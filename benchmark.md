@@ -11,6 +11,6 @@
 
 測定スクリプトは`pnpm run build`と`pnpm run astro:build`の後に`node scripts/measure-build.mjs`を実行します。両方とも同じローカル環境で依存関係をインストール済みの状態から測りました。Rspress 2.0.23のbuild報告時間は0.26秒で、Astro 6.4.8のbuild報告時間は3.12秒でした。Rspressの時間はcontent sync後のSSG処理、Astroの時間はcontent sync後のSSGとPagefind処理です。
 
-Astroは言語リファレンスの初回JavaScript量を大きく減らしました。プレイグラウンドではAstroがReactとCodeMirrorを初回表示時に読み込むため、RspressよりJavaScript量が多くなりました。本番ではReactベースのプレイグラウンドを既存ドキュメント内へ統合する要件に合わせ、レビュー0006の指定どおりRspress 2を採用します。
+Astroは言語リファレンスの初回JavaScript量を大きく減らしました。プレイグラウンドではAstroがReactとCodeMirrorを初回表示時に読み込むため、RspressよりJavaScript量が多くなりました。本番ではReactベースのプレイグラウンドを既存ドキュメント内へ統合する要件に合わせ、Rspress 2を採用します。
 
 この比較試作は採用判断の材料であり、本番用の配信設定ではありません。

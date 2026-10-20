@@ -1,0 +1,38 @@
+[tools]
+node = "24.22.0"
+pnpm = "12.14.0"
+
+[tasks.install]
+run = "pnpm install --frozen-lockfile"
+
+[tasks.dev]
+depends = ["install"]
+run = "pnpm run dev"
+
+[tasks.build]
+depends = ["install"]
+run = "pnpm run build"
+
+[tasks.lint]
+depends = ["install"]
+run = "pnpm run lint"
+
+[tasks."format:check"]
+depends = ["install"]
+run = "pnpm run format:check"
+
+[tasks."website:wasm:update"]
+description = "Build Playground WebAssembly assets from the sibling MCL core checkout"
+run = '''
+set -eu
+website_dir="$PWD"
+core_dir="${MCL_CORE_DIR:-../mcl}"
+mkdir -p public
+(cd "$core_dir" && GOOS=js GOARCH=wasm CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$website_dir/public/mcl.wasm" ./cmd/mcl-wasm)
+gzip -9 -n -f public/mcl.wasm
+(cd "$core_dir" && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$website_dir/public/wasm_exec.js")
+'''
+
+[tasks."website:grammar:update"]
+description = "Copy the canonical MCL grammar from the sibling VS Code extension checkout"
+run = 'cp "${MCL_VSCODE_DIR:-../vscode}/syntaxes/mcl.tmLanguage.json" src/playground/mcl.tmLanguage.json'

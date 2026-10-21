@@ -83,6 +83,28 @@ test("loads a project folder and resolves its relative MCL import", async ({ pag
   await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
 });
 
+test("rejects duplicate project paths and keeps the loaded project", async ({ page }) => {
+  await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(projectDirectory);
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
+
+  await page.getByLabel("MCLプロジェクトフォルダー").evaluate((element: HTMLInputElement) => {
+    const files = new DataTransfer();
+    for (const [index, source] of ['emit "duplicate-one"\n', 'emit "duplicate-two"\n'].entries()) {
+      const file = new File([source], `duplicate-${index}.mcl`, { type: "text/plain" });
+      Object.defineProperty(file, "webkitRelativePath", { value: "project/main.mcl" });
+      files.items.add(file);
+    }
+    element.files = files.files;
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await expect(page.getByRole("alert")).toContainText("Duplicate project path: main.mcl");
+  await expect(editor(page)).toContainText('import "modules/resource.mcl"');
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
+});
+
 test("renders a local Helm Chart from the selected project folder", async ({ page }) => {
   await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(helmProjectDirectory);
   await expect

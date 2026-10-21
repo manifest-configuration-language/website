@@ -59,7 +59,13 @@ test("formats source in the editor", async ({ page }) => {
 
 test("loads a project folder and resolves its relative MCL import", async ({ page }) => {
   await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(projectDirectory);
-  await expect(editor(page)).toContainText('import "modules/resource.mcl"');
+  await expect
+    .poll(() =>
+      editor(page).evaluate((element) =>
+        [...element.querySelectorAll(".cm-line")].map((line) => line.textContent).join("\n"),
+      ),
+    )
+    .toContain('import "modules/resource.mcl"');
   await page.getByRole("button", { name: "実行" }).click();
 
   await expectRendered(page, 'name: "imported"', 'origin: "project folder"');

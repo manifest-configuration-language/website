@@ -226,10 +226,15 @@ async function measurePage(
     ),
   }));
   let pagefindOnDemandAssets;
+  let pagefindFirstSearchMs;
   if (measureSearch) {
+    const searchStartedAt = performance.now();
     await page.getByRole("button", { name: "検索" }).click();
-    await page.getByRole("dialog").waitFor({ state: "visible" });
-    await page.waitForTimeout(500);
+    const searchDialog = page.getByRole("dialog", { name: "検索" });
+    await searchDialog.waitFor({ state: "visible" });
+    await searchDialog.locator("input").fill("型");
+    await searchDialog.getByRole("link", { name: /型/ }).first().waitFor({ state: "visible" });
+    pagefindFirstSearchMs = Math.round(performance.now() - searchStartedAt);
     await Promise.all(responseTasks);
     pagefindOnDemandAssets = totals(
       new Map([...assets].filter(([url]) => !initialAssets.has(url))),
@@ -276,6 +281,7 @@ async function measurePage(
     }),
     initialAssets: totals(initialAssets),
     ...(pagefindOnDemandAssets === undefined ? {} : { pagefindOnDemandAssets }),
+    ...(pagefindFirstSearchMs === undefined ? {} : { pagefindFirstSearchMs }),
     ...(renderMs === undefined
       ? {}
       : {

@@ -1,5 +1,7 @@
 ---
 title: "ParserとASTの構成"
+sidebar:
+  order: 1
 ---
 
 # ParserとASTの構成

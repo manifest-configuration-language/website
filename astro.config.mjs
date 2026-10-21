@@ -27,6 +27,11 @@ function workerNodeBuiltinPlugin() {
 export default defineConfig({
   site: "https://mcl.walnuts.dev",
   outDir: ".build/dist",
+  redirects: {
+    "/reference/language": "/reference/",
+    "/reference/architecture/parser-ast": "/internals/parser-ast/",
+    "/reference/architecture/deferred-evaluation": "/internals/deferred-evaluation/",
+  },
   vite: {
     optimizeDeps: { rolldownOptions: { plugins: [workerNodeBuiltinPlugin()] } },
     worker: {
@@ -48,6 +53,7 @@ export default defineConfig({
       sidebar: [
         { label: "チュートリアル", items: [{ autogenerate: { directory: "tutorial" } }] },
         { label: "リファレンス", items: [{ autogenerate: { directory: "reference" } }] },
+        { label: "内部仕様", items: [{ autogenerate: { directory: "internals" } }] },
         { label: "Playground", link: "/playground/" },
       ],
     }),

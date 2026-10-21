@@ -1,0 +1,29 @@
+name: Website performance
+
+on:
+  schedule:
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
+        with:
+          install: true
+          cache: true
+      - run: mise run install
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run build
+      - name: Measure and publish baseline observations
+        run: |
+          set -o pipefail
+          node scripts/measure-performance.mjs | tee performance.json >> "$GITHUB_STEP_SUMMARY"

@@ -7,16 +7,41 @@ function editor(page: import("@playwright/test").Page) {
   return page.locator('[aria-label="MCLソース"]');
 }
 
+async function expectRendered(page: import("@playwright/test").Page, ...fragments: string[]) {
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[aria-label="レンダリング結果"]') ||
+      document.querySelector('.playground [role="alert"]'),
+    null,
+    { timeout: 8_000 },
+  );
+  const output = page.getByLabel("レンダリング結果");
+  if ((await output.count()) === 0) {
+    const alert = (await page.getByRole("alert").allTextContents()).join(" ");
+    throw new Error(`Playground did not render output. UI alert: ${alert || "none"}`);
+  }
+  for (const fragment of fragments) await expect(output).toContainText(fragment);
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto("/playground/");
+});
+
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.status === testInfo.expectedStatus) return;
+  const state = await page
+    .locator(".playground")
+    .innerText()
+    .catch(() => "Playground content is unavailable.");
+  console.error(
+    `Playground state after ${testInfo.title}: ${state.replace(/\s+/g, " ").slice(0, 1_000)}`,
+  );
 });
 
 test("renders the starter source as a Kubernetes resource", async ({ page }) => {
   await page.getByRole("button", { name: "実行" }).click();
 
-  const output = page.getByLabel("レンダリング結果");
-  await expect(output).toContainText('kind: "ConfigMap"');
-  await expect(output).toContainText('name: "catalog"');
+  await expectRendered(page, 'kind: "ConfigMap"', 'name: "catalog"');
 });
 
 test("formats source in the editor", async ({ page }) => {
@@ -37,9 +62,7 @@ test("loads a project folder and resolves its relative MCL import", async ({ pag
   await expect(editor(page)).toContainText('import "modules/resource.mcl"');
   await page.getByRole("button", { name: "実行" }).click();
 
-  const output = page.getByLabel("レンダリング結果");
-  await expect(output).toContainText('name: "imported"');
-  await expect(output).toContainText('origin: "project folder"');
+  await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
 });
 
 test("shows a source diagnostic for an invalid program", async ({ page }) => {
@@ -72,6 +95,6 @@ test("cancels a run during worker startup and allows the next run", async ({ pag
   await expect(page.getByRole("alert")).toHaveCount(0);
 
   await page.getByRole("button", { name: "実行" }).click();
-  await expect(page.getByLabel("レンダリング結果")).toContainText('kind: "ConfigMap"');
+  await expectRendered(page, 'kind: "ConfigMap"');
   expect(wasmRequests).toBe(2);
 });

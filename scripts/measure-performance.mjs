@@ -287,7 +287,7 @@ try {
   const startupMs = await waitForServer();
   browser = await chromium.launch({ headless: true });
   const measurements = [
-    await measurePage(browser, "/reference/language/", { measureSearch: true }),
+    await measurePage(browser, "/reference/", { measureSearch: true }),
     await measurePage(browser, "/playground/", { renderPlayground: true }),
   ];
   const cancellationUiLatencyMs = await measureCancellation(browser);

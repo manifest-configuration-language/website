@@ -67,7 +67,7 @@ emit deployment
 validate deployment using scalable
 ```
 
-`require`の条件が`false`なら検証エラーになります。Ruleの検証は値を変更しません。Bundle全体や型に一致する子孫の検証など、検証対象の指定方法は[言語リファレンス](../reference/language#ruleによる検証)を参照してください。
+`require`の条件が`false`なら検証エラーになります。Ruleの検証は値を変更しません。Bundle全体や型に一致する子孫の検証など、検証対象の指定方法は[言語リファレンス](../reference/validation/)を参照してください。
 
 ## さらに学ぶ
 

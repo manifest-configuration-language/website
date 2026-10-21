@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { parse } from "parse5";
 
 async function htmlFiles(directory) {
   const files = [];
@@ -12,15 +13,29 @@ async function htmlFiles(directory) {
   return files;
 }
 
+function inlineScripts(node, scripts = []) {
+  if (node.tagName === "script") {
+    const attributes = new Set((node.attrs ?? []).map(({ name }) => name));
+    if (!attributes.has("src")) {
+      const source = (node.childNodes ?? [])
+        .filter((child) => child.nodeName === "#text")
+        .map((child) => child.value)
+        .join("");
+      if (source.trim()) scripts.push(source);
+    }
+  }
+  for (const child of node.childNodes ?? []) inlineScripts(child, scripts);
+  return scripts;
+}
+
 const [siteDirectory, outputPath] = process.argv.slice(2);
 if (!siteDirectory || !outputPath)
   throw new Error("Usage: node write-csp.mjs <site-directory> <output-file>");
 const hashes = new Set();
 for (const filePath of await htmlFiles(siteDirectory)) {
-  const html = await readFile(filePath, "utf8");
-  for (const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
-    if (/\bsrc\s*=/.test(match[1]) || match[2].trim() === "") continue;
-    hashes.add(`'sha256-${createHash("sha256").update(match[2]).digest("base64")}'`);
+  const document = parse(await readFile(filePath, "utf8"));
+  for (const source of inlineScripts(document)) {
+    hashes.add(`'sha256-${createHash("sha256").update(source).digest("base64")}'`);
   }
 }
 const template = await readFile("security-headers.conf", "utf8");

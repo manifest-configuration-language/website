@@ -47,14 +47,7 @@ export default defineConfig({
       locales: { root: { label: "日本語", lang: "ja" } },
       sidebar: [
         { label: "チュートリアル", items: [{ autogenerate: { directory: "tutorial" } }] },
-        {
-          label: "リファレンス",
-          items: [
-            { label: "言語", link: "/reference/language/" },
-            { label: "標準ライブラリ", link: "/reference/stdlib/" },
-            { label: "仕様", link: "/reference/spec/" },
-          ],
-        },
+        { label: "リファレンス", items: [{ autogenerate: { directory: "reference" } }] },
         { label: "Playground", link: "/playground/" },
       ],
     }),

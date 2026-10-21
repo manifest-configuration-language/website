@@ -30,8 +30,7 @@
     "astro": "7.2.10",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
-    "typescript": "6.0.2",
-    "vite-plugin-node-polyfills": "0.28.0"
+    "typescript": "6.0.2"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.4",
@@ -40,9 +39,13 @@
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.15",
     "@lezer/highlight": "1.2.5",
+    "buffer": "6.0.3",
+    "events": "3.3.0",
     "memfs": "4.80.0",
     "path-browserify": "1.0.1",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "stream-browserify": "3.0.0",
+    "url": "0.11.4"
   }
 }

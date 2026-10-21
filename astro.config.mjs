@@ -3,37 +3,34 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
-import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 const grammar = JSON.parse(readFileSync("src/playground/mcl.tmLanguage.json", "utf8"));
+const workerNodeModules = {
+  "node:buffer": "buffer/index.js",
+  "node:events": "events/events.js",
+  "node:path": "path-browserify",
+  "node:stream": "stream-browserify",
+  "node:url": "url/url.js",
+};
 
-const polyfills = { globals: { Buffer: true, global: false, process: true } };
+function workerNodeBuiltinPlugin() {
+  return {
+    name: "mcl-worker-node-builtins",
+    enforce: "pre",
+    resolveId(source) {
+      if (Object.hasOwn(workerNodeModules, source))
+        return fileURLToPath(import.meta.resolve(workerNodeModules[source]));
+    },
+  };
+}
 
 export default defineConfig({
   site: "https://mcl.walnuts.dev",
   outDir: ".build/dist",
   vite: {
-    plugins: [
-      nodePolyfills({
-        ...polyfills,
-        include: ["buffer", "events", "process", "stream", "url", "util"],
-      }),
-    ],
+    optimizeDeps: { rolldownOptions: { plugins: [workerNodeBuiltinPlugin()] } },
     worker: {
-      plugins: () => [
-        {
-          name: "mcl-worker-path-polyfill",
-          enforce: "pre",
-          resolveId(source) {
-            if (source === "node:path")
-              return fileURLToPath(import.meta.resolve("path-browserify"));
-          },
-        },
-        nodePolyfills({
-          ...polyfills,
-          include: ["buffer", "events", "path", "process", "stream", "url", "util"],
-        }),
-      ],
+      plugins: () => [workerNodeBuiltinPlugin()],
     },
   },
   integrations: [

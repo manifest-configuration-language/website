@@ -68,6 +68,7 @@ jobs:
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=tag
             type=sha,format=long
@@ -90,6 +91,15 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           cache-from: type=gha,scope=mcl-website
           cache-to: type=gha,scope=mcl-website,mode=max
+
+      - name: Report main image reference
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          image_ref="${IMAGE_NAME}:main@${IMAGE_DIGEST}"
+          echo "Published image: ${image_ref}"
+          printf 'Published image: %s\n' "$image_ref" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Attest image provenance
         if: github.event_name != 'pull_request' && github.repository_visibility == 'public'

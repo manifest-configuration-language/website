@@ -24,4 +24,10 @@ docker run --rm -p 8080:8080 mcl-website:latest
 
 ## コンテナイメージ
 
-`main`へのpushで`ghcr.io/manifest-configuration-language/website:latest`をビルドしてpushします。`v*`タグでは同じタグ名のイメージもpushします。現在は組織ポリシーでパッケージのPublic化が無効です。管理者が組織のPackages設定でPublic化を許可した後、`website`パッケージの可視性をPublicにすると認証なしでpullできます。
+`main`へのpushで`ghcr.io/manifest-configuration-language/website:main`と互換用の`latest`タグを更新します。`v*`タグでは同じタグ名のイメージもpushします。デプロイで同じイメージを固定する場合は、タグとBuildxが出力するdigestを組み合わせます。
+
+```text
+ghcr.io/manifest-configuration-language/website:main@sha256:<digest>
+```
+
+digestはGitHub ActionsのWebsiteワークフロー実行サマリーに表示されます。digest指定のイメージ参照はタグの更新後も同じイメージを指します。現在は組織ポリシーでパッケージのPublic化が無効です。管理者が組織のPackages設定でPublic化を許可した後、`website`パッケージの可視性をPublicにすると認証なしでpullできます。

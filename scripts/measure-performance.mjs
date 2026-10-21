@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { stat } from "node:fs/promises";
 import { createServer } from "node:net";
 import { chromium } from "@playwright/test";
+import { startWasmAssetServer } from "./wasm-asset-server.mjs";
 
 const astroCli = fileURLToPath(new URL("../node_modules/astro/bin/astro.mjs", import.meta.url));
 async function reservePort() {
@@ -21,6 +21,9 @@ async function reservePort() {
 
 const port = await reservePort();
 const origin = `http://127.0.0.1:${port}`;
+const wasmServer = await startWasmAssetServer();
+const wasmAssetName = wasmServer.assetName;
+const wasmAssetPath = `/_astro/${wasmAssetName}`;
 const server = spawn(
   process.execPath,
   [astroCli, "preview", "--host", "127.0.0.1", "--port", String(port)],
@@ -57,6 +60,9 @@ async function measurePage(
   { renderPlayground = false, measureSearch = false } = {},
 ) {
   const context = await browser.newContext();
+  await context.route("**/mcl.wasm-*.gz", (route) =>
+    route.continue({ url: `${wasmServer.url}/${wasmAssetName}` }),
+  );
   const page = await context.newPage();
   const assets = new Map();
   const responseTasks = [];
@@ -65,20 +71,26 @@ async function measurePage(
       const request = response.request();
       if (!response.ok()) return;
       try {
-        const body = await response.body();
         const url = new URL(response.url());
-        if (url.origin === origin) {
-          const type = request.resourceType();
-          const category =
-            type === "document"
-              ? "html"
-              : type === "script"
-                ? "javascript"
-                : type === "stylesheet"
-                  ? "css"
-                  : "other";
-          assets.set(url.pathname, { bytes: body.byteLength, category });
+        if (url.origin !== origin) return;
+        if (url.pathname === wasmAssetPath) {
+          assets.set(url.pathname, {
+            bytes: wasmServer.byteLength,
+            category: "other",
+          });
+          return;
         }
+        const body = await response.body();
+        const type = request.resourceType();
+        const category =
+          type === "document"
+            ? "html"
+            : type === "script"
+              ? "javascript"
+              : type === "stylesheet"
+                ? "css"
+                : "other";
+        assets.set(url.pathname, { bytes: body.byteLength, category });
       } catch {
         // A response may be canceled during navigation.
       }
@@ -145,10 +157,7 @@ async function measurePage(
     await page.getByRole("button", { name: "実行" }).waitFor({ state: "visible" });
     await page.getByLabel("レンダリング結果").waitFor({ state: "visible", timeout: 30_000 });
     secondRenderMs = performance.now() - secondStartedAt;
-    assets.set("/mcl.wasm.gz", {
-      bytes: (await stat(new URL("../.build/dist/mcl.wasm.gz", import.meta.url))).size,
-      category: "other",
-    });
+    assets.set(wasmAssetPath, { bytes: wasmServer.byteLength, category: "other" });
   }
   await page.waitForTimeout(200);
   const result = {
@@ -167,7 +176,7 @@ async function measurePage(
           ),
           wasmLoadedOnExecution: true,
         }),
-    wasmIncludedInInitialAssets: [...initialAssets.keys()].some((url) => url.includes("mcl.wasm")),
+    wasmIncludedInInitialAssets: [...initialAssets.keys()].some((url) => url.includes(".wasm-")),
     codeMirrorEditorPresent: (await page.locator(".cm-editor").count()) > 0,
     assets: Object.fromEntries(
       [...assets.entries()]
@@ -186,10 +195,10 @@ async function measureCancellation(browser) {
   const wasmRequested = new Promise((resolve) => (notifyWasmRequest = resolve));
   let releaseWasmRequest;
   const wasmHeld = new Promise((resolve) => (releaseWasmRequest = resolve));
-  await context.route("**/mcl.wasm.gz", async (route) => {
+  await context.route("**/mcl.wasm-*.gz", async (route) => {
     notifyWasmRequest();
     await wasmHeld;
-    await route.continue();
+    await route.continue({ url: `${wasmServer.url}/${wasmAssetName}` });
   });
   try {
     await page.goto(`${origin}/playground/`, { waitUntil: "load" });
@@ -207,6 +216,9 @@ async function measureCancellation(browser) {
 
 async function measureLargeProject(browser) {
   const context = await browser.newContext();
+  await context.route("**/mcl.wasm-*.gz", (route) =>
+    route.continue({ url: `${wasmServer.url}/${wasmAssetName}` }),
+  );
   const page = await context.newPage();
   await page.goto(`${origin}/playground/`, { waitUntil: "load" });
 
@@ -311,4 +323,5 @@ try {
 } finally {
   await browser?.close();
   server.kill("SIGTERM");
+  await wasmServer.close();
 }

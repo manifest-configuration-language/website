@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { addWasmAssetHeaders, closeWasmAssetServer } from "./previewRoutes";
 
 const projectDirectory = fileURLToPath(new URL("./fixtures/project", import.meta.url));
 const helmProjectDirectory = fileURLToPath(new URL("./fixtures/helm-project", import.meta.url));
@@ -32,8 +33,11 @@ async function expectRendered(page: import("@playwright/test").Page, ...fragment
 }
 
 test.beforeEach(async ({ page }) => {
+  await addWasmAssetHeaders(page);
   await page.goto("/playground/");
 });
+
+test.afterAll(async () => closeWasmAssetServer());
 
 test.afterEach(async ({ page }, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;
@@ -172,14 +176,14 @@ test("denies uncached external manifest fetches", async ({ page }) => {
 test("cancels a run during worker startup and allows the next run", async ({ page }) => {
   let releaseFirstRequest: (() => void) | undefined;
   let wasmRequests = 0;
-  await page.route("**/mcl.wasm.gz", async (route) => {
+  await page.route("**/mcl.wasm-*.gz", async (route) => {
     wasmRequests += 1;
     if (wasmRequests === 1) {
       await new Promise<void>((resolve) => {
         releaseFirstRequest = resolve;
       });
     }
-    await route.continue();
+    await route.fallback();
   });
   await page.evaluate(() => {
     const state = { terminated: 0 };

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { addWasmAssetHeaders, closeWasmAssetServer } from "./previewRoutes";
 
 const securityHeaders = readFileSync(
   new URL("../.build/security-headers.conf", import.meta.url),
@@ -11,6 +12,8 @@ const contentSecurityPolicy = securityHeaders.match(
 
 if (!contentSecurityPolicy)
   throw new Error("The generated Content Security Policy is unavailable.");
+
+test.afterAll(async () => closeWasmAssetServer());
 
 test("home page highlights MCL code and switches themes", async ({ page }) => {
   await page.goto("/");
@@ -63,6 +66,7 @@ test("documentation and Playground work under the generated CSP", async ({ page 
       headers: { ...response.headers(), "content-security-policy": contentSecurityPolicy },
     });
   });
+  await addWasmAssetHeaders(page);
 
   const response = await page.goto("/");
   expect(response?.headers()["content-security-policy"]).toBe(contentSecurityPolicy);

@@ -9,13 +9,14 @@ const config = JSON.parse(await readFile(path.join(root, "mcl-runtime.json"), "u
 const buildDirectory = path.join(root, ".build/mcl-core");
 const archivePath = path.join(root, ".build/mcl-core.tar.gz");
 const runtimeDirectory = path.join(root, ".build/runtime");
+const sourceRuntimeDirectory = path.join(root, "src/playground/runtime");
 const stampPath = path.join(root, ".build/mcl-runtime-ref");
 
 try {
   const [currentRef] = await Promise.all([
     readFile(stampPath, "utf8"),
-    access(path.join(root, "public/mcl.wasm.gz")),
-    access(path.join(root, "public/wasm_exec.js")),
+    access(path.join(sourceRuntimeDirectory, "mcl.wasm.gz")),
+    access(path.join(sourceRuntimeDirectory, "wasm_exec.js")),
   ]);
   if (currentRef === config.ref) process.exit(0);
 } catch {}
@@ -52,9 +53,11 @@ await run("cp", [
   path.join(goRoot.trim(), "lib/wasm/wasm_exec.js"),
   path.join(runtimeDirectory, "wasm_exec.js"),
 ]);
-const publicDirectory = path.join(root, "public");
-await mkdir(publicDirectory, { recursive: true });
-await cp(runtimeDirectory, publicDirectory, { recursive: true });
+await rm(sourceRuntimeDirectory, { recursive: true, force: true });
+await mkdir(sourceRuntimeDirectory, { recursive: true });
+await cp(runtimeDirectory, sourceRuntimeDirectory, { recursive: true });
+await rm(path.join(root, "public/mcl.wasm.gz"), { force: true });
+await rm(path.join(root, "public/wasm_exec.js"), { force: true });
 await writeFile(stampPath, config.ref);
 
 function run(command, args, options = {}) {

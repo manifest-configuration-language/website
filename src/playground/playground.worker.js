@@ -1,5 +1,7 @@
 import { Buffer } from "buffer/index.js";
 import path from "path-browserify";
+import wasmURL from "./runtime/mcl.wasm.gz?url";
+import "./runtime/wasm_exec.js";
 import { validateProjectInput } from "./projectValidation.js";
 
 globalThis.Buffer = Buffer;
@@ -75,21 +77,12 @@ async function startRuntime() {
   activeVolume = new Volume();
   globalThis.fs = makeFsAdapter();
 
-  const runtimeURL = new URL("/wasm_exec.js", self.location.href).href;
-  await import(/* @vite-ignore */ runtimeURL);
   if (typeof globalThis.Go !== "function")
     throw new Error("The Go WebAssembly runtime did not register a Go constructor.");
   const go = new globalThis.Go();
-  const response = await fetch("/mcl.wasm.gz");
+  const response = await fetch(wasmURL);
   if (!response.ok) throw new Error("Unable to download the MCL WebAssembly runtime.");
-  let wasmBody = response.body;
-  if (response.headers.get("Content-Encoding")?.toLowerCase() !== "gzip") {
-    if (typeof DecompressionStream !== "function")
-      throw new Error("This browser does not support gzip decompression for WebAssembly.");
-    wasmBody = wasmBody.pipeThrough(new DecompressionStream("gzip"));
-  }
-  const bytes = await new Response(wasmBody).arrayBuffer();
-  const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
+  const { instance } = await WebAssembly.instantiateStreaming(response, go.importObject);
   go.run(instance).catch((error) => self.postMessage({ type: "failure", message: String(error) }));
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {

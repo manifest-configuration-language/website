@@ -1,6 +1,5 @@
 node_modules/
 .build/
 .astro/
-public/mcl.wasm.gz
-public/wasm_exec.js
+src/playground/runtime/
 src/playground/mcl.tmLanguage.json

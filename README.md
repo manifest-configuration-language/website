@@ -11,7 +11,7 @@ mise run install
 mise run dev
 ```
 
-初回の開発起動とビルドでは、`mcl-runtime.json`で固定したMCL本体のコミットからWASMランタイムを生成し、`vscode-grammar.json`で固定したVS Code拡張のコミットから構文Grammarを取得します。2つの参照コミットはRenovateが更新します。生成物は`public/`へ出力され、Gitでは管理しません。
+初回の開発起動とビルドでは、`mcl-runtime.json`で固定したMCL本体のコミットからWASMランタイムを生成し、`vscode-grammar.json`で固定したVS Code拡張のコミットから構文Grammarを取得します。2つの参照コミットはRenovateが更新します。WASMと`wasm_exec.js`は`src/playground/runtime/`へ出力され、Workerへ同梱するJavaScriptとフィンガープリント付きWASMアセットにビルドされます。生成ファイルはGitで管理しません。
 
 ## Docker
 

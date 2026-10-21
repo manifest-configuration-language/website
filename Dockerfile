@@ -12,7 +12,7 @@ COPY security-headers.conf ./security-headers.conf
 COPY theme ./theme
 RUN pnpm run build && node scripts/write-csp.mjs .build/rspress/dist .build/security-headers.conf
 
-FROM nginx:1.29-alpine
+FROM nginx:1.30-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/manifest-configuration-language/website"
 LABEL org.opencontainers.image.description="MCL language documentation and playground"

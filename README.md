@@ -11,7 +11,7 @@ mise run dev
 
 ## WASMランタイム
 
-`public/mcl.wasm.gz`と`public/wasm_exec.js`はMCLコアの同名バージョンから生成します。リポジトリルートでMCLコアをチェックアウトし、`mise run website:wasm:update`を実行すると、Playground用のランタイムを更新できます。
+`docs/public/mcl.wasm.gz`と`docs/public/wasm_exec.js`はMCLコアの同名バージョンから生成します。リポジトリルートでMCLコアをチェックアウトし、`mise run website:wasm:update`を実行すると、Playground用のランタイムを更新できます。
 
 Playgroundの構文ハイライトはVS Code拡張のGrammarを使います。拡張リポジトリを隣にチェックアウトし、`mise run website:grammar:update`を実行すると同期できます。
 

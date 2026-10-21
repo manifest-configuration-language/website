@@ -6,7 +6,6 @@ RUN corepack enable && pnpm install --frozen-lockfile
 COPY docs ./docs
 COPY scripts ./scripts
 COPY src ./src
-COPY public ./public
 COPY rspress.config.ts ./rspress.config.ts
 COPY security-headers.conf ./security-headers.conf
 COPY theme ./theme

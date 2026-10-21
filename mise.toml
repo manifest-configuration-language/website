@@ -32,10 +32,10 @@ run = '''
 set -eu
 website_dir="$PWD"
 core_dir="${MCL_CORE_DIR:-../mcl}"
-mkdir -p public
-(cd "$core_dir" && GOOS=js GOARCH=wasm CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$website_dir/public/mcl.wasm" ./cmd/mcl-wasm)
-gzip -9 -n -f public/mcl.wasm
-(cd "$core_dir" && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$website_dir/public/wasm_exec.js")
+mkdir -p docs/public
+(cd "$core_dir" && GOOS=js GOARCH=wasm CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$website_dir/docs/public/mcl.wasm" ./cmd/mcl-wasm)
+gzip -9 -n -f docs/public/mcl.wasm
+(cd "$core_dir" && cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$website_dir/docs/public/wasm_exec.js")
 '''
 
 [tasks."website:grammar:update"]

@@ -4,7 +4,19 @@ import mclGrammar from "./src/playground/mcl.tmLanguage.json";
 
 export default defineConfig({
   builderConfig: { plugins: [pluginNodePolyfill()] },
-  root: ".build/rspress/docs",
+  root: "docs",
+  siteOrigin: "https://mcl.walnuts.dev",
+  head: [
+    (route) => [
+      "link",
+      { rel: "canonical", href: new URL(route.routePath, "https://mcl.walnuts.dev").toString() },
+    ],
+    (route) => [
+      "meta",
+      { property: "og:url", content: new URL(route.routePath, "https://mcl.walnuts.dev").toString() },
+    ],
+    ["meta", { property: "og:site_name", content: "MCL" }],
+  ],
   outDir: ".build/rspress/dist",
   title: "MCL",
   description: "MCL configuration language documentation",

@@ -28,6 +28,14 @@ jobs:
         with:
           install: true
           cache: true
+      # Temporary one-off regeneration step; removed once the lockfile is committed.
+      - name: Regenerate lockfile for the dependency cleanup
+        run: pnpm install --lockfile-only
+      - name: Export regenerated lockfile for review
+        run: |
+          echo MCL_WEBSITE_LOCKFILE_BEGIN
+          cat pnpm-lock.yaml
+          echo MCL_WEBSITE_LOCKFILE_END
       - run: mise run install
       - run: pnpm audit --audit-level=high
       - parallel:

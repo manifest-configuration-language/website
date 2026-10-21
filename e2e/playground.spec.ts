@@ -2,6 +2,10 @@ import { expect, test } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 
 const projectDirectory = fileURLToPath(new URL("./fixtures/project", import.meta.url));
+const helmProjectDirectory = fileURLToPath(new URL("./fixtures/helm-project", import.meta.url));
+const kustomizeProjectDirectory = fileURLToPath(
+  new URL("./fixtures/kustomize-project", import.meta.url),
+);
 
 function editor(page: import("@playwright/test").Page) {
   return page.locator('[aria-label="MCLソース"]');
@@ -69,6 +73,46 @@ test("loads a project folder and resolves its relative MCL import", async ({ pag
   await page.getByRole("button", { name: "実行" }).click();
 
   await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
+});
+
+test("renders a local Helm Chart from the selected project folder", async ({ page }) => {
+  await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(helmProjectDirectory);
+  await expect
+    .poll(() =>
+      editor(page).evaluate((element) =>
+        [...element.querySelectorAll(".cm-line")].map((line) => line.textContent).join("\n"),
+      ),
+    )
+    .toContain('helm.render("charts/api"');
+  await page.getByRole("button", { name: "実行" }).click();
+
+  await expectRendered(
+    page,
+    'kind: "Deployment"',
+    'name: "website"',
+    "replicas: 2",
+    'image: "example.test.walnuts.dev/api:v1"',
+  );
+});
+
+test("builds a local Kustomize overlay from the selected project folder", async ({ page }) => {
+  await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(kustomizeProjectDirectory);
+  await expect
+    .poll(() =>
+      editor(page).evaluate((element) =>
+        [...element.querySelectorAll(".cm-line")].map((line) => line.textContent).join("\n"),
+      ),
+    )
+    .toContain('directory = "k8s/overlay"');
+  await page.getByRole("button", { name: "実行" }).click();
+
+  await expectRendered(
+    page,
+    'kind: "ConfigMap"',
+    'name: "web-settings"',
+    'app.kubernetes.io/name: "web"',
+    'source: "local-kustomize"',
+  );
 });
 
 test("shows a source diagnostic for an invalid program", async ({ page }) => {

@@ -1,0 +1,8 @@
+import "std:kustomize" as kustomize
+
+let resources = kustomize.build(
+  source = ".",
+  revision = "",
+  directory = "k8s/overlay",
+)
+emit resources

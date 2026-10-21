@@ -1,5 +1,6 @@
-import { Volume, constants } from "memfs";
 import path from "path-browserify";
+
+import { Volume, constants } from "memfs";
 
 let started;
 let activeVolume = new Volume();
@@ -84,7 +85,7 @@ function mountProject(request) {
 
 async function startRuntime() {
   const runtimeURL = new URL("/wasm_exec.js", self.location.href).href;
-  await import(/* webpackIgnore: true */ runtimeURL);
+  await import(/* @vite-ignore */ runtimeURL);
   if (typeof globalThis.Go !== "function")
     throw new Error("The Go WebAssembly runtime did not register a Go constructor.");
   const go = new globalThis.Go();
@@ -92,7 +93,9 @@ async function startRuntime() {
   if (!response.ok) throw new Error("Unable to download the MCL WebAssembly runtime.");
   if (typeof DecompressionStream !== "function")
     throw new Error("This browser does not support gzip decompression for WebAssembly.");
-  const bytes = await response.body.pipeThrough(new DecompressionStream("gzip")).arrayBuffer();
+  const bytes = await new Response(
+    response.body.pipeThrough(new DecompressionStream("gzip")),
+  ).arrayBuffer();
   const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
   go.run(instance).catch((error) => self.postMessage({ type: "failure", message: String(error) }));
   await new Promise((resolve, reject) => {

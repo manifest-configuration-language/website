@@ -55,7 +55,7 @@ export function createPlaygroundClient(): PlaygroundClient {
       };
       worker.onerror = (event) => {
         event.preventDefault();
-        terminate(new Error("The WebAssembly worker failed to start."));
+        terminate(new Error(`The WebAssembly worker failed to start: ${event.message}`));
       };
     });
     return ready;

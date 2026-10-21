@@ -35,6 +35,25 @@ const modes = new Set(["verify", "expected-error", "fragment", "release-gap"]);
 const docsRoot = fileURLToPath(new URL("../src/content/docs/", import.meta.url));
 const fixturesRoot = fileURLToPath(new URL("./doc-example-fixtures/", import.meta.url));
 
+async function verifyLatestRelease() {
+  const headers = { accept: "application/vnd.github+json" };
+  if (process.env.GH_TOKEN) headers.authorization = `Bearer ${process.env.GH_TOKEN}`;
+  const response = await fetch(
+    "https://api.github.com/repos/manifest-configuration-language/mcl/releases/latest",
+    {
+      headers,
+    },
+  );
+  if (!response.ok)
+    throw new Error(`Checking the latest MCL release failed: HTTP ${response.status}`);
+  const latestRelease = (await response.json()).tag_name;
+  if (latestRelease !== release) {
+    throw new Error(
+      `Documentation examples use MCL ${release}, but the latest stable release is ${latestRelease}`,
+    );
+  }
+}
+
 async function markdownFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const files = await Promise.all(
@@ -154,6 +173,7 @@ async function getCli() {
 }
 
 async function main() {
+  await verifyLatestRelease();
   const classifications = new Map([...modes].map((mode) => [mode, 0]));
   const executableExamples = [];
   const expectedErrors = [];

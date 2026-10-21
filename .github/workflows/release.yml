@@ -62,8 +62,6 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       # GitHub FreeではPrivateリポジトリのArtifact Attestationを利用できないため、公開時のみ生成します。
       - name: Attest image provenance

@@ -26,4 +26,4 @@ docker run --rm -p 8080:8080 mcl-website:latest
 
 ## コンテナイメージ
 
-`main`へのpushで`ghcr.io/manifest-configuration-language/website:latest`をビルドして公開します。`v*`タグでは同じタグ名のイメージも公開します。最初のpush後にGitHubのPackages設定で`website`パッケージの可視性をPublicに変更すると、認証なしでpullできます。
+`main`へのpushで`ghcr.io/manifest-configuration-language/website:latest`をビルドしてpushします。`v*`タグでは同じタグ名のイメージもpushします。現在は組織ポリシーでパッケージのPublic化が無効です。管理者が組織のPackages設定でPublic化を許可した後、`website`パッケージの可視性をPublicにすると認証なしでpullできます。

@@ -19,7 +19,8 @@
     "test:project-validation": "node --test src/playground/projectValidation.test.js",
     "typecheck": "astro check",
     "pretest:e2e": "pnpm run build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "measure:performance": "node scripts/measure-performance.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.4",

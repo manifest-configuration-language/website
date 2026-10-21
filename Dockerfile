@@ -14,6 +14,10 @@ RUN pnpm run build && node scripts/write-csp.mjs .build/rspress/dist .build/secu
 
 FROM nginx:1.29-alpine
 
+LABEL org.opencontainers.image.source="https://github.com/manifest-configuration-language/website"
+LABEL org.opencontainers.image.description="MCL language documentation and playground"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY --from=docs /src/.build/security-headers.conf /etc/nginx/security-headers.conf
 COPY --from=docs /src/.build/rspress/dist /usr/share/nginx/html

@@ -59,6 +59,22 @@ jobs:
       - name: Measure performance and enforce asset-byte budgets
         run: pnpm run measure:performance
 
+      - name: Upload pull request preview
+        id: preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: website-preview-pr-${{ github.event.pull_request.number }}
+          path: .build/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Link the pull request preview
+        if: github.event_name == 'pull_request'
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.artifact-url }}
+        run: echo "[Download the built site preview]($PREVIEW_URL)" >> "$GITHUB_STEP_SUMMARY"
+
   links:
     runs-on: ubuntu-latest
     timeout-minutes: 10

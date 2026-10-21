@@ -1,5 +1,5 @@
 ---
-title: "はじめる"
+title: "導入"
 sidebar:
   order: 0
 ---

@@ -51,7 +51,7 @@ export default defineConfig({
       defaultLocale: "root",
       locales: { root: { label: "日本語", lang: "ja" } },
       sidebar: [
-        { label: "はじめる", items: [{ autogenerate: { directory: "getting-started" } }] },
+        { label: "導入", items: [{ autogenerate: { directory: "getting-started" } }] },
         { label: "チュートリアル", items: [{ autogenerate: { directory: "tutorial" } }] },
         { label: "リファレンス", items: [{ autogenerate: { directory: "reference" } }] },
         { label: "内部仕様", items: [{ autogenerate: { directory: "internals" } }] },

@@ -13,18 +13,22 @@ const releaseAssets = {
   "darwin-arm64": [
     "mcl_0.1.0_darwin_arm64.tar.gz",
     "0c8cbb96548bd25b4e8ecc9d5cb6c61467f1a3cfca975a6469843890b4c1b78d",
+    "mcl-darwin-arm64",
   ],
   "darwin-x64": [
     "mcl_0.1.0_darwin_amd64.tar.gz",
     "21167d353f0c8b1ffab1f4f0da68f010db0ba78e4b83cb44f67ce96c4ce1c0aa",
+    "mcl-darwin-amd64",
   ],
   "linux-arm64": [
     "mcl_0.1.0_linux_arm64.tar.gz",
     "5a8b7c517ae289bb607b32db71733628611a74c82972e03c98603439f52cbcca",
+    "mcl-linux-arm64",
   ],
   "linux-x64": [
     "mcl_0.1.0_linux_amd64.tar.gz",
     "e2b230c2d81b3fad715433e231b766b41600395d0ac3462c3f85be3c986ec4ba",
+    "mcl-linux-amd64",
   ],
 };
 const modes = new Set(["verify", "expected-error", "fragment", "release-gap"]);
@@ -76,7 +80,7 @@ async function getCli() {
   const platform = `${process.platform}-${process.arch}`;
   const asset = releaseAssets[platform];
   if (!asset) throw new Error(`No checksum-pinned MCL ${release} binary for ${platform}`);
-  const [name, expectedDigest] = asset;
+  const [name, expectedDigest, executableName] = asset;
   const directory = await mkdtemp(join(tmpdir(), "mcl-doc-verification-"));
   const archive = join(directory, name);
   const response = await fetch(
@@ -88,9 +92,6 @@ async function getCli() {
   if (digest !== expectedDigest) throw new Error(`MCL ${release} checksum mismatch: ${digest}`);
   await writeFile(archive, bytes);
   execFileSync("tar", ["-xzf", archive, "-C", directory], { stdio: "pipe" });
-  const executableName = platform.startsWith("darwin-")
-    ? "mcl-darwin-" + process.arch
-    : "mcl-linux-" + process.arch;
   return { binary: join(directory, executableName), directory };
 }
 

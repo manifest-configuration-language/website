@@ -1,19 +1,17 @@
 # MCL Webサイト
 
-チュートリアル、言語リファレンス、標準ライブラリ、言語仕様、Playgroundを管理します。公開サイトは[https://mcl.walnuts.dev/](https://mcl.walnuts.dev/)です。
+チュートリアル、言語リファレンス、標準ライブラリ、言語仕様、Playgroundを管理します。公開サイトは[https://mcl.walnuts.dev/](https://mcl.walnuts.dev/)です。ドキュメントは`src/content/docs/`で直接編集します。
 
 ## ローカル開発
+
+Node.js、pnpm、Goは`mise.toml`に記載したバージョンを使用します。
 
 ```sh
 mise run install
 mise run dev
 ```
 
-## WASMランタイム
-
-`public/mcl.wasm.gz`と`public/wasm_exec.js`はMCLコアの同名バージョンから生成します。リポジトリルートでMCLコアをチェックアウトし、`mise run website:wasm:update`を実行すると、Playground用のランタイムを更新できます。
-
-Playgroundの構文ハイライトはVS Code拡張のGrammarを使います。拡張リポジトリを隣にチェックアウトし、`mise run website:grammar:update`を実行すると同期できます。
+初回の開発起動とビルドでは、`mcl-runtime.json`で固定したMCL本体のコミットからWASMランタイムを生成し、`vscode-grammar.json`で固定したVS Code拡張のコミットから構文Grammarを取得します。2つの参照コミットはRenovateが更新します。生成物は`public/`へ出力され、Gitでは管理しません。
 
 ## Docker
 

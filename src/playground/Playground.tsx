@@ -6,6 +6,7 @@ import {
   StreamLanguage,
   syntaxHighlighting,
 } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -42,36 +43,38 @@ type GrammarRule = {
   patterns?: GrammarRule[];
   include?: string;
 };
+type Grammar = { patterns: GrammarRule[]; repository: Record<string, GrammarRule> };
 type LexerState = { quote?: string };
 const tokenNames = {
-  "comment.line.number-sign.mcl": "comment",
-  "string.quoted.double.mcl": "string",
-  "string.quoted.multi.double.mcl": "string",
-  "constant.character.escape.mcl": "escape",
-  "keyword.control.mcl": "keyword",
-  "keyword.operator.mcl": "operator",
-  "constant.language.mcl": "atom",
-  "storage.type.mcl": "typeName",
-  "entity.name.function.mcl": "function",
-  "constant.numeric.mcl": "number",
-  "punctuation.separator.key-value.mcl": "punctuation",
-  "punctuation.separator.comma.mcl": "punctuation",
-  "punctuation.accessor.mcl": "punctuation",
+  "comment.line.number-sign.mcl": tags.comment,
+  "string.quoted.double.mcl": tags.string,
+  "string.quoted.multi.double.mcl": tags.string,
+  "constant.character.escape.mcl": tags.escape,
+  "keyword.control.mcl": tags.keyword,
+  "keyword.operator.mcl": tags.operator,
+  "constant.language.mcl": tags.atom,
+  "storage.type.mcl": tags.typeName,
+  "entity.name.function.mcl": tags.function(tags.variableName),
+  "constant.numeric.mcl": tags.number,
+  "punctuation.separator.key-value.mcl": tags.punctuation,
+  "punctuation.separator.comma.mcl": tags.punctuation,
+  "punctuation.accessor.mcl": tags.punctuation,
 };
+const grammar = mclGrammar as unknown as Grammar;
 
 function grammarRules(patterns: GrammarRule[]): GrammarRule[] {
   return patterns.flatMap((rule) =>
     rule.include?.startsWith("#")
       ? grammarRules(
-          mclGrammar.repository[rule.include.slice(1)].patterns ?? [
-            mclGrammar.repository[rule.include.slice(1)],
+          grammar.repository[rule.include.slice(1)].patterns ?? [
+            grammar.repository[rule.include.slice(1)],
           ],
         )
       : [rule],
   );
 }
 
-const mclRules = grammarRules(mclGrammar.patterns);
+const mclRules = grammarRules(grammar.patterns);
 const mclLanguage = StreamLanguage.define({
   tokenTable: tokenNames,
   startState: (): LexerState => ({}),
@@ -119,6 +122,9 @@ let configMap =
 
 emit configMap
 `;
+const directoryInputProps = {
+  webkitdirectory: "",
+} as React.InputHTMLAttributes<HTMLInputElement> & { webkitdirectory: string };
 
 export default function Playground() {
   const editorHost = useRef<HTMLDivElement>(null);
@@ -320,7 +326,7 @@ export default function Playground() {
           <input
             type="file"
             multiple
-            webkitdirectory=""
+            {...directoryInputProps}
             aria-label="MCLプロジェクトフォルダー"
             onChange={loadProject}
           />

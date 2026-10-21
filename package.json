@@ -4,33 +4,31 @@
   "version": "0.0.0",
   "type": "module",
   "packageManager": "pnpm@12.14.0",
-  "engines": {
-    "node": ">=24.22.0"
-  },
+  "engines": { "node": ">=24.22.0" },
   "scripts": {
-    "install:deps": "pnpm install --frozen-lockfile",
-    "content:sync": "node scripts/sync-content.mjs",
-    "content:sync:astro": "node scripts/sync-content.mjs astro",
-    "dev": "pnpm run content:sync && rspress dev",
-    "build": "pnpm run content:sync && rspress build",
-    "preview": "rspress preview",
-    "astro:build": "pnpm run content:sync:astro && pnpm --dir astro-prototype build",
-    "lint": "oxlint rspress.config.ts scripts src astro-prototype",
-    "format": "oxfmt rspress.config.ts scripts src astro-prototype/src",
-    "format:check": "oxfmt --check rspress.config.ts scripts src astro-prototype/src"
+    "prepare:runtime": "node scripts/prepare-runtime.mjs",
+    "prepare:grammar": "node scripts/prepare-grammar.mjs",
+    "predev": "pnpm run prepare:runtime && pnpm run prepare:grammar",
+    "dev": "astro dev",
+    "prebuild": "pnpm run prepare:runtime && pnpm run prepare:grammar",
+    "build": "astro build && node scripts/write-csp.mjs .build/dist .build/security-headers.conf",
+    "preview": "astro preview",
+    "pretypecheck": "pnpm run prepare:grammar",
+    "lint": "oxlint astro.config.mjs scripts src",
+    "format": "oxfmt astro.config.mjs scripts src",
+    "format:check": "oxfmt --check astro.config.mjs scripts src",
+    "typecheck": "astro check"
   },
   "devDependencies": {
+    "@astrojs/check": "0.9.8",
     "@astrojs/react": "7.1.0",
     "@astrojs/starlight": "0.42.6",
-    "@rsbuild/plugin-node-polyfill": "1.4.6",
-    "@rspress/core": "2.0.23",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "astro": "7.2.10",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
-    "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "typescript": "6.0.2"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.4",
@@ -38,6 +36,7 @@
     "@codemirror/language": "6.13.1",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.15",
+    "@lezer/highlight": "1.2.5",
     "memfs": "4.80.0",
     "path-browserify": "1.0.1",
     "react": "19.3.1",

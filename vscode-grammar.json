@@ -1,0 +1,5 @@
+{
+  "repository": "manifest-configuration-language/vscode",
+  "ref": "7d382478a13ed363298d703e306a19fc39daf64d",
+  "path": "syntaxes/mcl.tmLanguage.json"
+}

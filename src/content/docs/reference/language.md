@@ -1,3 +1,7 @@
+---
+title: "MCL言語仕様"
+---
+
 # MCL言語仕様
 
 この文書は現在のCLIが解釈する言語の仕様です。実装済みの機能と今後必要な機能を区別します。Parser、AST、Formatterの内部設計は[ParserとASTの再設計](architecture/parser-ast.md)、遅延評価の設計は[遅延評価](architecture/deferred-evaluation.md)を参照してください。
@@ -300,29 +304,29 @@ let result = mergeByKey(
 - `filter`はListの各要素へ1引数の関数を適用し、Boolの結果がtrueの要素を返します。ラムダまたは名前付き関数を指定できます。
 - `exactlyOne`はListからBoolを返す述語に一致する値を選び、一致数が1件でなければエラーにします。ラムダまたは名前付き関数を指定できます。
 - `fold`はListの要素を初期値と2引数の関数で順に集約します。ラムダまたは名前付き関数を指定できます。
-`len`、`replace`、`clone`は`std:core`、List操作は`std:list`、Map操作は`std:map`からimportできます。これらの標準関数は直接呼び出せるほか、`map`などの関数引数にも指定できます。外部Bundleの値を変更するときは、`exactlyOne`などで対象を明示的に選び、`with:`で合成します。Bundle全体へ条件付きの変更を適用する関数はありません。
+  `len`、`replace`、`clone`は`std:core`、List操作は`std:list`、Map操作は`std:map`からimportできます。これらの標準関数は直接呼び出せるほか、`map`などの関数引数にも指定できます。外部Bundleの値を変更するときは、`exactlyOne`などで対象を明示的に選び、`with:`で合成します。Bundle全体へ条件付きの変更を適用する関数はありません。
 
 標準moduleの公開名と呼び出し形は次のとおりです。Adapterの制約は各節で説明します。
 
-| Module | Export | 引数と戻り値 |
-| --- | --- | --- |
-| `std:core` | `len(value) -> Int` | String、List、Mapを受け取り、Unicodeコードポイント数、要素数、キー数を返します。それ以外の型はエラーです。 |
-| `std:core` | `replace(value) -> Replacement` | `with:`の既存フィールド置換に使う値を返します。 |
-| `std:core` | `clone(value) -> Value` | 値を複製し、含まれるNodeに新しい同一性を割り当てます。 |
-| `std:list` | `contains(values, value) -> Bool` | Listの要素比較、またはStringの部分文字列検索を行います。 |
-| `std:list` | `concat(first, second) -> List<T>` | 二つのListを順に連結します。 |
-| `std:list` | `union(first, second) -> List<T>` | 二つのListを連結し、等しい値を最初の出現順で一つにまとめます。 |
-| `std:list` | `replaceAt(values, index, value) -> List<T>` | 0始まりの添字を置換します。添字がIntでない場合や範囲外の場合はエラーです。 |
-| `std:list` | `mergeByKey(existing, overrides, key) -> List<Map>` | 指定キーが等しいMapを再帰合成し、未一致のoverrideを末尾へ追加します。両List内のキー欠落・重複はエラーです。 |
-| `std:list` | `map(values, transform) -> List<R>` | 各要素へ1引数関数を適用し、結果を同じ順序で返します。 |
-| `std:list` | `filter(values, predicate) -> List<T>` | Boolを返す述語がtrueになる要素を元の順序で返します。 |
-| `std:list` | `exactlyOne(values, predicate) -> T` | Boolを返す述語に一致する要素を一つ返します。一致数が0または2以上ならエラーです。 |
-| `std:list` | `fold(values, initial, combine) -> R` | Listを先頭から順に走査し、`combine(accumulator, value)`で集約します。 |
-| `std:map` | `keyOf(mapping, key) -> String` | Mapに存在するStringキーを返します。Map以外、String以外のキー、存在しないキーはエラーです。 |
+| Module          | Export                                                    | 引数と戻り値                                                                                                                                                                  |
+| --------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `std:core`      | `len(value) -> Int`                                       | String、List、Mapを受け取り、Unicodeコードポイント数、要素数、キー数を返します。それ以外の型はエラーです。                                                                    |
+| `std:core`      | `replace(value) -> Replacement`                           | `with:`の既存フィールド置換に使う値を返します。                                                                                                                               |
+| `std:core`      | `clone(value) -> Value`                                   | 値を複製し、含まれるNodeに新しい同一性を割り当てます。                                                                                                                        |
+| `std:list`      | `contains(values, value) -> Bool`                         | Listの要素比較、またはStringの部分文字列検索を行います。                                                                                                                      |
+| `std:list`      | `concat(first, second) -> List<T>`                        | 二つのListを順に連結します。                                                                                                                                                  |
+| `std:list`      | `union(first, second) -> List<T>`                         | 二つのListを連結し、等しい値を最初の出現順で一つにまとめます。                                                                                                                |
+| `std:list`      | `replaceAt(values, index, value) -> List<T>`              | 0始まりの添字を置換します。添字がIntでない場合や範囲外の場合はエラーです。                                                                                                    |
+| `std:list`      | `mergeByKey(existing, overrides, key) -> List<Map>`       | 指定キーが等しいMapを再帰合成し、未一致のoverrideを末尾へ追加します。両List内のキー欠落・重複はエラーです。                                                                   |
+| `std:list`      | `map(values, transform) -> List<R>`                       | 各要素へ1引数関数を適用し、結果を同じ順序で返します。                                                                                                                         |
+| `std:list`      | `filter(values, predicate) -> List<T>`                    | Boolを返す述語がtrueになる要素を元の順序で返します。                                                                                                                          |
+| `std:list`      | `exactlyOne(values, predicate) -> T`                      | Boolを返す述語に一致する要素を一つ返します。一致数が0または2以上ならエラーです。                                                                                              |
+| `std:list`      | `fold(values, initial, combine) -> R`                     | Listを先頭から順に走査し、`combine(accumulator, value)`で集約します。                                                                                                         |
+| `std:map`       | `keyOf(mapping, key) -> String`                           | Mapに存在するStringキーを返します。Map以外、String以外のキー、存在しないキーはエラーです。                                                                                    |
 | `std:lifecycle` | `attach(value, events, priority, wait, cleanup) -> Value` | `value`はMap、`events`は空でないStringのList、`priority`はInt、`wait`はBool、`cleanup`はStringのListです。Bundle、既存metadata、不正または重複したevent/cleanupはエラーです。 |
-| `std:kustomize` | `build(source, revision, directory) -> Bundle` | 三つの引数はStringです。Kustomizeディレクトリをビルドします。 |
-| `std:manifest` | `load(source) -> Bundle` | `source`はStringです。YAML Manifestを読み込みます。 |
-| `std:helm` | `render(source, options) -> Bundle` | `source`はString、`options`はMapです。Helm Chartをレンダリングします。 |
+| `std:kustomize` | `build(source, revision, directory) -> Bundle`            | 三つの引数はStringです。Kustomizeディレクトリをビルドします。                                                                                                                 |
+| `std:manifest`  | `load(source) -> Bundle`                                  | `source`はStringです。YAML Manifestを読み込みます。                                                                                                                           |
+| `std:helm`      | `render(source, options) -> Bundle`                       | `source`はString、`options`はMapです。Helm Chartをレンダリングします。                                                                                                        |
 
 位置引数と名前付き引数を併用する場合、同じ引数を重ねて指定したり、未知の名前を指定したりするとエラーです。`map`、`filter`、`exactlyOne`、`fold`の関数引数にはラムダまたは名前付き関数を指定できます。
 
@@ -451,28 +455,28 @@ Kubernetes向け出力ではArtifact直下のListを拒否します。各Resourc
 
 組み込みCatalogは次のKindを扱います。記載のないKindやAPI groupは、`mcl.toml`の追加DescriptorまたはBundle内CRDでscopeを定義してください。scope未解決のResourceは`mcl check`と`mcl render`でエラーになります。
 
-| Scope | API group | Kind |
-| --- | --- | --- |
-| Namespaced | core | ConfigMap、Endpoints、Event、LimitRange、PersistentVolumeClaim、Pod、PodTemplate、ReplicationController、ResourceQuota、Secret、Service、ServiceAccount |
-| Cluster | core | Namespace、Node、PersistentVolume |
-| Namespaced | `apps` | ControllerRevision、DaemonSet、Deployment、ReplicaSet、StatefulSet |
-| Namespaced | `autoscaling` | HorizontalPodAutoscaler |
-| Namespaced | `batch` | CronJob、Job |
-| Cluster | `admissionregistration.k8s.io` | MutatingWebhookConfiguration、ValidatingAdmissionPolicy、ValidatingAdmissionPolicyBinding、ValidatingWebhookConfiguration |
-| Cluster | `apiregistration.k8s.io` | APIService |
-| Cluster | `apiextensions.k8s.io` | CustomResourceDefinition |
-| Cluster | `certificates.k8s.io` | CertificateSigningRequest |
-| Namespaced | `coordination.k8s.io` | Lease |
-| Namespaced | `discovery.k8s.io` | EndpointSlice |
-| Cluster | `flowcontrol.apiserver.k8s.io` | FlowSchema、PriorityLevelConfiguration |
-| Namespaced | `networking.k8s.io` | Ingress、NetworkPolicy |
-| Cluster | `networking.k8s.io` | IngressClass |
-| Cluster | `node.k8s.io` | RuntimeClass |
-| Namespaced | `policy` | PodDisruptionBudget |
-| Namespaced | `rbac.authorization.k8s.io` | Role、RoleBinding |
-| Cluster | `rbac.authorization.k8s.io` | ClusterRole、ClusterRoleBinding |
-| Cluster | `scheduling.k8s.io` | PriorityClass |
-| Cluster | `storage.k8s.io` | CSIDriver、CSINode、StorageClass、VolumeAttachment |
+| Scope      | API group                      | Kind                                                                                                                                                    |
+| ---------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Namespaced | core                           | ConfigMap、Endpoints、Event、LimitRange、PersistentVolumeClaim、Pod、PodTemplate、ReplicationController、ResourceQuota、Secret、Service、ServiceAccount |
+| Cluster    | core                           | Namespace、Node、PersistentVolume                                                                                                                       |
+| Namespaced | `apps`                         | ControllerRevision、DaemonSet、Deployment、ReplicaSet、StatefulSet                                                                                      |
+| Namespaced | `autoscaling`                  | HorizontalPodAutoscaler                                                                                                                                 |
+| Namespaced | `batch`                        | CronJob、Job                                                                                                                                            |
+| Cluster    | `admissionregistration.k8s.io` | MutatingWebhookConfiguration、ValidatingAdmissionPolicy、ValidatingAdmissionPolicyBinding、ValidatingWebhookConfiguration                               |
+| Cluster    | `apiregistration.k8s.io`       | APIService                                                                                                                                              |
+| Cluster    | `apiextensions.k8s.io`         | CustomResourceDefinition                                                                                                                                |
+| Cluster    | `certificates.k8s.io`          | CertificateSigningRequest                                                                                                                               |
+| Namespaced | `coordination.k8s.io`          | Lease                                                                                                                                                   |
+| Namespaced | `discovery.k8s.io`             | EndpointSlice                                                                                                                                           |
+| Cluster    | `flowcontrol.apiserver.k8s.io` | FlowSchema、PriorityLevelConfiguration                                                                                                                  |
+| Namespaced | `networking.k8s.io`            | Ingress、NetworkPolicy                                                                                                                                  |
+| Cluster    | `networking.k8s.io`            | IngressClass                                                                                                                                            |
+| Cluster    | `node.k8s.io`                  | RuntimeClass                                                                                                                                            |
+| Namespaced | `policy`                       | PodDisruptionBudget                                                                                                                                     |
+| Namespaced | `rbac.authorization.k8s.io`    | Role、RoleBinding                                                                                                                                       |
+| Cluster    | `rbac.authorization.k8s.io`    | ClusterRole、ClusterRoleBinding                                                                                                                         |
+| Cluster    | `scheduling.k8s.io`            | PriorityClass                                                                                                                                           |
+| Cluster    | `storage.k8s.io`               | CSIDriver、CSINode、StorageClass、VolumeAttachment                                                                                                      |
 
 scopeを識別できるCluster-scoped Resourceは`metadata.namespace`を指定できません。
 

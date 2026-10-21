@@ -1,0 +1,6 @@
+ignores:
+  - rule: cache-poisoning
+    file: .github/workflows/ci.yml
+    job: build
+    step: Build image
+    reason: GitHub scopes pull request caches to their merge refs; trusted main and tag builds share BuildKit cache to reduce build time.

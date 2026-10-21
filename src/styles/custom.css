@@ -1,0 +1,62 @@
+.playground {
+  margin-block: 1.5rem;
+}
+
+.playground-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.playground-toolbar button {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 3px;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  cursor: pointer;
+}
+
+.playground-toolbar button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.playground-editor {
+  border: 1px solid var(--sl-color-gray-5);
+  font:
+    14px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+.playground-editor .cm-editor {
+  min-height: 18rem;
+}
+
+.playground-editor .cm-content {
+  padding-block: 0.75rem;
+}
+
+.playground-output {
+  overflow: auto;
+  padding: 1rem;
+  border: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-gray-6);
+}
+
+.playground-diagnostics {
+  padding-inline-start: 1.2rem;
+}
+
+.diagnostic {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--sl-color-text);
+  text-align: start;
+  cursor: pointer;
+}

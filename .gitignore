@@ -1,8 +1,6 @@
 node_modules/
 .build/
-.rspress/
 .astro/
-astro-prototype/dist/
-astro-prototype/src/content/docs/
-docs/.vitepress/cache/
-docs/.vitepress/dist/
+public/mcl.wasm.gz
+public/wasm_exec.js
+src/playground/mcl.tmLanguage.json

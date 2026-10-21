@@ -1,3 +1,7 @@
+---
+title: "MCL"
+---
+
 # MCL
 
 MCLは、YAML Manifestを型付きの値として組み立て、検証するための設定言語です。

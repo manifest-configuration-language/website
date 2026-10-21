@@ -19,7 +19,7 @@ sidebar:
 
 MCLソースはエントリーファイル、import先、文字列からの解析のいずれも1ファイル16 MiBまでです。
 
-```mcl verify
+```mcl verify expect=0.metadata.name=sample,0.data.MODE=production
 let name = "sample"
 let resource =
   apiVersion: "v1"
@@ -63,13 +63,19 @@ Mapのキーは識別子または二重引用符で囲んだ文字列です。�
 
 文字列は二重引用符または三重二重引用符で囲みます。三重二重引用符を同じ行で閉じると、区切りの間をそのまま文字列として扱います。複数行文字列では開始区切りの後に改行し、終了区切りを単独行に置きます。空でない本文行の共通インデントを除去し、空行の空白は除去します。本文の先頭と末尾にある区切り用の改行は値に含めず、CRLFはLFに変換します。本文中の`#`とタブはそのまま保持し、終了区切りを本文へ含めるエスケープ方法はありません。Formatterは本文の内容と相対インデントを保持し、改行をLFへ統一します。
 
-計算したMapキーには`key(expression): value`を使います。式の結果はStringでなければならず、静的キーを含む重複も評価時にエラーになります。
+計算したMapキーには`key(expression): value`を使います。式の結果はStringでなければならず、静的キーを含む重複も評価時にエラーになります。型検査と値の評価は別々に行われます。MCL v0.1.0は計算キーを含むMapを評価できないため、次の例をリリースギャップとして分類します。
 
-```mcl verify
+```mcl release-gap
 let annotationName = "example.org/checksum"
 let annotations =
   key(annotationName): "abc123"
   "example.org/enabled": "true"
+
+let output =
+  checksum: annotations[annotationName]
+  enabled: annotations["example.org/enabled"]
+
+emit output
 ```
 
 計算キーの型が静的にStringと判定できる場合、Mapの値型も推論します。推論できない計算キーや値があるMapは、型注釈との整合性を静的に判定しません。

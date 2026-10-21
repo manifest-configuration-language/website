@@ -41,7 +41,7 @@ emit production
 
 構造型でMapのフィールドと値の型を宣言できます。構造型は閉じた型です。必須フィールドがない場合や、宣言されていないフィールドを含む場合はエラーになります。
 
-```mcl verify
+```mcl verify expect=0.name=catalog,0.ports.0=8080
 type Container =
   name: String
   image: String
@@ -62,7 +62,7 @@ emit container
 
 `without:`とフィールドパスを使うと、Mapのフィールドを削除できます。指定先が存在しない場合はエラーです。
 
-```mcl verify
+```mcl verify expect=0.securityContext.capabilities={}
 let base =
   securityContext:
     allowPrivilegeEscalation: false

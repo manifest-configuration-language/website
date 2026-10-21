@@ -22,7 +22,7 @@ let replicas =
 
 Listから値を生成するには`for name in values:`を使います。各要素に対して本体を評価し、結果をListにまとめます。ループ本体がListを返す場合もflattenしません。
 
-```mcl verify
+```mcl verify expect=0.name=api,1.name=worker
 let names =
   - "api"
   - "worker"
@@ -30,6 +30,8 @@ let containers =
   for name in names:
     name: name
     image: "example/" + name + ":latest"
+
+emit each containers
 ```
 
 MCLは`fn(parameter, ...) => expression`形式のラムダを値として扱います。ラムダは定義時の値を捕捉し、関数の引数として渡せます。
@@ -38,13 +40,15 @@ MCLは`fn(parameter, ...) => expression`形式のラムダを値として扱い�
 
 名前付き関数は`fn name(parameter: Type, ...) -> ReturnType = expression`で定義します。関数本体には1つの式を記述し、Mapを返す場合はインデント形式を使えます。ローカル関数は戻り値型を省略でき、実装が戻り値型を推論します。再帰関数は戻り値型を明示してください。関数呼び出しでは位置引数と名前付き引数を使えます。遅延評価を含む関数呼び出しの引数と戻り値は、評価確定後に宣言型と照合します。評価時の関数呼び出し深度は256までです。モジュールから公開する関数は`export fn`で宣言し、引数型と戻り値型を明示します。
 
-```mcl verify
+```mcl verify expect=0.app=api-web
 fn resourceName(app: String, component: String) -> String =
   app + "-" + component
 
 export fn labels(name: String) -> Map<String, String> =
   app: name
   "app.kubernetes.io/name": name
+
+emit labels(resourceName("api", "web"))
 ```
 
 ```mcl expected-error error=List
@@ -107,7 +111,7 @@ Bundleに`apiextensions.k8s.io/v1`の`CustomResourceDefinition`と対応するCu
 
 `std:kustomize`の`build(source, revision, directory)`は、Kustomizeディレクトリをビルドし、Manifestを含むBundleを返します。ローカルsourceでは`source`に呼び出し元MCLファイルからの相対パス、`revision`に空文字列、`directory`にsourceからの相対パスを指定します。Git sourceでは`source`に`git+https://`で始まるRepository URL、`revision`に小文字40桁のcommit SHA-1、`directory`にRepository内の相対パスを指定します。Kustomizationファイル内の推移的Git参照は`https://host/org/repo.git//directory?ref=<40桁のcommit SHA-1>`形式に限り利用できます。Repositoryのルートを参照する場合は`//directory`を省略します。`mcl update`は参照された全commitを取得し、SHA-256を`mcl.lock`とコンテンツキャッシュへ記録します。通常の評価はキャッシュ済みsourceを一時ディレクトリへ展開して参照を書き換えるため、ネットワークへ接続しません。Git sourceの元ファイルはarchiveのSHA-256ごとに`.mcl/cache/kustomize-sources/`へ保存し、診断に利用します。SSH、ブランチ名、タグ名、短縮SHA、リダイレクト、submodule、symlink、Git以外のremote参照は拒否します。推移的参照は最大64件、深さ16、キャッシュarchiveの合計64 MiBまでです。各Git sourceは最大10,000ファイル、展開後16 MiBまでです。プロジェクトルート外のローカルファイル読み込みも拒否します。Kustomizeが入力元を追跡しているResourceでは、Lifecycle OriginにそのResourceのファイルlocatorを記録し、入力ファイルと一致する値やキーには元YAMLの範囲を割り当てます。変換後の値には入力行を主位置として割り当てず、値の型が変わった場合も元スカラーの範囲を関連位置として保持します。Schema診断では`kustomize.build`の式を主位置にし、追跡できた元ResourceのYAML範囲を関連情報に表示します。入力元を特定できないResourceには元YAMLの位置を表示しません。
 
-```mcl verify fixture=kustomize-local
+```mcl verify fixture=kustomize-local expect=0.metadata.name=example
 import "std:kustomize" as kustomize
 
 let resources = kustomize.build(
@@ -132,7 +136,7 @@ let resources = kustomize.build(
 
 `std:lifecycle`の`attach(value, events, priority, wait, cleanup)`は、Map形式のManifestにライフサイクル情報を付けます。Bundleには適用できません。`events`には`bootstrap`、`before.create`、`after.create`、`before.update`、`after.update`、`before.delete`、`after.delete`、`before.rollback`、`after.rollback`、`verify`を指定できます。`cleanup`には`before-next-run`、`on-success`、`on-failure`を指定できます。`wait`は後段のExecutorへHook完了待機を要求するmetadataです。`mcl render`はHookを実行せず、`lifecycle.json`へ`wait`と`cleanup`を出力します。`priority`が小さいArtifactから出力します。
 
-```mcl verify
+```mcl verify expect=empty,lifecycle.operation=create,lifecycle.artifacts.0.wait=true,lifecycle.artifacts.0.priority=-10,lifecycle.artifacts.0.events.0=before.create,lifecycle.artifacts.0.cleanup.0=before-next-run,lifecycle.artifacts.0.cleanup.1=on-success
 import "std:lifecycle" as lifecycle
 
 let migration =
@@ -159,7 +163,7 @@ emit migrationHook
 
 `std:helm`の`render(source, options)`は、Helm Chartをレンダリングし、Artifactを含むBundleを返します。`source`には呼び出し元MCLファイルからの相対パス、HTTPS ChartアーカイブのURL、または`oci://host/repository/chart`形式のOCI参照を指定できます。HTTPSアーカイブとOCI参照では`version`にChartのバージョンを指定します。Chartアーカイブは圧縮後64 MiBまで、展開後100 MiBまでです。Chart.yamlに宣言された依存Chartは、Chartに同梱されたsubchartとChart名、SemVer version constraintを照合します。検証はnested dependenciesにも適用し、宣言されたsubchartが同梱されていない場合やversionが一致しない場合はエラーにします。Chart.yamlに宣言されていないcharts/内のsubchartもHelmの挙動に従ってレンダリングし、そのChart内の依存宣言を検証します。`Chart.lock`を使った依存Chartの外部取得は行いません。`mcl update`は参照されたHTTPSアーカイブとOCI Chartを取得して`.mcl/cache/sha256/`へ保存し、`mcl.lock`にダイジェストを記録します。OCI Chartはmanifest digest、Chart layer digest、保存したアーカイブのSHA-256を記録します。通常の評価はロック済みキャッシュを使い、ネットワークへ接続しません。OCI Registryへの通信はTLSを必須とし、匿名アクセスを使います。HelmとDockerの資格情報ファイルやOSの資格情報ストアは読み込みません。そのため、認証が必要なRegistryは利用できません。`options`には`values`、`releaseName`、`namespace`、`operation`、`revision`、`kubeVersion`、`apiVersions`、`version`を指定できます。`kubeVersion`と`apiVersions`はChartの内容にかかわらず必須で、ターゲットクラスターの値を明示します。追加APIがなければ`apiVersions: []`を指定します。`values`の既定値は空Map、`releaseName`の既定値は`mcl`、`namespace`の既定値は`default`、`operation`の既定値は`create`、`revision`の既定値は`1`です。`revision`にはHelm Release contextへ渡す1以上の整数を指定します。`operation`は`create`、`update`、`delete`、`rollback`、`verify`を受け付けます。DecimalをHelmへ渡す場合は`float64`で正確に表現できる必要があります。`0.1`のように正確に変換できないDecimalは丸めずにエラーにします。`mcl render --operation`を指定すると、CLIの操作種別が`options.operation`より優先され、Chartを同じ操作のHelm Release contextで評価します。Chartの`values.schema.json`による検証エラーは`options.values`のMap全体を診断範囲にします。Helm Hookは一般的なLifecycle eventへ変換し、Hook weightとdelete policyをArtifact metadataとして保持します。ローカルChartとロック済みHTTPS・OCI ChartでHelmがテンプレートパスと行番号を返す解析・実行エラーは、Chart元ファイルを診断します。ロック済みChartの元ファイルはアーカイブのSHA-256ごとに`.mcl/cache/helm-sources/`へ復元します。Hook metadata検証エラーはテンプレート元ファイル全体を範囲として診断します。この範囲は生成YAML内の該当行を示しません。`crds/`のYAMLファイルは`bootstrap` Artifactとして扱います。ローカルとロック済みChartの`crds/` YAMLは元ファイルの値とキーの範囲を診断に使います。テンプレートファイルに`{{`がなく、レンダー結果が元ファイルと完全一致する場合も値とキーの範囲を診断に使います。テンプレート式を含まないYAMLの出力解析エラーは、元ファイルと出力が一致する場合にChart元ファイルの該当行を診断します。出力を生成するHelmテンプレート式はマーカーで出力先を追跡し、YAMLの値またはMapキーへ一意に対応する場合は式の範囲をSchema診断に使います。関数呼び出し、テンプレート呼び出し、パイプ、MapやListを生成する式も追跡します。`indent`と`nindent`のパイプは計測時も適用して出力構造を保ちます。繰り返し出力される式と実行された分岐の式は、各出力先を式の範囲へ対応付けます。非実行分岐を含むテンプレートや同じ式が複数回出力される場合は、Helmテンプレートファイル全体も関連情報として示します。Helmリポジトリー名からのChart解決、Kubernetes API、DNS、時刻・乱数・証明書生成、bcryptを使う`htpasswd`に依存するテンプレート関数は利用できません。
 
-```mcl verify fixture=helm-local
+```mcl verify fixture=helm-local expect=0.data.image-tag=1.2.3
 import "std:helm" as helm
 
 let renderOptions =
@@ -182,7 +186,7 @@ ManifestとKustomizeのYAML入力は16 MiB、300,000ノード、128階層まで�
 
 割当単位はRuntimeValueの個数を基準にした上限であり、プロセス全体のheap byte数を保証しません。YAML parserの構造ノード、Helm・Kustomize内部の構造体、文字列やsliceの容量、その他の一時割当は別の入力サイズ制限で抑制しますが、この予算では個別に計測しません。
 
-```mcl verify
+```mcl verify expect=0.count=2,0.key=APP_MODE
 import "std:list" as lists
 import "std:map" as maps
 

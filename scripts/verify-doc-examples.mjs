@@ -60,20 +60,78 @@ function modeFor(node, file) {
   const mode = tokens[0];
   const expectedError = tokens.find((token) => token.startsWith("error="))?.slice("error=".length);
   const fixture = tokens.find((token) => token.startsWith("fixture="))?.slice("fixture=".length);
+  const expectation = tokens.find((token) => token.startsWith("expect="))?.slice("expect=".length);
   const validFixture = fixture && /^[a-z0-9-]+$/.test(fixture);
+  const validExpectation =
+    expectation &&
+    expectation.split(",").every((entry) => {
+      if (entry === "empty") return true;
+      const separator = entry.indexOf("=");
+      if (separator < 1 || separator === entry.length - 1) return false;
+      const path = entry.slice(0, separator);
+      const value = entry.slice(separator + 1);
+      return (
+        path.split(".").every((part) => /^(?:0|[1-9][0-9]*|[A-Za-z_][A-Za-z0-9_-]*)$/.test(part)) &&
+        !value.includes(",")
+      );
+    });
+  const fixtureTokens = tokens.filter((token) => token.startsWith("fixture="));
+  const expectationTokens = tokens.filter((token) => token.startsWith("expect="));
+  const errorTokens = tokens.filter((token) => token.startsWith("error="));
   if (
     !modes.has(mode) ||
-    (mode === "expected-error" && (!expectedError || tokens.length !== 2)) ||
-    (mode === "verify" && tokens.length > 2) ||
-    (mode !== "expected-error" && mode !== "verify" && tokens.length !== 1) ||
-    (tokens.some((token) => token.startsWith("fixture=")) && !validFixture) ||
-    (mode !== "verify" && fixture)
+    (mode === "expected-error" &&
+      (!expectedError || errorTokens.length !== 1 || tokens.length !== 2)) ||
+    (mode === "verify" &&
+      (!validExpectation ||
+        expectationTokens.length !== 1 ||
+        errorTokens.length !== 0 ||
+        fixtureTokens.length > 1 ||
+        tokens.length !== 2 + fixtureTokens.length)) ||
+    (mode !== "verify" && mode !== "expected-error" && tokens.length !== 1) ||
+    (fixtureTokens.length > 0 && !validFixture) ||
+    (mode !== "verify" && (fixture || expectation))
   ) {
     throw new Error(
-      `${file}:${node.position.start.line}: invalid MCL fence metadata; use a mode (${[...modes].join(", ")}), optionally fixture=<name> for verify or error=<substring> for expected-error`,
+      `${file}:${node.position.start.line}: invalid MCL fence metadata; verify requires expect=<path=value,...|empty> and may use fixture=<name>; expected-error requires error=<substring>`,
     );
   }
-  return { mode, expectedError, fixture };
+  return { mode, expectedError, fixture, expectation };
+}
+
+function valueAtPath(value, path) {
+  return path.split(".").reduce((current, part) => {
+    if (current === undefined || current === null || !Object.hasOwn(current, part))
+      return undefined;
+    return current[part];
+  }, value);
+}
+
+function verifyOutput(output, expectation, lifecycleOutput) {
+  const rendered = JSON.parse(output);
+  const expectations = expectation.split(",");
+  if (expectations.includes("empty")) {
+    if (!Array.isArray(rendered) || rendered.length !== 0)
+      throw new Error(`expected no rendered artifacts, received ${JSON.stringify(rendered)}`);
+  }
+
+  for (const entry of expectations) {
+    if (entry === "empty") continue;
+    const separator = entry.indexOf("=");
+    const path = entry.slice(0, separator);
+    const expected = entry.slice(separator + 1);
+    const source = path.startsWith("lifecycle.") ? JSON.parse(lifecycleOutput) : rendered;
+    const actual = valueAtPath(source, path.startsWith("lifecycle.") ? path.slice(10) : path);
+    let matches = String(actual) === expected;
+    try {
+      matches ||= JSON.stringify(actual) === JSON.stringify(JSON.parse(expected));
+    } catch {}
+    if (!matches) {
+      throw new Error(
+        `expected output ${path}=${JSON.stringify(expected)}, received ${JSON.stringify(actual)}`,
+      );
+    }
+  }
 }
 
 async function getCli() {
@@ -105,7 +163,7 @@ async function main() {
     const tree = unified().use(remarkParse).use(remarkMdx).parse(source);
     visit(tree, (node) => {
       if (node.type !== "code" || node.lang !== "mcl") return;
-      const { mode, expectedError, fixture } = modeFor(node, relative(docsRoot, file));
+      const { mode, expectedError, fixture, expectation } = modeFor(node, relative(docsRoot, file));
       classifications.set(mode, classifications.get(mode) + 1);
       if (mode === "verify")
         executableExamples.push({
@@ -113,6 +171,7 @@ async function main() {
           line: node.position.start.line,
           source: node.value,
           fixture,
+          expectation,
         });
       if (fixture) fixtureCounts.set(fixture, (fixtureCounts.get(fixture) ?? 0) + 1);
       if (mode === "expected-error")
@@ -129,7 +188,8 @@ async function main() {
 
   const cli = await getCli();
   try {
-    for (const [index, example] of [...executableExamples, ...expectedErrors].entries()) {
+    for (const example of [...executableExamples, ...expectedErrors]) {
+      const executable = executableExamples.includes(example);
       const directory = await mkdtemp(join(tmpdir(), "mcl-doc-example-"));
       const sourcePath = join(directory, "main.mcl");
       if (example.fixture) {
@@ -148,29 +208,70 @@ async function main() {
         }
       }
       await writeFile(sourcePath, example.source);
-      let failed = false;
+      let checkFailure;
+      let renderFailure;
       let output = "";
+      let lifecycleOutput;
       try {
         execFileSync(cli.binary, ["check", sourcePath], { cwd: directory, stdio: "pipe" });
       } catch (error) {
-        failed = true;
-        output = `${error.stderr?.toString() ?? ""}${error.stdout?.toString() ?? ""}`.trim();
-      } finally {
-        await rm(directory, { recursive: true, force: true });
+        checkFailure = error;
       }
-      if (index < executableExamples.length && failed) {
+      if (!checkFailure && executable) {
+        try {
+          output = execFileSync(cli.binary, ["render", "--format", "json", sourcePath], {
+            cwd: directory,
+            stdio: "pipe",
+          }).toString();
+          if (example.expectation.split(",").some((entry) => entry.startsWith("lifecycle."))) {
+            const operationDirectory = join(directory, "operation-output");
+            execFileSync(
+              cli.binary,
+              [
+                "render",
+                "--operation",
+                "create",
+                "--output-dir",
+                operationDirectory,
+                "--format",
+                "json",
+                sourcePath,
+              ],
+              { cwd: directory, stdio: "pipe" },
+            );
+            lifecycleOutput = await readFile(join(operationDirectory, "lifecycle.json"), "utf8");
+          }
+        } catch (error) {
+          renderFailure = error;
+        }
+      }
+      await rm(directory, { recursive: true, force: true });
+      const checkOutput = (error) =>
+        `${error.stderr?.toString() ?? ""}${error.stdout?.toString() ?? ""}`.trim();
+      if (executable && checkFailure) {
         throw new Error(
-          `${relative(docsRoot, example.file)}:${example.line}: MCL ${release} rejected example ${index + 1}\n${output}`,
+          `${relative(docsRoot, example.file)}:${example.line}: MCL ${release} rejected example during check\n${checkOutput(checkFailure)}`,
         );
       }
-      if (index >= executableExamples.length) {
-        if (!failed)
+      if (executable && renderFailure) {
+        throw new Error(
+          `${relative(docsRoot, example.file)}:${example.line}: MCL ${release} could not render example\n${checkOutput(renderFailure)}`,
+        );
+      }
+      if (executable) {
+        try {
+          verifyOutput(output, example.expectation, lifecycleOutput);
+        } catch (error) {
+          throw new Error(`${relative(docsRoot, example.file)}:${example.line}: ${error.message}`);
+        }
+      } else {
+        if (!checkFailure)
           throw new Error(
             `${relative(docsRoot, example.file)}:${example.line}: expected MCL ${release} to reject this example`,
           );
-        if (!output.includes(example.expectedError))
+        if (!checkOutput(checkFailure).includes(example.expectedError))
           throw new Error(
-            `${relative(docsRoot, example.file)}:${example.line}: expected diagnostic containing ${JSON.stringify(example.expectedError)}\n${output}`,
+            `${relative(docsRoot, example.file)}:${example.line}: expected diagnostic containing ${JSON.stringify(example.expectedError)}\n${checkOutput(checkFailure)}`,
           );
       }
     }

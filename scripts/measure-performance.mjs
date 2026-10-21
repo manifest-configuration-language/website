@@ -87,14 +87,22 @@ async function measurePage(
   });
 
   await page.addInitScript(() => {
-    window.__performanceLcp = 0;
-    window.__performanceCls = 0;
+    Reflect.set(window, "__performanceLcp", 0);
+    Reflect.set(window, "__performanceCls", 0);
     new PerformanceObserver((entries) => {
-      for (const entry of entries.getEntries()) window.__performanceLcp = entry.startTime;
+      for (const entry of entries.getEntries()) {
+        Reflect.set(window, "__performanceLcp", entry.startTime);
+      }
     }).observe({ type: "largest-contentful-paint", buffered: true });
     new PerformanceObserver((entries) => {
       for (const entry of entries.getEntries()) {
-        if (!entry.hadRecentInput) window.__performanceCls += entry.value;
+        if (!entry.hadRecentInput) {
+          Reflect.set(
+            window,
+            "__performanceCls",
+            Number(Reflect.get(window, "__performanceCls")) + entry.value,
+          );
+        }
       }
     }).observe({ type: "layout-shift", buffered: true });
   });
@@ -109,8 +117,10 @@ async function measurePage(
     firstContentfulPaintMs: Math.round(
       performance.getEntriesByName("first-contentful-paint")[0]?.startTime ?? 0,
     ),
-    largestContentfulPaintMs: Math.round(window.__performanceLcp ?? 0),
-    cumulativeLayoutShift: Number((window.__performanceCls ?? 0).toFixed(4)),
+    largestContentfulPaintMs: Math.round(Number(Reflect.get(window, "__performanceLcp")) || 0),
+    cumulativeLayoutShift: Number(
+      (Number(Reflect.get(window, "__performanceCls")) || 0).toFixed(4),
+    ),
   }));
   let pagefindOnDemandAssets;
   if (measureSearch) {

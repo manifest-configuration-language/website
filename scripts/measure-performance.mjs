@@ -1,16 +1,17 @@
 import { spawn } from "node:child_process";
+import { readFile, readdir } from "node:fs/promises";
+import { createServer, request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
-import { createServer } from "node:net";
+import { createServer as createNetServer } from "node:net";
 import { chromium } from "@playwright/test";
-import { startWasmAssetServer } from "./wasm-asset-server.mjs";
 
 const astroCli = fileURLToPath(new URL("../node_modules/astro/bin/astro.mjs", import.meta.url));
-async function reservePort() {
-  const listener = createServer();
+async function reservePort(requestedPort = 0) {
+  const listener = createNetServer();
   await new Promise((resolve, reject) => {
     listener.once("error", reject);
-    listener.listen(Number(process.env.PERFORMANCE_PORT ?? 0), "127.0.0.1", resolve);
+    listener.listen(requestedPort, "127.0.0.1", resolve);
   });
   const { port } = listener.address();
   await new Promise((resolve, reject) =>
@@ -19,19 +20,63 @@ async function reservePort() {
   return port;
 }
 
-const port = await reservePort();
+const port = await reservePort(Number(process.env.PERFORMANCE_PORT ?? 0));
+const previewPort = await reservePort();
 const origin = `http://127.0.0.1:${port}`;
-const wasmServer = await startWasmAssetServer();
-const wasmAssetName = wasmServer.assetName;
+const wasmAssetDirectory = new URL("../.build/dist/_astro/", import.meta.url);
+const wasmAssetName = (await readdir(wasmAssetDirectory)).find((name) =>
+  /^mcl\.wasm-[A-Za-z0-9_-]{8,}\.gz$/.test(name),
+);
+if (!wasmAssetName) throw new Error("The fingerprinted MCL WebAssembly asset is missing.");
 const wasmAssetPath = `/_astro/${wasmAssetName}`;
+const wasmAssetBytes = await readFile(new URL(wasmAssetName, wasmAssetDirectory));
+const workerInstrumentation = `**/playground.worker-*.js`;
 const server = spawn(
   process.execPath,
-  [astroCli, "preview", "--host", "127.0.0.1", "--port", String(port)],
+  [astroCli, "preview", "--host", "127.0.0.1", "--port", String(previewPort)],
   {
     stdio: "ignore",
     env: { ...process.env, ASTRO_PREVIEW_BACKGROUND: "1" },
   },
 );
+const proxyServer = createServer((request, response) => {
+  if (new URL(request.url ?? "/", origin).pathname === wasmAssetPath) {
+    response.writeHead(200, {
+      "cache-control": "public, max-age=31536000, immutable",
+      "content-encoding": "gzip",
+      "content-length": String(wasmAssetBytes.byteLength),
+      "content-type": "application/wasm",
+    });
+    response.end(wasmAssetBytes);
+    return;
+  }
+
+  const upstream = httpRequest(
+    {
+      hostname: "127.0.0.1",
+      port: previewPort,
+      path: request.url,
+      method: request.method,
+      headers: { ...request.headers, host: `127.0.0.1:${previewPort}` },
+    },
+    (upstreamResponse) => {
+      response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
+      upstreamResponse.pipe(response);
+    },
+  );
+  upstream.on("error", () => {
+    response.writeHead(502);
+    response.end();
+  });
+  request.pipe(upstream);
+});
+await new Promise((resolve, reject) => {
+  proxyServer.once("error", reject);
+  proxyServer.listen(port, "127.0.0.1", resolve);
+}).catch((error) => {
+  server.kill("SIGTERM");
+  throw error;
+});
 
 async function waitForServer() {
   const startedAt = performance.now();
@@ -54,15 +99,46 @@ function totals(assets) {
   return { ...result, total: Object.values(result).reduce((sum, bytes) => sum + bytes, 0) };
 }
 
+async function instrumentWasmWorker(context) {
+  await context.route(workerInstrumentation, async (route) => {
+    const response = await route.fetch();
+    const source = await response.text();
+    const instantiateCall = /WebAssembly\.instantiateStreaming\(([^,]+),([^)]*)\)/g;
+    const matches = [...source.matchAll(instantiateCall)];
+    if (matches.length !== 1)
+      throw new Error(
+        `Expected one WebAssembly.instantiateStreaming call in ${route.request().url()}`,
+      );
+    const instrumented = source.replace(
+      instantiateCall,
+      "(globalThis.__mclWasmInstantiateStartedAt=performance.now(),WebAssembly.instantiateStreaming($1,$2).then(result=>{globalThis.__mclWasmInstantiateMs=performance.now()-globalThis.__mclWasmInstantiateStartedAt;globalThis.__mclWasmMemoryAtInstantiationBytes=result.instance.exports.mem?.buffer.byteLength??null;globalThis.__mclWasmMemory=result.instance.exports.mem??null;return result}))",
+    );
+    const headers = { ...response.headers() };
+    delete headers["content-encoding"];
+    delete headers["content-length"];
+    await route.fulfill({ response, body: instrumented, headers });
+  });
+}
+
+async function wasmWorkerMetrics(page) {
+  const worker = page.workers().find((candidate) => candidate.url().includes("playground.worker-"));
+  if (!worker) return null;
+  return worker.evaluate(() => ({
+    wasmStreamingInstantiateMs: Number.isFinite(globalThis.__mclWasmInstantiateMs)
+      ? Math.round(globalThis.__mclWasmInstantiateMs)
+      : null,
+    wasmLinearMemoryBytesAfterInstantiation: globalThis.__mclWasmMemoryAtInstantiationBytes ?? null,
+    wasmLinearMemoryCurrentBytes: globalThis.__mclWasmMemory?.buffer.byteLength ?? null,
+  }));
+}
+
 async function measurePage(
   browser,
   pathname,
   { renderPlayground = false, measureSearch = false } = {},
 ) {
   const context = await browser.newContext();
-  await context.route("**/mcl.wasm-*.gz", (route) =>
-    route.continue({ url: `${wasmServer.url}/${wasmAssetName}` }),
-  );
+  await instrumentWasmWorker(context);
   const page = await context.newPage();
   const assets = new Map();
   const responseTasks = [];
@@ -75,7 +151,7 @@ async function measurePage(
         if (url.origin !== origin) return;
         if (url.pathname === wasmAssetPath) {
           assets.set(url.pathname, {
-            bytes: wasmServer.byteLength,
+            bytes: wasmAssetBytes.byteLength,
             category: "other",
           });
           return;
@@ -157,8 +233,9 @@ async function measurePage(
     await page.getByRole("button", { name: "実行" }).waitFor({ state: "visible" });
     await page.getByLabel("レンダリング結果").waitFor({ state: "visible", timeout: 30_000 });
     secondRenderMs = performance.now() - secondStartedAt;
-    assets.set(wasmAssetPath, { bytes: wasmServer.byteLength, category: "other" });
+    assets.set(wasmAssetPath, { bytes: wasmAssetBytes.byteLength, category: "other" });
   }
+  const wasmMetrics = renderPlayground ? await wasmWorkerMetrics(page) : null;
   await page.waitForTimeout(200);
   const result = {
     path: pathname,
@@ -170,6 +247,10 @@ async function measurePage(
       ? {}
       : {
           wasmStartupAndFirstRenderMs: Math.round(renderMs),
+          wasmStreamingInstantiateMs: wasmMetrics?.wasmStreamingInstantiateMs ?? null,
+          wasmLinearMemoryBytesAfterInstantiation:
+            wasmMetrics?.wasmLinearMemoryBytesAfterInstantiation ?? null,
+          wasmLinearMemoryBytesAfterFirstRender: wasmMetrics?.wasmLinearMemoryCurrentBytes ?? null,
           secondRenderMs: Math.round(secondRenderMs),
           afterExecutionAssets: totals(
             new Map([...assets].filter(([url]) => !initialAssets.has(url))),
@@ -198,7 +279,7 @@ async function measureCancellation(browser) {
   await context.route("**/mcl.wasm-*.gz", async (route) => {
     notifyWasmRequest();
     await wasmHeld;
-    await route.continue({ url: `${wasmServer.url}/${wasmAssetName}` });
+    await route.continue();
   });
   try {
     await page.goto(`${origin}/playground/`, { waitUntil: "load" });
@@ -216,9 +297,7 @@ async function measureCancellation(browser) {
 
 async function measureLargeProject(browser) {
   const context = await browser.newContext();
-  await context.route("**/mcl.wasm-*.gz", (route) =>
-    route.continue({ url: `${wasmServer.url}/${wasmAssetName}` }),
-  );
+  await instrumentWasmWorker(context);
   const page = await context.newPage();
   await page.goto(`${origin}/playground/`, { waitUntil: "load" });
 
@@ -281,6 +360,7 @@ emit configMap
     .then((handle) => handle.jsonValue())
     .catch(() => ({ status: "timeout" }));
   const evaluationMs = Math.round(performance.now() - renderStartedAt);
+  const wasmMetrics = await wasmWorkerMetrics(page);
   await context.close();
   if (evaluationResult.status !== "rendered")
     throw new Error(`31.8 MiB binary project did not render: ${JSON.stringify(evaluationResult)}`);
@@ -290,6 +370,7 @@ emit configMap
     fileCount: 3,
     projectImportMs,
     evaluationMs,
+    wasmLinearMemoryBytesAfterLargeProject: wasmMetrics?.wasmLinearMemoryCurrentBytes ?? null,
     evaluationResult,
   };
 }
@@ -321,7 +402,18 @@ try {
     ),
   );
 } finally {
-  await browser?.close();
-  server.kill("SIGTERM");
-  await wasmServer.close();
+  try {
+    await browser?.close();
+  } finally {
+    if (server.exitCode === null) {
+      server.kill("SIGTERM");
+      await Promise.race([
+        new Promise((resolve) => server.once("exit", resolve)),
+        delay(5_000).then(() => server.kill("SIGKILL")),
+      ]);
+    }
+    await new Promise((resolve, reject) =>
+      proxyServer.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
 }

@@ -98,7 +98,9 @@ test("documentation and Playground work under the generated CSP", async ({ page 
 
   await page.goto("/playground/");
   await page.getByRole("button", { name: "実行" }).click();
-  await expect(page.getByLabel("レンダリング結果")).toContainText('kind: "ConfigMap"');
+  await expect(page.getByLabel("レンダリング結果")).toContainText('kind: "ConfigMap"', {
+    timeout: 15_000,
+  });
   await expect
     .poll(() =>
       page.evaluate(

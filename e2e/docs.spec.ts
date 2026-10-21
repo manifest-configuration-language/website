@@ -53,7 +53,7 @@ test("search opens results and navigates to a language reference", async ({ page
   const dialog = page.getByRole("dialog", { name: "検索" });
   const search = dialog.locator("input");
   await expect(search).toBeVisible();
-  await search.fill("型");
+  await search.fill("DeploymentKind");
   const result = dialog.getByRole("link", { name: /型/ }).first();
   await expect(result).toBeVisible();
   await result.click();

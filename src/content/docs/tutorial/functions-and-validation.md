@@ -1,5 +1,7 @@
 ---
 title: "関数と検証"
+sidebar:
+  order: 2
 ---
 
 # 関数と検証

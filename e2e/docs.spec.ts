@@ -35,7 +35,7 @@ test("home page highlights MCL code and switches themes", async ({ page }) => {
 });
 
 test("reference pages do not load the Playground runtime", async ({ page }) => {
-  const runtimeRequests = [];
+  const runtimeRequests: string[] = [];
   page.on("request", (request) => {
     if (/mcl\.wasm-|playground\.worker-/.test(request.url())) runtimeRequests.push(request.url());
   });

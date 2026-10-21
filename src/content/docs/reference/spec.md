@@ -1,5 +1,7 @@
 ---
 title: "言語仕様"
+sidebar:
+  order: 8
 ---
 
 # 言語仕様

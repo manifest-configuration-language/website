@@ -24,7 +24,8 @@ emit service
 
 ## 学ぶ
 
-- [チュートリアル](/tutorial/)で値の定義、合成、型、検証を順に学びます。
+- [はじめる](/getting-started/)でCLIの準備と最初のManifest作成を行います。
+- [チュートリアル](/tutorial/)で値の合成、型、検証を順に学びます。
 - [言語リファレンス](/reference/)で構文と現在の実装範囲を確認します。
 - [標準ライブラリ](/reference/stdlib)で関数とAdapterを確認します。
 - [言語仕様](/reference/spec)で処理モデルと対応構文を確認します。

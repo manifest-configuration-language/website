@@ -1,5 +1,7 @@
 ---
 title: "合成と型"
+sidebar:
+  order: 1
 ---
 
 # 合成と型

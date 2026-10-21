@@ -1,5 +1,6 @@
 import { Buffer } from "buffer/index.js";
 import path from "path-browserify";
+import { validateProjectInput } from "./projectValidation.js";
 
 globalThis.Buffer = Buffer;
 
@@ -130,41 +131,9 @@ started.then(
   (error) => self.postMessage({ type: "failure", message: String(error) }),
 );
 
-const maxMainBytes = 64 * 1024;
-const maxFileBytes = 16 * 1024 * 1024;
-const maxProjectBytes = 32 * 1024 * 1024;
-
 self.onmessage = async (event) => {
   const request = event.data;
-  let projectBytes =
-    typeof request?.source === "string"
-      ? new TextEncoder().encode(request.source).byteLength
-      : Infinity;
-  let invalidProject = typeof request?.source !== "string" || projectBytes > maxMainBytes;
-  for (const [path, file] of Object.entries(request?.files ?? {})) {
-    const safePath =
-      typeof path === "string" &&
-      path.length > 0 &&
-      !path.startsWith("/") &&
-      !path.includes("\\") &&
-      path.split("/").every((part) => part && part !== "." && part !== "..");
-    if (
-      !safePath ||
-      !file ||
-      !["utf8", "base64"].includes(file.encoding) ||
-      typeof file.content !== "string"
-    ) {
-      invalidProject = true;
-      continue;
-    }
-    const byteLength =
-      file.encoding === "utf8"
-        ? new TextEncoder().encode(file.content).byteLength
-        : Math.floor((file.content.length * 3) / 4);
-    if (byteLength > maxFileBytes) invalidProject = true;
-    projectBytes += byteLength;
-  }
-  if (invalidProject || projectBytes > maxProjectBytes) {
+  if (!validateProjectInput(request?.source, request?.files)) {
     self.postMessage({
       type: "result",
       response: {

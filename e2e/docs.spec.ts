@@ -34,6 +34,18 @@ test("home page highlights MCL code and switches themes", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 });
 
+test("reference pages do not load the Playground runtime", async ({ page }) => {
+  const runtimeRequests = [];
+  page.on("request", (request) => {
+    if (/mcl\.wasm-|playground\.worker-/.test(request.url())) runtimeRequests.push(request.url());
+  });
+
+  await page.goto("/reference/");
+
+  await expect(page.locator(".cm-editor")).toHaveCount(0);
+  expect(runtimeRequests).toEqual([]);
+});
+
 test("search opens results and navigates to a language reference", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "検索" }).click();

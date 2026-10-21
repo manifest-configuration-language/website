@@ -6,6 +6,7 @@ const limits = {
 };
 
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+const base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function projectFileBytes(file) {
   if (!file || typeof file.content !== "string") return undefined;
@@ -14,14 +15,14 @@ function projectFileBytes(file) {
 
   const padding = file.content.endsWith("==") ? 2 : file.content.endsWith("=") ? 1 : 0;
   const byteLength = (file.content.length / 4) * 3 - padding;
-  if (byteLength > limits.fileBytes) return byteLength;
-
-  try {
-    const decoded = atob(file.content);
-    return btoa(decoded) === file.content ? decoded.length : undefined;
-  } catch {
+  const finalCharacter = base64Alphabet.indexOf(file.content.at(-(padding + 1)) ?? "");
+  if (
+    (padding === 2 && (finalCharacter & 15) !== 0) ||
+    (padding === 1 && (finalCharacter & 3) !== 0)
+  )
     return undefined;
-  }
+  if (byteLength > limits.fileBytes) return byteLength;
+  return byteLength;
 }
 
 export function validateProjectInput(source, files) {

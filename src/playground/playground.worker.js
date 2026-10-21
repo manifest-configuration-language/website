@@ -63,26 +63,9 @@ globalThis.process = {
   umask: () => 0o022,
 };
 
-function mountProject(request) {
+function resetFilesystem() {
   activeVolume = new Volume();
   activeVolume.mkdirSync("/mcl-project", { recursive: true });
-  activeVolume.writeFileSync("/mcl-project/main.mcl", request.source);
-  for (const [relativePath, file] of Object.entries(request.files ?? {})) {
-    const absolutePath = path.posix.resolve("/mcl-project", relativePath);
-    if (!absolutePath.startsWith("/mcl-project/") || absolutePath === "/mcl-project/main.mcl")
-      throw new Error(`Invalid project path: ${relativePath}`);
-    const directory = path.posix.dirname(absolutePath);
-    activeVolume.mkdirSync(directory, { recursive: true });
-    if (file.encoding === "utf8") {
-      activeVolume.writeFileSync(absolutePath, file.content, "utf8");
-    } else {
-      const decoded = atob(file.content);
-      const bytes = new Uint8Array(decoded.length);
-      for (let index = 0; index < decoded.length; index += 1)
-        bytes[index] = decoded.charCodeAt(index);
-      activeVolume.writeFileSync(absolutePath, bytes);
-    }
-  }
   workingDirectory = "/mcl-project";
 }
 
@@ -154,7 +137,7 @@ self.onmessage = async (event) => {
 
   try {
     await started;
-    mountProject(request);
+    resetFilesystem();
     const response = JSON.parse(globalThis.mclWasm.run(JSON.stringify(request)));
     if (!response.ok && response.error) response.error.severity = "error";
     const yaml = response.result?.yaml ?? "";

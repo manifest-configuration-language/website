@@ -205,6 +205,81 @@ async function measureCancellation(browser) {
   }
 }
 
+async function measureLargeProject(browser) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  await page.goto(`${origin}/playground/`, { waitUntil: "load" });
+
+  const projectBytes = 15.9 * 1024 * 1024;
+  const source = `let appName = "catalog"
+let configMap =
+  apiVersion: "v1"
+  kind: "ConfigMap"
+  metadata:
+    name: appName
+  data:
+    mode: "development"
+
+emit configMap
+`;
+  const importStartedAt = performance.now();
+  await page.locator('input[aria-label="MCLプロジェクトフォルダー"]').evaluate(
+    (input, { fileSize, source }) => {
+      const root = "large-project";
+      const files = [
+        new File([source], "main.mcl", { type: "text/plain" }),
+        new File([new Uint8Array(fileSize)], "payload-a.bin"),
+        new File([new Uint8Array(fileSize)], "payload-b.bin"),
+      ];
+      for (const [index, file] of files.entries()) {
+        const name = index === 0 ? "main.mcl" : `payload-${index === 1 ? "a" : "b"}.bin`;
+        Object.defineProperty(file, "webkitRelativePath", { value: `${root}/${name}` });
+      }
+      const transfer = new DataTransfer();
+      files.forEach((file) => transfer.items.add(file));
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    { fileSize: projectBytes, source },
+  );
+  try {
+    await page
+      .locator(".playground-toolbar span")
+      .filter({ hasText: "2 files · 31.8 / 32" })
+      .waitFor({ timeout: 10_000 });
+  } catch (error) {
+    const playgroundText = await page.locator(".playground").innerText();
+    throw new Error(`Large project import failed: ${playgroundText}`, { cause: error });
+  }
+  const projectImportMs = Math.round(performance.now() - importStartedAt);
+
+  const renderStartedAt = performance.now();
+  await page.getByRole("button", { name: "実行" }).click();
+  const evaluationResult = await page
+    .waitForFunction(
+      () => {
+        if (document.querySelector('[aria-label="レンダリング結果"]'))
+          return { status: "rendered" };
+        const alert = document.querySelector(".playground [role=alert]");
+        return alert ? { status: "error", message: alert.textContent?.trim() } : false;
+      },
+      null,
+      { timeout: 60_000 },
+    )
+    .then((handle) => handle.jsonValue())
+    .catch(() => ({ status: "timeout" }));
+  const evaluationMs = Math.round(performance.now() - renderStartedAt);
+  await context.close();
+
+  return {
+    acceptedProjectBytes: Math.round(projectBytes * 2),
+    fileCount: 3,
+    projectImportMs,
+    evaluationMs,
+    evaluationResult,
+  };
+}
+
 let browser;
 try {
   const startupMs = await waitForServer();
@@ -214,6 +289,7 @@ try {
     await measurePage(browser, "/playground/", { renderPlayground: true }),
   ];
   const cancellationUiLatencyMs = await measureCancellation(browser);
+  const largeProject = await measureLargeProject(browser);
   console.log(
     JSON.stringify(
       {
@@ -223,6 +299,7 @@ try {
         chromium: browser.version(),
         previewReadyMs: Math.round(startupMs),
         cancellationUiLatencyMs,
+        largeProject,
         measurements,
       },
       null,

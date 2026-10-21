@@ -78,9 +78,7 @@ export function createPlaygroundClient(): PlaygroundClient {
         files,
       };
       const timeout = window.setTimeout(() => {
-        terminate(
-          new Error("Evaluation exceeded the 4 second time limit. The worker was restarted."),
-        );
+        terminate(new Error("Evaluation timed out. Run it again."));
       }, 4500);
       pending = { request, resolve, reject, timeout };
       worker?.postMessage(request);
@@ -90,7 +88,7 @@ export function createPlaygroundClient(): PlaygroundClient {
   return {
     async run(source, revision, files) {
       if (pending) this.cancel();
-      const lint = await invoke("lint", source, revision, files);
+      const lint = await invoke("lint", source, revision);
       if (!lint.ok) return lint;
       const rendered = await invoke("render", source, revision, files);
       if (rendered.ok)

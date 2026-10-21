@@ -65,6 +65,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # GitHub FreeではPrivateリポジトリのArtifact Attestationを利用できないため、公開時のみ生成します。
       - name: Attest image provenance
         if: github.repository_visibility == 'public'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4

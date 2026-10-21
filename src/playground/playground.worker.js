@@ -116,7 +116,8 @@ started.then(
 
 self.onmessage = async (event) => {
   const request = event.data;
-  if (!validateProjectInput(request?.source, request?.files)) {
+  const binaryFiles = request?.binaryFiles ?? {};
+  if (!validateProjectInput(request?.source, request?.files, binaryFiles)) {
     self.postMessage({
       type: "result",
       response: {
@@ -138,7 +139,8 @@ self.onmessage = async (event) => {
   try {
     await started;
     resetFilesystem();
-    const response = JSON.parse(globalThis.mclWasm.run(JSON.stringify(request)));
+    const { binaryFiles: _binaryFiles, ...metadata } = request;
+    const response = JSON.parse(globalThis.mclWasm.run(JSON.stringify(metadata), binaryFiles));
     if (!response.ok && response.error) response.error.severity = "error";
     const yaml = response.result?.yaml ?? "";
     if (new TextEncoder().encode(yaml).byteLength > 1024 * 1024) {

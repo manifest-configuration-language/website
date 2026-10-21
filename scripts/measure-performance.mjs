@@ -270,6 +270,8 @@ emit configMap
     .catch(() => ({ status: "timeout" }));
   const evaluationMs = Math.round(performance.now() - renderStartedAt);
   await context.close();
+  if (evaluationResult.status !== "rendered")
+    throw new Error(`31.8 MiB binary project did not render: ${JSON.stringify(evaluationResult)}`);
 
   return {
     acceptedProjectBytes: Math.round(projectBytes * 2),

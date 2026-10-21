@@ -101,16 +101,6 @@ const mclLanguage = StreamLanguage.define({
   },
 });
 
-function base64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(
-      ...bytes.subarray(offset, Math.min(offset + 0x8000, bytes.length)),
-    );
-  }
-  return btoa(binary);
-}
-
 const initialSource = `let appName = "catalog"
 let configMap =
   apiVersion: "v1"
@@ -211,7 +201,6 @@ export default function Playground() {
       const result = await client.current.format(
         editor.current.state.doc.toString(),
         currentRevision,
-        projectFiles,
       );
       if (currentRevision !== revision.current) return;
       if (!result.ok) {
@@ -259,7 +248,7 @@ export default function Playground() {
       const main = normalized.find(({ path }) => path === "main.mcl");
       if (!main) throw new Error("The selected directory must contain main.mcl at its root.");
       if (main.file.size > maxMainBytes) throw new Error("main.mcl exceeds the 64 KiB limit.");
-      const nextFiles: Record<string, ProjectFile> = {};
+      const nextFiles = Object.create(null) as Record<string, ProjectFile>;
       let total = main.file.size;
       for (const { file, path } of normalized) {
         if (file === main.file) continue;
@@ -276,10 +265,7 @@ export default function Playground() {
         if (textExtensions.has(extension)) {
           nextFiles[path] = { encoding: "utf8", content: await file.text() };
         } else {
-          nextFiles[path] = {
-            encoding: "base64",
-            content: base64(new Uint8Array(await file.arrayBuffer())),
-          };
+          nextFiles[path] = { encoding: "binary", bytes: new Uint8Array(await file.arrayBuffer()) };
         }
       }
       const source = await main.file.text();

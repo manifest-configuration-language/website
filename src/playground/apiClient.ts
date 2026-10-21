@@ -1,4 +1,10 @@
-import type { PlaygroundClient, PlaygroundReply, PlaygroundRequest, ProjectFile } from "./types";
+import type {
+  PlaygroundClient,
+  PlaygroundReply,
+  PlaygroundRequest,
+  PlaygroundWorkerRequest,
+  ProjectFile,
+} from "./types";
 
 type WorkerMessage =
   | { type: "ready" }
@@ -81,7 +87,27 @@ export function createPlaygroundClient(): PlaygroundClient {
         terminate(new Error("Evaluation timed out. Run it again."));
       }, 4500);
       pending = { request, resolve, reject, timeout };
-      worker?.postMessage(request);
+      const { files: projectFiles, ...requestMetadata } = request;
+      const metadata = Object.create(null) as NonNullable<PlaygroundWorkerRequest["files"]>;
+      const binaryFiles = Object.create(null) as Record<string, Uint8Array>;
+      const transfer: ArrayBuffer[] = [];
+      for (const [filePath, file] of Object.entries(projectFiles ?? {})) {
+        if (file.encoding === "utf8") {
+          metadata![filePath] = file;
+          continue;
+        }
+        const bytes = new Uint8Array(file.bytes.byteLength);
+        bytes.set(file.bytes);
+        binaryFiles[filePath] = bytes;
+        transfer.push(bytes.buffer as ArrayBuffer);
+        metadata![filePath] = { encoding: "binary" };
+      }
+      const workerRequest: PlaygroundWorkerRequest = {
+        ...requestMetadata,
+        ...(projectFiles ? { files: metadata } : {}),
+        ...(Object.keys(binaryFiles).length > 0 ? { binaryFiles } : {}),
+      };
+      worker?.postMessage(workerRequest, transfer);
     });
   }
 
@@ -96,9 +122,9 @@ export function createPlaygroundClient(): PlaygroundClient {
           .result as PlaygroundReply["diagnostics"];
       return rendered;
     },
-    format(source, revision, files) {
+    format(source, revision) {
       if (pending) this.cancel();
-      return invoke("format", source, revision, files);
+      return invoke("format", source, revision);
     },
     cancel() {
       if (worker) terminate(new Error("Evaluation cancelled."));

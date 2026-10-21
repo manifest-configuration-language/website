@@ -1,4 +1,4 @@
-const limits = {
+export const projectLimits = {
   sourceBytes: 64 * 1024,
   projectFiles: 4096,
   fileBytes: 16 * 1024 * 1024,
@@ -21,14 +21,14 @@ function projectFileBytes(file, binary) {
 export function validateProjectInput(source, files, binaryFiles = {}) {
   if (
     typeof source !== "string" ||
-    new TextEncoder().encode(source).byteLength > limits.sourceBytes
+    new TextEncoder().encode(source).byteLength > projectLimits.sourceBytes
   )
     return false;
 
   const entries = Object.entries(files ?? {});
-  if (entries.length + 1 > limits.projectFiles) return false;
+  if (entries.length + 1 > projectLimits.projectFiles) return false;
   const binaries = Object.entries(binaryFiles ?? {});
-  if (binaries.length > limits.projectFiles - 1) return false;
+  if (binaries.length > projectLimits.projectFiles - 1) return false;
   const binaryPaths = new Set(binaries.map(([filePath]) => filePath));
   if (binaryPaths.size !== binaries.length) return false;
 
@@ -46,10 +46,10 @@ export function validateProjectInput(source, files, binaryFiles = {}) {
     const fileBytes = projectFileBytes(file, binary);
     if (file?.encoding === "binary") binaryPaths.delete(filePath);
     else if (binary !== undefined) return false;
-    if (!safePath || fileBytes === undefined || fileBytes > limits.fileBytes) return false;
+    if (!safePath || fileBytes === undefined || fileBytes > projectLimits.fileBytes) return false;
 
     totalBytes += fileBytes;
-    if (totalBytes > limits.projectBytes) return false;
+    if (totalBytes > projectLimits.projectBytes) return false;
   }
 
   return binaryPaths.size === 0;

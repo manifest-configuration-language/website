@@ -25,6 +25,13 @@ export type ProjectFile =
   | { encoding: "utf8"; content: string }
   | { encoding: "binary"; bytes: Uint8Array };
 
+export type LoadedProject = {
+  source: string;
+  files: Record<string, ProjectFile>;
+  bytes: number;
+  fileCount: number;
+};
+
 export type PlaygroundReply = {
   requestId: number;
   revision: number;
@@ -41,6 +48,7 @@ export type PlaygroundReply = {
 };
 
 export interface PlaygroundClient {
+  loadProject(files: FileList | File[]): Promise<LoadedProject>;
   run(
     source: string,
     revision: number,

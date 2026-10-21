@@ -5,6 +5,7 @@ import type {
   PlaygroundWorkerRequest,
   ProjectFile,
 } from "./types";
+import { readProject } from "./projectFiles.js";
 
 type WorkerMessage =
   | { type: "ready" }
@@ -112,6 +113,9 @@ export function createPlaygroundClient(): PlaygroundClient {
   }
 
   return {
+    loadProject(files) {
+      return readProject(files);
+    },
     async run(source, revision, files) {
       if (pending) this.cancel();
       const lint = await invoke("lint", source, revision);

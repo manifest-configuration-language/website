@@ -1,172 +1,53 @@
-import React, { useEffect, useRef, useState, type ChangeEvent } from "react";
-import {
-  bracketMatching,
-  defaultHighlightStyle,
-  indentUnit,
-  StreamLanguage,
-  syntaxHighlighting,
-} from "@codemirror/language";
-import { tags } from "@lezer/highlight";
-import { EditorState } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
-import mclGrammar from "./mcl.tmLanguage.json";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPlaygroundClient } from "./apiClient";
+import { MclEditor } from "./MclEditor";
+import { PlaygroundResult } from "./PlaygroundResult";
+import { ProjectFileInput } from "./ProjectFileInput";
+import type { EditorView } from "@codemirror/view";
 import type { PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
 
-const maxProjectBytes = 32 * 1024 * 1024;
-const maxMainBytes = 64 * 1024;
-const maxFileBytes = 16 * 1024 * 1024;
-const textExtensions = new Set([
-  "mcl",
-  "yaml",
-  "yml",
-  "json",
-  "jsonnet",
-  "tpl",
-  "txt",
-  "md",
-  "lock",
-  "toml",
-  "properties",
-  "xml",
-  "sh",
-  "conf",
-]);
-
-type GrammarRule = {
-  name?: string;
-  match?: string;
-  begin?: string;
-  end?: string;
-  patterns?: GrammarRule[];
-  include?: string;
-};
-type Grammar = { patterns: GrammarRule[]; repository: Record<string, GrammarRule> };
-type LexerState = { quote?: string };
-const tokenNames = {
-  "comment.line.number-sign.mcl": tags.comment,
-  "string.quoted.double.mcl": tags.string,
-  "string.quoted.multi.double.mcl": tags.string,
-  "constant.character.escape.mcl": tags.escape,
-  "keyword.control.mcl": tags.keyword,
-  "keyword.operator.mcl": tags.operator,
-  "constant.language.mcl": tags.atom,
-  "storage.type.mcl": tags.typeName,
-  "entity.name.function.mcl": tags.function(tags.variableName),
-  "constant.numeric.mcl": tags.number,
-  "punctuation.separator.key-value.mcl": tags.punctuation,
-  "punctuation.separator.comma.mcl": tags.punctuation,
-  "punctuation.accessor.mcl": tags.punctuation,
-};
-const grammar = mclGrammar as unknown as Grammar;
-
-function grammarRules(patterns: GrammarRule[]): GrammarRule[] {
-  return patterns.flatMap((rule) =>
-    rule.include?.startsWith("#")
-      ? grammarRules(
-          grammar.repository[rule.include.slice(1)].patterns ?? [
-            grammar.repository[rule.include.slice(1)],
-          ],
-        )
-      : [rule],
-  );
-}
-
-const mclRules = grammarRules(grammar.patterns);
-const mclLanguage = StreamLanguage.define({
-  tokenTable: tokenNames,
-  startState: (): LexerState => ({}),
-  token(stream, state) {
-    if (stream.eatSpace()) return null;
-    if (state.quote) {
-      const close = stream.string.indexOf(state.quote, stream.pos);
-      if (close < 0) {
-        stream.skipToEnd();
-      } else {
-        stream.pos = close + state.quote.length;
-        state.quote = undefined;
-      }
-      return "string";
-    }
-    for (const rule of mclRules) {
-      const pattern = rule.begin ?? rule.match;
-      if (!pattern || !stream.match(new RegExp(`^(?:${pattern})`))) continue;
-      if (rule.begin) state.quote = rule.end?.replaceAll('\\"', '"') ?? '"';
-      return rule.name ?? null;
-    }
-    stream.next();
-    return null;
-  },
-});
-
-const initialSource = `let appName = "catalog"
-let configMap =
-  apiVersion: "v1"
-  kind: "ConfigMap"
-  metadata:
-    name: appName
-  data:
-    mode: "development"
-
-emit configMap
-`;
-const directoryInputProps = {
-  webkitdirectory: "",
-} as React.InputHTMLAttributes<HTMLInputElement> & { webkitdirectory: string };
-
 export default function Playground() {
-  const editorHost = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | undefined>(undefined);
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
   const revision = useRef(0);
   const active = useRef(false);
+  const projectLoads = useRef(0);
   const [reply, setReply] = useState<PlaygroundReply>();
   const [error, setError] = useState("");
+  const [editorError, setEditorError] = useState("");
+  const [editorAttempt, setEditorAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [loadingProject, setLoadingProject] = useState(false);
   const [projectFiles, setProjectFiles] = useState<Record<string, ProjectFile>>({});
   const [projectSize, setProjectSize] = useState(0);
 
   useEffect(() => {
-    if (!editorHost.current) return;
-    const view = new EditorView({
-      parent: editorHost.current,
-      state: EditorState.create({
-        doc: initialSource,
-        extensions: [
-          lineNumbers(),
-          EditorView.contentAttributes.of({ "aria-label": "MCLソース" }),
-          history(),
-          closeBrackets(),
-          bracketMatching(),
-          mclLanguage,
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-          indentUnit.of("  "),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              revision.current += 1;
-              if (active.current) client.current?.cancel();
-              active.current = false;
-              setBusy(false);
-              setReply(undefined);
-              setError("");
-            }
-          }),
-          keymap.of([...closeBracketsKeymap, indentWithTab, ...defaultKeymap, ...historyKeymap]),
-        ],
-      }),
-    });
-    editor.current = view;
     client.current = createPlaygroundClient();
     return () => {
-      view.destroy();
       client.current?.dispose();
+      client.current = undefined;
     };
   }, []);
 
+  const onEditorReady = useCallback((view: EditorView | undefined) => {
+    editor.current = view;
+  }, []);
+
+  const onEditorError = useCallback((cause: Error) => {
+    setEditorError(cause.message);
+  }, []);
+
+  const onDocumentChange = useCallback(() => {
+    revision.current += 1;
+    if (active.current) client.current?.cancel();
+    active.current = false;
+    setBusy(false);
+    setReply(undefined);
+    setError("");
+  }, []);
+
   async function run() {
-    if (!editor.current || !client.current) return;
+    if (!editor.current || !client.current || loadingProject) return;
     const currentRevision = ++revision.current;
     active.current = true;
     setBusy(true);
@@ -191,7 +72,7 @@ export default function Playground() {
   }
 
   async function formatSource() {
-    if (!editor.current || !client.current) return;
+    if (!editor.current || !client.current || loadingProject) return;
     const currentRevision = ++revision.current;
     active.current = true;
     setBusy(true);
@@ -207,10 +88,12 @@ export default function Playground() {
         setReply(result);
       } else if (result.result?.source !== undefined) {
         const view = editor.current;
-        if (view)
+        if (view) {
+          active.current = false;
           view.dispatch({
             changes: { from: 0, to: view.state.doc.length, insert: result.result.source },
           });
+        }
       }
     } catch (cause) {
       if (currentRevision === revision.current)
@@ -232,53 +115,27 @@ export default function Playground() {
     setReply(undefined);
   }
 
-  async function loadProject(event: ChangeEvent<HTMLInputElement>) {
-    const selected = [...(event.currentTarget.files ?? [])];
-    event.currentTarget.value = "";
-    if (selected.length === 0) return;
+  async function loadProject(files: FileList) {
+    if (!client.current) throw new Error("The playground is not ready.");
+    projectLoads.current += 1;
+    setLoadingProject(true);
+    setError("");
     try {
-      if (selected.length > 4096) throw new Error("A project can contain at most 4,096 files.");
-      const paths = selected.map((file) => file.webkitRelativePath || file.name);
-      const roots = new Set(paths.map((path) => path.split("/")[0]));
-      const stripRoot = roots.size === 1 && selected.some((file) => file.webkitRelativePath !== "");
-      const normalized = selected.map((file, index) => ({
-        file,
-        path: stripRoot ? paths[index].slice(paths[index].indexOf("/") + 1) : paths[index],
-      }));
-      const main = normalized.find(({ path }) => path === "main.mcl");
-      if (!main) throw new Error("The selected directory must contain main.mcl at its root.");
-      if (main.file.size > maxMainBytes) throw new Error("main.mcl exceeds the 64 KiB limit.");
-      const nextFiles = Object.create(null) as Record<string, ProjectFile>;
-      let total = main.file.size;
-      for (const { file, path } of normalized) {
-        if (file === main.file) continue;
-        if (
-          !path ||
-          path.startsWith("/") ||
-          path.split("/").some((part) => part === ".." || part === ".")
-        )
-          throw new Error(`Invalid project path: ${path}`);
-        if (file.size > maxFileBytes) throw new Error(`${path} exceeds the 16 MiB per-file limit.`);
-        total += file.size;
-        if (total > maxProjectBytes) throw new Error("The project exceeds the 32 MiB total limit.");
-        const extension = path.split(".").pop()?.toLowerCase() ?? "";
-        if (textExtensions.has(extension)) {
-          nextFiles[path] = { encoding: "utf8", content: await file.text() };
-        } else {
-          nextFiles[path] = { encoding: "binary", bytes: new Uint8Array(await file.arrayBuffer()) };
-        }
-      }
-      const source = await main.file.text();
-      if (editor.current)
-        editor.current.dispatch({
-          changes: { from: 0, to: editor.current.state.doc.length, insert: source },
-        });
-      setProjectFiles(nextFiles);
-      setProjectSize(total);
-      setError("");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      return await client.current.loadProject(files);
+    } finally {
+      projectLoads.current -= 1;
+      setLoadingProject(projectLoads.current > 0);
     }
+  }
+
+  function applyProject(project: Awaited<ReturnType<typeof loadProject>>) {
+    if (editor.current)
+      editor.current.dispatch({
+        changes: { from: 0, to: editor.current.state.doc.length, insert: project.source },
+      });
+    setProjectFiles(project.files);
+    setProjectSize(project.bytes);
+    setError("");
   }
 
   function goToDiagnostic(diagnostic: PlaygroundDiagnostic) {
@@ -299,55 +156,49 @@ export default function Playground() {
           </button>
         ) : (
           <>
-            <button type="button" onClick={run}>
+            <button type="button" onClick={run} disabled={loadingProject || Boolean(editorError)}>
               実行
             </button>
-            <button type="button" onClick={formatSource}>
+            <button
+              type="button"
+              onClick={formatSource}
+              disabled={loadingProject || Boolean(editorError)}
+            >
               整形
             </button>
           </>
         )}
-        <label>
-          プロジェクト
-          <input
-            type="file"
-            multiple
-            {...directoryInputProps}
-            aria-label="MCLプロジェクトフォルダー"
-            onChange={loadProject}
-          />
-        </label>
-        <span>
-          {Object.keys(projectFiles).length} files · {(projectSize / 1024 / 1024).toFixed(1)} / 32
-          MiB
-        </span>
+        <ProjectFileInput
+          fileCount={Object.keys(projectFiles).length}
+          projectSize={projectSize}
+          onLoad={loadProject}
+          onLoaded={applyProject}
+          onError={setError}
+          disabled={busy || loadingProject || Boolean(editorError)}
+        />
         <a href="/playground/capabilities">対応機能</a>
       </div>
-      <div className="playground-editor" ref={editorHost} />
-      {error && <p role="alert">{error}</p>}
-      {reply && !reply.ok && reply.error && (
+      <MclEditor
+        key={editorAttempt}
+        onReady={onEditorReady}
+        onDocumentChange={onDocumentChange}
+        onError={onEditorError}
+      />
+      {editorError && (
         <p role="alert">
-          <button className="diagnostic" onClick={() => goToDiagnostic(reply.error!)}>
-            {reply.error.code}: {reply.error.message} ({reply.error.line}:{reply.error.column})
+          {editorError}{" "}
+          <button
+            onClick={() => {
+              setEditorError("");
+              setEditorAttempt((attempt) => attempt + 1);
+            }}
+          >
+            再試行
           </button>
         </p>
       )}
-      {reply?.diagnostics && reply.diagnostics.length > 0 && (
-        <ul className="playground-diagnostics">
-          {reply.diagnostics.map((diagnostic, index) => (
-            <li key={`${diagnostic.code}-${diagnostic.line}-${index}`}>
-              <button className="diagnostic" onClick={() => goToDiagnostic(diagnostic)}>
-                {diagnostic.severity}: {diagnostic.message} ({diagnostic.line}:{diagnostic.column})
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {reply?.ok && (
-        <pre className="playground-output" aria-label="レンダリング結果">
-          <code>{reply.result?.yaml}</code>
-        </pre>
-      )}
+      {error && <p role="alert">{error}</p>}
+      <PlaygroundResult reply={reply} onDiagnostic={goToDiagnostic} />
     </section>
   );
 }

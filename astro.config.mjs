@@ -53,6 +53,7 @@ export default defineConfig({
       sidebar: [
         { label: "導入", items: [{ autogenerate: { directory: "getting-started" } }] },
         { label: "チュートリアル", items: [{ autogenerate: { directory: "tutorial" } }] },
+        { label: "ガイド", items: [{ autogenerate: { directory: "guide" } }] },
         { label: "リファレンス", items: [{ autogenerate: { directory: "reference" } }] },
         { label: "内部仕様", items: [{ autogenerate: { directory: "internals" } }] },
         { label: "Playground", link: "/playground/" },

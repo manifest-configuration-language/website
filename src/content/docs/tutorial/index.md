@@ -12,7 +12,7 @@ go install github.com/manifest-configuration-language/mcl/cmd/mcl@latest
 
 `check`は構文と値を検証します。`render`は評価結果をYAMLとして出力します。ファイルを作成する場合は、次の内容を`main.mcl`として保存します。
 
-```mcl
+```mcl verify
 let appName = "catalog"
 
 let service =
@@ -46,7 +46,7 @@ mcl render path/to/main.mcl
 
 ManifestをListにまとめると、出力順を保ったまま複数の値を定義できます。複数の`emit`も同じように複数のYAML文書を出力します。
 
-```mcl
+```mcl verify
 let names =
   - "api"
   - "worker"

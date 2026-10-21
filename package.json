@@ -15,6 +15,7 @@
     "lint": "oxlint astro.config.mjs playwright.config.ts scripts src e2e",
     "format": "oxfmt astro.config.mjs playwright.config.ts scripts src e2e",
     "format:check": "oxfmt --check astro.config.mjs playwright.config.ts scripts src e2e",
+    "verify:docs": "node scripts/verify-doc-examples.mjs",
     "typecheck": "astro check",
     "pretest:e2e": "pnpm run build",
     "test:e2e": "playwright test"
@@ -46,7 +47,10 @@
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
     "parse5": "8.0.1",
-    "typescript": "6.0.2"
+    "remark-mdx": "3.1.1",
+    "remark-parse": "11.0.0",
+    "typescript": "6.0.2",
+    "unified": "11.0.5"
   },
   "engines": {
     "node": ">=24.22.0"

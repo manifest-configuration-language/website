@@ -19,7 +19,7 @@ sidebar:
 
 MCLソースはエントリーファイル、import先、文字列からの解析のいずれも1ファイル16 MiBまでです。
 
-```mcl
+```mcl verify
 let name = "sample"
 let resource =
   apiVersion: "v1"
@@ -37,7 +37,7 @@ emit resource
 `[]`でMapのキーまたはListの添字を参照できます。MapのキーはString、Listの添字は0から始まるIntです。キーが存在しない場合や添字が範囲外の場合は評価エラーになります。アクセスはフィールド参照と組み合わせられます。
 Map、List、キーや添字の型を静的に推論できる場合は、対応するキー型・添字型を評価前に検査します。構造型Mapでは、文字列リテラル、先行する`let`定義、文字列連結からキーを確定できる場合に、存在しないキーを評価前にエラーにします。
 
-```mcl
+```mcl fragment
 let servicePort = service.spec.ports[0].port
 let configValue = settings["mode"]
 ```
@@ -46,7 +46,7 @@ let configValue = settings["mode"]
 
 MCLは`String`、整数、十進数、`Bool`、`null`、`List`、`Map`を扱います。Listには`-`を必ず付けます。空でないMapやListをインラインで記述する構文、シングルクォート、YAMLのanchor、alias、tag、暗黙の型変換はありません。
 
-```mcl
+```mcl release-gap
 let settings =
   enabled: true
   retries: 3
@@ -65,7 +65,7 @@ Mapのキーは識別子または二重引用符で囲んだ文字列です。�
 
 計算したMapキーには`key(expression): value`を使います。式の結果はStringでなければならず、静的キーを含む重複も評価時にエラーになります。
 
-```mcl
+```mcl verify
 let annotationName = "example.org/checksum"
 let annotations =
   key(annotationName): "abc123"

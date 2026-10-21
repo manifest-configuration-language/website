@@ -30,6 +30,7 @@ jobs:
           cache: true
       - run: mise run install
       - run: pnpm audit --audit-level=high
+      - run: pnpm run verify:docs
       - parallel:
           - name: Lint website
             run: pnpm run lint

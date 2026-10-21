@@ -242,9 +242,18 @@ importers:
       parse5:
         specifier: 8.0.1
         version: 8.0.1
+      remark-mdx:
+        specifier: 3.1.1
+        version: 3.1.1
+      remark-parse:
+        specifier: 11.0.0
+        version: 11.0.0
       typescript:
         specifier: 6.0.2
         version: 6.0.2
+      unified:
+        specifier: 11.0.5
+        version: 11.0.5
 
 packages:
 
@@ -4385,10 +4394,8 @@ snapshots:
   acorn-jsx@5.3.2(acorn@8.19.0):
     dependencies:
       acorn: 8.19.0
-    optional: true
 
-  acorn@8.19.0:
-    optional: true
+  acorn@8.19.0: {}
 
   ajv-draft-04@1.0.0(ajv@8.20.0):
     optionalDependencies:
@@ -4787,8 +4794,7 @@ snapshots:
       estree-walker: 3.0.3
     optional: true
 
-  estree-util-is-identifier-name@3.0.0:
-    optional: true
+  estree-util-is-identifier-name@3.0.0: {}
 
   estree-util-scope@1.0.1:
     dependencies:
@@ -4807,7 +4813,6 @@ snapshots:
     dependencies:
       '@types/estree-jsx': 1.0.5
       '@types/unist': 3.0.3
-    optional: true
 
   estree-walker@3.0.3:
     dependencies:
@@ -5352,7 +5357,6 @@ snapshots:
       mdast-util-to-markdown: 2.2.0
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   mdast-util-mdx-jsx@3.2.0:
     dependencies:
@@ -5370,7 +5374,6 @@ snapshots:
       vfile-message: 4.0.3
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   mdast-util-mdx@3.0.0:
     dependencies:
@@ -5381,7 +5384,6 @@ snapshots:
       mdast-util-to-markdown: 2.2.0
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   mdast-util-mdxjs-esm@2.0.1:
     dependencies:
@@ -5393,7 +5395,6 @@ snapshots:
       mdast-util-to-markdown: 2.2.0
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   mdast-util-phrasing@4.1.0:
     dependencies:
@@ -5556,7 +5557,6 @@ snapshots:
       micromark-util-events-to-acorn: 2.0.3
       micromark-util-symbol: 2.0.1
       micromark-util-types: 2.0.3
-    optional: true
 
   micromark-extension-mdx-jsx@3.0.2:
     dependencies:
@@ -5570,12 +5570,10 @@ snapshots:
       micromark-util-symbol: 2.0.1
       micromark-util-types: 2.0.3
       vfile-message: 4.0.3
-    optional: true
 
   micromark-extension-mdx-md@2.0.0:
     dependencies:
       micromark-util-types: 2.0.3
-    optional: true
 
   micromark-extension-mdxjs-esm@3.0.0:
     dependencies:
@@ -5588,7 +5586,6 @@ snapshots:
       micromark-util-types: 2.0.3
       unist-util-position-from-estree: 2.0.0
       vfile-message: 4.0.3
-    optional: true
 
   micromark-extension-mdxjs@3.0.0:
     dependencies:
@@ -5600,7 +5597,6 @@ snapshots:
       micromark-extension-mdxjs-esm: 3.0.0
       micromark-util-combine-extensions: 2.0.1
       micromark-util-types: 2.0.3
-    optional: true
 
   micromark-factory-destination@2.0.1:
     dependencies:
@@ -5626,7 +5622,6 @@ snapshots:
       micromark-util-types: 2.0.3
       unist-util-position-from-estree: 2.0.0
       vfile-message: 4.0.3
-    optional: true
 
   micromark-factory-space@2.1.0:
     dependencies:
@@ -5693,7 +5688,6 @@ snapshots:
       micromark-util-symbol: 2.0.1
       micromark-util-types: 2.0.3
       vfile-message: 4.0.3
-    optional: true
 
   micromark-util-html-tag-name@2.0.1: {}
 
@@ -6051,7 +6045,6 @@ snapshots:
       micromark-extension-mdxjs: 3.0.0
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   remark-parse@11.0.0:
     dependencies:
@@ -6061,7 +6054,6 @@ snapshots:
       unified: 11.0.5
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   remark-rehype@11.1.2:
     dependencies:
@@ -6390,7 +6382,6 @@ snapshots:
   unist-util-position-from-estree@2.0.0:
     dependencies:
       '@types/unist': 3.0.3
-    optional: true
 
   unist-util-position@5.0.0:
     dependencies:

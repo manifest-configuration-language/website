@@ -6,7 +6,7 @@ title: "MCL"
 
 MCLは、YAML Manifestを型付きの値として組み立て、検証するための設定言語です。
 
-```mcl
+```mcl verify
 let service =
   apiVersion: "v1"
   kind: "Service"

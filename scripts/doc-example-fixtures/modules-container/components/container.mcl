@@ -1,0 +1,5 @@
+let privateValue = "internal"
+
+export let container =
+  securityContext:
+    allowPrivilegeEscalation: false

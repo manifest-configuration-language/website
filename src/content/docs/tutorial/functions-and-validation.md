@@ -6,7 +6,7 @@ title: "関数と検証"
 
 名前付き関数とラムダを使って、値の変換や条件判定を再利用できます。次の例はListから本番用の値だけを選びます。
 
-```mcl
+```mcl verify
 let environments =
   - name: "development"
     replicas: 1
@@ -43,7 +43,7 @@ emit deployment
 
 `rule`は値の制約を定義し、`validate`で明示的に実行します。
 
-```mcl
+```mcl release-gap
 type Deployment =
   apiVersion: String
   kind: "Deployment"

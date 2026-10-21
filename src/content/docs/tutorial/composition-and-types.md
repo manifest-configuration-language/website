@@ -6,7 +6,7 @@ title: "合成と型"
 
 MCLの`with:`はMapを再帰的に合成します。右側で指定したフィールドが優先され、右側にないMapフィールドは保たれます。Listは要素単位ではなくList全体を置き換えます。
 
-```mcl
+```mcl expected-error error=selector
 let defaults =
   apiVersion: "apps/v1"
   kind: "Deployment"
@@ -41,7 +41,7 @@ emit production
 
 構造型でMapのフィールドと値の型を宣言できます。構造型は閉じた型です。必須フィールドがない場合や、宣言されていないフィールドを含む場合はエラーになります。
 
-```mcl
+```mcl verify
 type Container =
   name: String
   image: String
@@ -62,7 +62,7 @@ emit container
 
 `without:`とフィールドパスを使うと、Mapのフィールドを削除できます。指定先が存在しない場合はエラーです。
 
-```mcl
+```mcl verify
 let base =
   securityContext:
     allowPrivilegeEscalation: false

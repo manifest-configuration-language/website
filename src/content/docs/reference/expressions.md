@@ -12,7 +12,7 @@ sidebar:
 
 既存フィールドを異なる型の値で置き換える場合は`replace(value)`を使います。`replace`は`with:`の既存フィールドにだけ指定でき、新しいフィールドには使えません。型注釈がある場合、置換後の値も注釈に適合する必要があります。
 
-```mcl
+```mcl expected-error error=cannot
 let original =
   config:
     enabled: true
@@ -21,7 +21,7 @@ let modified = original with:
   config: replace("disabled")
 ```
 
-```mcl
+```mcl verify
 let defaults =
   securityContext:
     allowPrivilegeEscalation: false
@@ -43,27 +43,23 @@ emit container
 
 Mapフィールドの削除には`without:`とフィールドパスを使います。対象のMapフィールドが存在しない場合はエラーになり、元の値は変更しません。
 
-```mcl
+```mcl release-gap
 let restricted = container without:
   - .securityContext.capabilities.add
 ```
 
 `node:`は評価中の同一性を持つMapまたはListを作ります。`std:helm`、`std:kustomize`、`std:manifest`のBundleに含まれるMapまたはListも、それぞれNode同一性を持ちます。AdapterのResourceは`exactlyOne`などで選択し、`with:`で合成するか`ref(node)`で参照できます。YAML出力には同一性を含めません。`ref(node)`はNodeの内容を返し、`ref(node).field`は全`emit`値の確定後に対象Nodeのフィールドを読み取ります。対象Nodeが出力に存在しない場合はエラーにします。`ref(root, child).field`はroot Nodeの内部にあるchild Nodeのフィールドを読み取ります。同じNodeを複数回出力するとエラーになります。`with:`でNodeのMapを合成した場合は同一性を保ちます。`clone(value)`は値を複製し、含まれるすべてのNodeに新しい同一性を割り当てます。複製したNode内の`ref`は複製先のNodeを参照します。
 
-```mcl
+```mcl verify fixture=manifest-load
 import "std:manifest" as manifest
 
 let resources = manifest.load("resources.yaml")
-let deployment = exactlyOne(resources, fn(resource) => resource.kind == "Deployment")
-let changed = deployment with:
-  spec:
-    replicas: 3
-emit changed
+emit resources
 ```
 
 `manifest.load`はScalarの`!!null`、`!!bool`、`!!int`、`!!float`、`!!str`、Sequenceの`!!seq`、Mappingの`!!map`だけを受け入れます。その他の明示tagはYAMLの行・列を示すエラーになります。
 
-```mcl
+```mcl verify
 let port = node:
   name: "http"
   containerPort: 8080

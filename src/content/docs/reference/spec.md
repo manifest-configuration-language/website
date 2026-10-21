@@ -10,7 +10,7 @@ title: "言語仕様"
 
 ソースファイルには、先頭の`import`、値・関数・型・Ruleの定義、`emit`文、明示的な検証を記述します。モジュールは相対パスで読み込み、別モジュールから利用する定義には`export`を付けます。import先の出力と検証はエントリーファイルに記述します。
 
-```mcl
+```mcl verify fixture=spec-defaults
 import "./defaults.mcl" as defaults
 
 let service = defaults.service with:

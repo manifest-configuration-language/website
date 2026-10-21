@@ -6,7 +6,7 @@ title: "標準ライブラリ"
 
 標準関数は名前を直接呼び出すか、`std:`モジュールをimportして使います。演算子と関数の仕様は[標準関数](./functions/)を参照してください。
 
-```mcl
+```mcl verify
 import "std:list" as lists
 import "std:map" as maps
 
@@ -47,7 +47,7 @@ let key = maps.keyOf(settings, "mode")
 | `exactlyOne(values, predicate)`        | 述語が`true`を返す要素が一つだけの場合にその値を返します。それ以外はエラーです。                            |
 | `fold(values, initial, combine)`       | Listを先頭から走査し、`combine(accumulator, value)`で値を集約します。                                       |
 
-```mcl
+```mcl verify
 import "std:list" as lists
 
 let ports =

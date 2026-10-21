@@ -1,4 +1,96 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+const securityHeaders = readFileSync(
+  new URL("../.build/security-headers.conf", import.meta.url),
+  "utf8",
+);
+const contentSecurityPolicy = securityHeaders.match(
+  /^add_header Content-Security-Policy "(.+)" always;$/m,
+)?.[1];
+
+if (!contentSecurityPolicy)
+  throw new Error("The generated Content Security Policy is unavailable.");
+
+test("home page highlights MCL code and switches themes", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.locator("main h1").first()).toHaveText("MCL");
+  const keyword = page
+    .locator('pre[data-language="mcl"] .ec-line')
+    .first()
+    .locator(".code span")
+    .first();
+  await expect(keyword).toHaveText("let");
+  await expect(keyword).toHaveAttribute("style", /--0:/);
+
+  const theme = page.locator("starlight-theme-select select").first();
+  await theme.selectOption("light");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await theme.selectOption("dark");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+});
+
+test("search opens results and navigates to a language reference", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "検索" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "検索" });
+  const search = dialog.locator("input");
+  await expect(search).toBeVisible();
+  await search.fill("型");
+  const result = dialog.getByRole("link", { name: /型/ }).first();
+  await expect(result).toBeVisible();
+  await result.click();
+
+  await expect(page).toHaveURL(/\/reference\/types\/?/);
+  await expect(page.locator("main h1").first()).toHaveText("型");
+});
+
+test("documentation and Playground work under the generated CSP", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = window as unknown as Window & { __cspViolations: string[] };
+    state.__cspViolations = [];
+    document.addEventListener("securitypolicyviolation", (event) => {
+      state.__cspViolations.push(`${event.violatedDirective}: ${event.blockedURI}`);
+    });
+  });
+  await page.route("**/*", async (route) => {
+    if (!route.request().isNavigationRequest()) return route.continue();
+    const response = await route.fetch();
+    return route.fulfill({
+      response,
+      headers: { ...response.headers(), "content-security-policy": contentSecurityPolicy },
+    });
+  });
+
+  const response = await page.goto("/");
+  expect(response?.headers()["content-security-policy"]).toBe(contentSecurityPolicy);
+  await expect(page.locator('pre[data-language="mcl"]')).toBeVisible();
+  await page.locator("starlight-theme-select select").first().selectOption("light");
+  await page.getByRole("button", { name: "検索" }).click();
+  const dialog = page.getByRole("dialog", { name: "検索" });
+  await dialog.locator("input").fill("型");
+  await expect(dialog.getByRole("link", { name: /型/ }).first()).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as Window & { __cspViolations: string[] }).__cspViolations,
+      ),
+    )
+    .toEqual([]);
+
+  await page.goto("/playground/");
+  await page.getByRole("button", { name: "実行" }).click();
+  await expect(page.getByLabel("レンダリング結果")).toContainText('kind: "ConfigMap"');
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => (window as unknown as Window & { __cspViolations: string[] }).__cspViolations,
+      ),
+    )
+    .toEqual([]);
+});
 
 test("published documentation includes the playground capability contract", async ({ page }) => {
   await page.goto("/playground/capabilities/");

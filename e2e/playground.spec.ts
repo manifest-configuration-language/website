@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { Buffer } from "node:buffer";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const projectDirectory = fileURLToPath(new URL("./fixtures/project", import.meta.url));
@@ -121,6 +125,48 @@ test("shows a source diagnostic for an invalid program", async ({ page }) => {
 
   await expect(page.getByRole("button", { name: /MCL-UNDEFINED.*missingValue/ })).toBeVisible();
   await expect(page.getByLabel("レンダリング結果")).toHaveCount(0);
+
+  await editor(page).fill('emit "recovered"\n');
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, '"recovered"');
+});
+
+test("rejects a project import that escapes the project root", async ({ page }) => {
+  await editor(page).fill('import "../outside.mcl" as outside\nemit outside.value\n');
+  await page.getByRole("button", { name: "実行" }).click();
+
+  await expect(page.getByRole("button", { name: /MCL-.*outside|outside.*project/i })).toBeVisible();
+  await expect(page.getByLabel("レンダリング結果")).toHaveCount(0);
+});
+
+test("rejects a project file larger than the per-file limit", async ({ page }) => {
+  const directory = mkdtempSync(join(tmpdir(), "mcl-e2e-size-limit-"));
+  writeFileSync(join(directory, "main.mcl"), 'emit "ok"\n');
+  writeFileSync(join(directory, "oversized.bin"), Buffer.alloc(16 * 1024 * 1024 + 1));
+  try {
+    await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(directory);
+    await expect(page.getByRole("alert")).toContainText(
+      "oversized.bin exceeds the 16 MiB per-file limit.",
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+
+  await expect(editor(page)).toContainText('let appName = "catalog"');
+});
+
+test("denies uncached external manifest fetches", async ({ page }) => {
+  const externalRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).hostname === "example.invalid") externalRequests.push(request.url());
+  });
+  await editor(page).fill(
+    'import "std:manifest" as manifest\nlet resources = manifest.load("https://example.invalid/manifest.yaml")\nemit resources\n',
+  );
+  await page.getByRole("button", { name: "実行" }).click();
+
+  await expect(page.getByRole("button", { name: /MCL-.*(manifest|lock|cache)/i })).toBeVisible();
+  expect(externalRequests).toEqual([]);
 });
 
 test("cancels a run during worker startup and allows the next run", async ({ page }) => {
@@ -135,11 +181,29 @@ test("cancels a run during worker startup and allows the next run", async ({ pag
     }
     await route.continue();
   });
+  await page.evaluate(() => {
+    const state = { terminated: 0 };
+    Object.defineProperty(window, "__playgroundWorkerState", { value: state });
+    const originalTerminate = Worker.prototype.terminate;
+    Worker.prototype.terminate = function () {
+      state.terminated += 1;
+      return originalTerminate.call(this);
+    };
+  });
 
   await page.getByRole("button", { name: "実行" }).click();
   await expect.poll(() => wasmRequests).toBe(1);
   await page.getByRole("button", { name: "中断" }).click();
   releaseFirstRequest?.();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __playgroundWorkerState?: { terminated: number } })
+            .__playgroundWorkerState?.terminated ?? 0,
+      ),
+    )
+    .toBe(1);
   await expect(page.getByRole("button", { name: "実行" })).toBeVisible();
   await expect(page.getByLabel("レンダリング結果")).toHaveCount(0);
   await expect(page.getByRole("alert")).toHaveCount(0);
@@ -147,4 +211,41 @@ test("cancels a run during worker startup and allows the next run", async ({ pag
   await page.getByRole("button", { name: "実行" }).click();
   await expectRendered(page, 'kind: "ConfigMap"');
   expect(wasmRequests).toBe(2);
+});
+
+test("terminates a timed-out worker and allows another run", async ({ page }) => {
+  await page.evaluate(() => {
+    const state = { ignoreNextLint: true, terminated: 0 };
+    Object.defineProperty(window, "__playgroundWorkerState", { value: state });
+    const originalPostMessage = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, transfer) {
+      if (state.ignoreNextLint && (message as { operation?: string }).operation === "lint") {
+        state.ignoreNextLint = false;
+        return;
+      }
+      return Reflect.apply(originalPostMessage, this, [message, transfer]);
+    };
+    const originalTerminate = Worker.prototype.terminate;
+    Worker.prototype.terminate = function () {
+      state.terminated += 1;
+      return originalTerminate.call(this);
+    };
+  });
+
+  await page.getByRole("button", { name: "実行" }).click();
+  await expect(page.getByRole("alert")).toContainText("Evaluation timed out. Run it again.", {
+    timeout: 10_000,
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __playgroundWorkerState?: { terminated: number } })
+            .__playgroundWorkerState?.terminated ?? 0,
+      ),
+    )
+    .toBe(1);
+
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'kind: "ConfigMap"');
 });

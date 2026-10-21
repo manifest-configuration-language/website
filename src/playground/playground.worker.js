@@ -66,6 +66,7 @@ globalThis.process = {
 function resetFilesystem() {
   activeVolume = new Volume();
   activeVolume.mkdirSync("/mcl-project", { recursive: true });
+  activeVolume.mkdirSync("/tmp", { recursive: true });
   workingDirectory = "/mcl-project";
 }
 

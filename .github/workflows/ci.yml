@@ -57,8 +57,19 @@ jobs:
       - run: pnpm exec playwright install --with-deps
       - run: pnpm run test:e2e
 
+  links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
+        with:
+          args: --offline --no-progress --include-fragments --index-files index.md --fallback-extensions md --root-dir "$GITHUB_WORKSPACE/src/content/docs" src/content/docs
+
   container:
-    needs: [verify, e2e]
+    needs: [verify, e2e, links]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:

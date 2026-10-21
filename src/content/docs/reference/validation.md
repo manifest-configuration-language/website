@@ -29,4 +29,4 @@ validate container using hardened
 
 複数Artifactを横断する制約には`validate output using ruleName`を使います。条件付き制約は`require`内の条件式、論理演算子、`if`式で記述できます。条件専用のRule宣言構文は設けません。
 
-Parser、Formatter、型付きIRなど内部設計の方針は[ParserとASTの再設計](architecture/parser-ast.md)を参照してください。
+Parser、Formatter、型付きIRなど内部設計の方針は[ParserとASTの再設計](/internals/parser-ast/)を参照してください。

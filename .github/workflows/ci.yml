@@ -83,8 +83,35 @@ jobs:
         with:
           context: .
           push: false
+          load: true
+          tags: mcl-website:ci
           cache-from: type=gha,scope=mcl-website
           cache-to: type=gha,scope=mcl-website,mode=max
+
+      - name: Run image with a read-only root filesystem
+        run: |
+          set -eu
+          container_id="$(docker run --detach --read-only --user 101:101 --tmpfs /tmp:rw,noexec,nosuid,size=16m --publish 127.0.0.1:8080:8080 mcl-website:ci)"
+          trap 'docker rm --force "$container_id" >/dev/null' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --dump-header /tmp/mcl-website.headers --output /tmp/mcl-website.html http://127.0.0.1:8080/; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs "$container_id"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          grep -qi '^HTTP/[^ ]* 200' /tmp/mcl-website.headers
+          grep -qi '<title>MCL' /tmp/mcl-website.html
+          grep -qi "^Content-Security-Policy:.*default-src 'self'.*frame-ancestors 'none'" /tmp/mcl-website.headers
+          grep -qi '^Cross-Origin-Resource-Policy: same-origin' /tmp/mcl-website.headers
+          grep -qi '^Referrer-Policy: no-referrer' /tmp/mcl-website.headers
+          grep -qi '^X-Content-Type-Options: nosniff' /tmp/mcl-website.headers
+          grep -qi '^Permissions-Policy: camera=(), microphone=(), geolocation=()' /tmp/mcl-website.headers
 
   publish:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')

@@ -115,7 +115,7 @@ export default function Playground() {
     setReply(undefined);
   }
 
-  async function loadProject(files: FileList) {
+  async function loadProject(files: File[]) {
     if (!client.current) throw new Error("The playground is not ready.");
     projectLoads.current += 1;
     setLoadingProject(true);

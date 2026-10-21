@@ -8,7 +8,7 @@ const directoryInputProps = {
 type Props = {
   fileCount: number;
   projectSize: number;
-  onLoad: (files: FileList) => Promise<LoadedProject>;
+  onLoad: (files: File[]) => Promise<LoadedProject>;
   onLoaded: (project: LoadedProject) => void;
   onError: (message: string) => void;
   disabled?: boolean;
@@ -25,7 +25,7 @@ export function ProjectFileInput({
   const selection = useRef(0);
 
   async function load(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.currentTarget.files;
+    const selected = [...(event.currentTarget.files ?? [])];
     event.currentTarget.value = "";
     if (!selected?.length) return;
     const currentSelection = ++selection.current;

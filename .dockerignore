@@ -1,5 +1,14 @@
 .git
+.github
+.DS_Store
 .build
 node_modules
+e2e
+playwright-report
+test-results
+coverage
+playwright.config.ts
+README.md
+benchmark.md
 public/mcl.wasm.gz
 public/wasm_exec.js

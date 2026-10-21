@@ -15,8 +15,14 @@ async function htmlFiles(directory) {
 
 function inlineScripts(node, scripts = []) {
   if (node.tagName === "script") {
-    const attributes = new Set((node.attrs ?? []).map(({ name }) => name));
-    if (!attributes.has("src")) {
+    const attributes = new Map((node.attrs ?? []).map(({ name, value }) => [name, value]));
+    const type = (attributes.get("type") ?? "").trim().toLowerCase();
+    const isJavaScript =
+      type === "" ||
+      type === "module" ||
+      type === "importmap" ||
+      /^(?:application|text)\/(?:x-)?(?:java|ecma)script(?:\d+(?:\.\d+)?)?(?:\s*;|$)/.test(type);
+    if (!attributes.has("src") && isJavaScript) {
       const source = (node.childNodes ?? [])
         .filter((child) => child.nodeName === "#text")
         .map((child) => child.value)
@@ -39,6 +45,7 @@ for (const filePath of await htmlFiles(siteDirectory)) {
   }
 }
 const template = await readFile("security-headers.conf", "utf8");
-if (!template.includes("{{SCRIPT_HASHES}}"))
-  throw new Error("CSP template is missing the inline script hash placeholder.");
+const placeholder = "{{SCRIPT_HASHES}}";
+if (template.split(placeholder).length !== 2)
+  throw new Error("CSP template must contain exactly one inline script hash placeholder.");
 await writeFile(outputPath, template.replace("{{SCRIPT_HASHES}}", [...hashes].join(" ")));

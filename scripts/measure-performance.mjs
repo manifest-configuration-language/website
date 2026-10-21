@@ -177,6 +177,7 @@ async function measurePage(
   await page.addInitScript(() => {
     Reflect.set(window, "__performanceLcp", 0);
     Reflect.set(window, "__performanceCls", 0);
+    Reflect.set(window, "__performanceInteractions", []);
     new PerformanceObserver((entries) => {
       for (const entry of entries.getEntries()) {
         Reflect.set(window, "__performanceLcp", entry.startTime);
@@ -193,6 +194,20 @@ async function measurePage(
         }
       }
     }).observe({ type: "layout-shift", buffered: true });
+    if (PerformanceObserver.supportedEntryTypes.includes("event")) {
+      new PerformanceObserver((entries) => {
+        const interactions = Reflect.get(window, "__performanceInteractions");
+        for (const entry of entries.getEntries()) {
+          if (entry.interactionId > 0) {
+            interactions.push({
+              duration: entry.duration,
+              interactionId: entry.interactionId,
+              name: entry.name,
+            });
+          }
+        }
+      }).observe({ type: "event", buffered: true, durationThreshold: 16 });
+    }
   });
   const navigationStartedAt = performance.now();
   await page.goto(`${origin}${pathname}`, { waitUntil: "load" });
@@ -241,6 +256,24 @@ async function measurePage(
     path: pathname,
     navigationLoadMs: Math.round(loadMs),
     browserTimingProxies,
+    interactionLatencyProxy: await page.evaluate(() => {
+      const interactions = Reflect.get(window, "__performanceInteractions");
+      const durations = new Map();
+      for (const entry of interactions) {
+        const current = durations.get(entry.interactionId);
+        if (!current || entry.duration > current.duration) {
+          durations.set(entry.interactionId, { duration: entry.duration, name: entry.name });
+        }
+      }
+      const longest = [...durations.values()].sort(
+        (left, right) => right.duration - left.duration,
+      )[0];
+      return {
+        observedInteractionCount: durations.size,
+        maxObservedInteractionMs: longest ? Math.round(longest.duration) : null,
+        maxObservedInteractionEvent: longest?.name ?? null,
+      };
+    }),
     initialAssets: totals(initialAssets),
     ...(pagefindOnDemandAssets === undefined ? {} : { pagefindOnDemandAssets }),
     ...(renderMs === undefined

@@ -7,6 +7,22 @@ import { createServer as createNetServer } from "node:net";
 import { chromium } from "@playwright/test";
 
 const astroCli = fileURLToPath(new URL("../node_modules/astro/bin/astro.mjs", import.meta.url));
+const assetBudgets = JSON.parse(
+  await readFile(new URL("./performance-budget.json", import.meta.url), "utf8"),
+);
+const assetBudgetNames = [
+  "referenceInitialAssetsBytes",
+  "playgroundInitialAssetsBytes",
+  "referenceSearchAssetsBytes",
+  "playgroundExecutionAssetsBytes",
+];
+if (
+  Object.keys(assetBudgets).length !== assetBudgetNames.length ||
+  assetBudgetNames.some(
+    (name) => !Number.isSafeInteger(assetBudgets[name]) || assetBudgets[name] <= 0,
+  )
+)
+  throw new Error("The asset-byte budget configuration is invalid.");
 async function reservePort(requestedPort = 0) {
   const listener = createNetServer();
   await new Promise((resolve, reject) => {
@@ -424,22 +440,38 @@ try {
   ];
   const cancellationUiLatencyMs = await measureCancellation(browser);
   const largeProject = await measureLargeProject(browser);
-  console.log(
-    JSON.stringify(
-      {
-        measuredAt: new Date().toISOString(),
-        node: process.version,
-        platform: `${process.platform}-${process.arch}`,
-        chromium: browser.version(),
-        previewReadyMs: Math.round(startupMs),
-        cancellationUiLatencyMs,
-        largeProject,
-        measurements,
-      },
-      null,
-      2,
-    ),
-  );
+  const assetBudgetMeasurements = {
+    referenceInitialAssetsBytes: measurements[0].initialAssets.total,
+    playgroundInitialAssetsBytes: measurements[1].initialAssets.total,
+    referenceSearchAssetsBytes: measurements[0].pagefindOnDemandAssets.total,
+    playgroundExecutionAssetsBytes: measurements[1].afterExecutionAssets.total,
+  };
+  const assetBudgetViolations = assetBudgetNames.flatMap((name) => {
+    const limit = assetBudgets[name];
+    const measured = assetBudgetMeasurements[name];
+    return measured > limit ? [{ limit, measured, metric: name }] : [];
+  });
+  const report = {
+    measuredAt: new Date().toISOString(),
+    node: process.version,
+    platform: `${process.platform}-${process.arch}`,
+    chromium: browser.version(),
+    previewReadyMs: Math.round(startupMs),
+    cancellationUiLatencyMs,
+    largeProject,
+    measurements,
+    assetBudget: {
+      status: assetBudgetViolations.length === 0 ? "pass" : "fail",
+      limits: assetBudgets,
+      measurements: assetBudgetMeasurements,
+      violations: assetBudgetViolations,
+    },
+  };
+  console.log(JSON.stringify(report, null, 2));
+  if (assetBudgetViolations.length > 0) {
+    process.exitCode = 1;
+    console.error(`Asset byte budgets exceeded: ${JSON.stringify(assetBudgetViolations)}`);
+  }
 } finally {
   try {
     await browser?.close();

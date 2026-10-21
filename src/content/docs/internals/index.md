@@ -8,3 +8,4 @@ MCLの実装構造と処理モデルを説明します。言語の使い方は[�
 
 - [ParserとASTの構成](./parser-ast/)
 - [遅延参照の評価](./deferred-evaluation/)
+- [型解析と型付き中間表現](./type-system/)

@@ -1,8 +1,17 @@
+import {
+  maxProjectBytes,
+  maxProjectFileBytes,
+  maxProjectFiles,
+  maxSourceBytes,
+} from "@manifest-configuration-language/browser";
+
+const playgroundProjectBytes = 32 * 1024 * 1024;
+
 export const projectLimits = {
-  sourceBytes: 64 * 1024,
-  projectFiles: 4096,
-  fileBytes: 16 * 1024 * 1024,
-  projectBytes: 32 * 1024 * 1024,
+  sourceBytes: maxSourceBytes,
+  projectFiles: maxProjectFiles,
+  fileBytes: maxProjectFileBytes,
+  projectBytes: Math.min(maxProjectBytes, playgroundProjectBytes),
 };
 
 export function isSafeProjectPath(filePath) {

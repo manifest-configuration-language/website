@@ -33,7 +33,7 @@ function gzipWasmAssets() {
       for (const asset of Object.values(bundle)) {
         if (
           asset.type !== "asset" ||
-          !/^_astro\/mcl\.wasm-[A-Za-z0-9_-]{8,}\.wasm$/.test(asset.fileName)
+          !/(?:^|\/)mcl\.wasm-[A-Za-z0-9_-]{8,}\.wasm$/.test(asset.fileName)
         )
           continue;
         bundle[`${asset.fileName}.gz`] = {

@@ -30,10 +30,11 @@ export let container =
 
 `export type`で公開された型は、import aliasを使って型注釈に指定できます。exportされた構造型が非公開の型エイリアスを参照する場合も、定義元の型環境で検証します。
 
-```mcl release-gap
+```mcl verify fixture=module-type-annotation expect=0.name=api,0.image=example.test/api:v1
 import "./types.mcl" as types
 
 let container: types.Container =
   name: "api"
   image: "example.test/api:v1"
+emit container
 ```

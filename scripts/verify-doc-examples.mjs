@@ -101,15 +101,24 @@ function modeFor(node, file) {
     !modes.has(mode) ||
     (mode === "expected-error" &&
       (!expectedError || errorTokens.length !== 1 || tokens.length !== 2)) ||
+    (mode === "release-gap" &&
+      (!expectedError ||
+        errorTokens.length !== 1 ||
+        fixtureTokens.length > 1 ||
+        tokens.length !== 2 + fixtureTokens.length)) ||
     (mode === "verify" &&
       (!validExpectation ||
         expectationTokens.length !== 1 ||
         errorTokens.length !== 0 ||
         fixtureTokens.length > 1 ||
         tokens.length !== 2 + fixtureTokens.length)) ||
-    (mode !== "verify" && mode !== "expected-error" && tokens.length !== 1) ||
+    (mode !== "verify" &&
+      mode !== "expected-error" &&
+      mode !== "release-gap" &&
+      tokens.length !== 1) ||
+    fixtureTokens.length > 1 ||
     (fixtureTokens.length > 0 && !validFixture) ||
-    (mode !== "verify" && (fixture || expectation))
+    (mode !== "verify" && mode !== "release-gap" && (fixture || expectation))
   ) {
     throw new Error(
       `${file}:${node.position.start.line}: invalid MCL fence metadata; verify requires expect=<path=value,...|empty> and may use fixture=<name>; expected-error requires error=<substring>`,
@@ -194,12 +203,14 @@ async function main() {
           expectation,
         });
       if (fixture) fixtureCounts.set(fixture, (fixtureCounts.get(fixture) ?? 0) + 1);
-      if (mode === "expected-error")
+      if (mode === "expected-error" || mode === "release-gap")
         expectedErrors.push({
           file,
           line: node.position.start.line,
           source: node.value,
           expectedError,
+          mode,
+          fixture,
         });
     });
   }
@@ -287,7 +298,7 @@ async function main() {
       } else {
         if (!checkFailure)
           throw new Error(
-            `${relative(docsRoot, example.file)}:${example.line}: expected MCL ${release} to reject this example`,
+            `${relative(docsRoot, example.file)}:${example.line}: ${example.mode === "release-gap" ? `release gap is resolved in MCL ${release}; mark this example verify and add an expectation` : `expected MCL ${release} to reject this example`}`,
           );
         if (!checkOutput(checkFailure).includes(example.expectedError))
           throw new Error(
@@ -300,7 +311,7 @@ async function main() {
   }
 
   console.log(
-    `Verified ${executableExamples.length} valid and ${expectedErrors.length} expected-error MCL examples with MCL ${release}.`,
+    `Verified ${executableExamples.length} valid, ${classifications.get("expected-error")} expected-error, and ${classifications.get("release-gap")} release-gap MCL examples with MCL ${release}.`,
   );
   console.log(
     `Classified MCL fences: ${[...classifications].map(([mode, count]) => `${mode}=${count}`).join(", ")}.`,

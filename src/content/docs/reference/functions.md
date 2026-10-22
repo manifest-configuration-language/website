@@ -62,7 +62,7 @@ emit map(values, addOffset)
 
 関数呼び出しは`name(arg1, arg2)`の形式で、位置引数と名前付き引数を使えます。複数行呼び出しでは、最後の引数を含めて各引数の末尾にカンマが必要です。
 
-```mcl release-gap
+```mcl release-gap error=CallExpr
 let result = mergeByKey(
   existing = base,
   overrides = updates,

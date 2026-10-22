@@ -46,7 +46,7 @@ let configValue = settings["mode"]
 
 MCLは`String`、整数、十進数、`Bool`、`null`、`List`、`Map`を扱います。Listには`-`を必ず付けます。空でないMapやListをインラインで記述する構文、シングルクォート、YAMLのanchor、alias、tag、暗黙の型変換はありません。
 
-```mcl release-gap
+```mcl release-gap error=MapExpr
 let settings =
   enabled: true
   retries: 3
@@ -65,7 +65,7 @@ Mapのキーは識別子または二重引用符で囲んだ文字列です。�
 
 計算したMapキーには`key(expression): value`を使います。式の結果はStringでなければならず、静的キーを含む重複も評価時にエラーになります。型検査と値の評価は別々に行われます。MCL v0.1.0は計算キーを含むMapを評価できないため、次の例をリリースギャップとして分類します。
 
-```mcl release-gap
+```mcl release-gap error=MapExpr
 let annotationName = "example.org/checksum"
 let annotations =
   key(annotationName): "abc123"

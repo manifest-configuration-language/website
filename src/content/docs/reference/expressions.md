@@ -43,7 +43,7 @@ emit container
 
 Mapフィールドの削除には`without:`とフィールドパスを使います。対象のMapフィールドが存在しない場合はエラーになり、元の値は変更しません。
 
-```mcl release-gap
+```mcl release-gap error=RemovalExpr
 let restricted = container without:
   - .securityContext.capabilities.add
 ```

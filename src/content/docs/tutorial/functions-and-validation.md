@@ -45,7 +45,7 @@ emit deployment
 
 `rule`は値の制約を定義し、`validate`で明示的に実行します。
 
-```mcl release-gap
+```mcl release-gap error=expected
 type Deployment =
   apiVersion: String
   kind: "Deployment"

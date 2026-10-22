@@ -1,0 +1,12 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["local>walnuts1018/renovate-config"],
+  "packageRules": [
+    {
+      "description": "Pin digests for Dockerfile base images",
+      "matchDatasources": ["docker"],
+      "matchManagers": ["dockerfile"],
+      "pinDigests": true
+    }
+  ]
+}

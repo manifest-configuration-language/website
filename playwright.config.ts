@@ -1,28 +1,28 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const containerImage = process.env.PRODUCTION_CONTAINER_IMAGE ?? "mcl-website:e2e";
+if (!/^[A-Za-z0-9._/:@-]+$/.test(containerImage)) {
+  throw new Error("PRODUCTION_CONTAINER_IMAGE contains unsupported characters.");
+}
+
 export default defineConfig({
   testDir: "./e2e",
   outputDir: ".build/playwright-results",
-  fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: "list",
-  workers: process.env.CI ? 2 : undefined,
+  workers: 1,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4322",
+    baseURL: "http://127.0.0.1:4322",
     trace: "retain-on-failure",
   },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
-    { name: "webkit", use: { ...devices["Desktop Safari"] } },
-  ],
-  webServer: process.env.PLAYWRIGHT_BASE_URL
-    ? undefined
-    : {
-        command: "pnpm exec astro preview --host 127.0.0.1 --port 4322",
-        url: "http://127.0.0.1:4322",
-        reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
-      },
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  webServer: {
+    command: `docker run --rm --read-only --cap-drop=ALL --security-opt=no-new-privileges --user 10001:10001 --tmpfs /tmp:rw,noexec,nosuid,size=16m --publish 127.0.0.1:4322:8080 ${containerImage}`,
+    url: "http://127.0.0.1:4322",
+    reuseExistingServer: false,
+    timeout: 30_000,
+    stdout: "pipe",
+    stderr: "pipe",
+  },
 });

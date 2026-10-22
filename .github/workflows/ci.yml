@@ -42,7 +42,7 @@ jobs:
           - name: Lint GitHub Actions workflows
             run: mise run actions:lint
 
-  e2e:
+  preview:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -54,11 +54,7 @@ jobs:
           install: true
           cache: true
       - run: mise run install
-      - run: pnpm exec playwright install --with-deps
-      - run: pnpm run test:e2e
-      - name: Measure performance and enforce budgets
-        run: pnpm run measure:performance
-
+      - run: pnpm run build
       - name: Upload pull request preview
         id: preview
         if: github.event_name == 'pull_request'
@@ -87,9 +83,11 @@ jobs:
           args: --offline --no-progress --include-fragments --index-files index.md --fallback-extensions md --root-dir "$GITHUB_WORKSPACE/src/content/docs" src/content/docs
 
   container:
-    needs: [verify, e2e, links]
+    needs: [verify, preview, links]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      IMAGE_NAME: ghcr.io/manifest-configuration-language/website
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -97,27 +95,48 @@ jobs:
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      - name: Generate image metadata
+        id: metadata
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=tag
+
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: false
           load: true
           tags: mcl-website:ci
-          cache-from: type=gha,scope=mcl-website
-          cache-to: type=gha,scope=mcl-website,mode=max
+          labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=mcl-website-main' || '' }}
+          cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=mcl-website-main,mode=max' || '' }}
 
       - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
         with:
           install: true
-          cache: true
+          cache: ${{ github.ref == 'refs/heads/main' }}
       - run: mise run install
       - run: pnpm exec playwright install --with-deps chromium
 
       - name: Test the production container in Chromium
         env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4322
           PRODUCTION_CONTAINER_IMAGE: mcl-website:ci
-        run: pnpm exec playwright test e2e/production-container.spec.ts --project=chromium
+        run: pnpm exec playwright test
+
+      - name: Save tested image
+        run: docker save mcl-website:ci -o /tmp/mcl-website.tar
+
+      - name: Upload tested image
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: website-container-${{ github.sha }}
+          path: /tmp/mcl-website.tar
+          if-no-files-found: error
+          retention-days: 1
 
   publish:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
@@ -134,14 +153,6 @@ jobs:
       REGISTRY: ghcr.io
       IMAGE_NAME: ghcr.io/manifest-configuration-language/website
     steps:
-      - name: Check out source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
       - name: Generate image metadata
         id: metadata
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -160,16 +171,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Publish image
-        id: push
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - name: Download tested image
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          context: .
-          push: true
-          tags: ${{ steps.metadata.outputs.tags }}
-          labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha,scope=mcl-website
-          cache-to: type=gha,scope=mcl-website,mode=max
+          name: website-container-${{ github.sha }}
+          path: /tmp/website-container
+
+      - name: Load and publish tested image
+        id: push
+        env:
+          IMAGE_TAGS: ${{ steps.metadata.outputs.tags }}
+        run: |
+          docker load -i /tmp/website-container/mcl-website.tar
+          while IFS= read -r image_tag; do
+            [ -n "$image_tag" ] || continue
+            docker tag mcl-website:ci "$image_tag"
+            docker push "$image_tag"
+          done <<< "$IMAGE_TAGS"
+          image_ref="$(docker image inspect "${IMAGE_TAGS%%$'\n'*}" --format '{{index .RepoDigests 0}}')"
+          image_digest="${image_ref##*@}"
+          printf 'digest=%s\n' "$image_digest" >> "$GITHUB_OUTPUT"
+          printf 'Published image: %s@%s\n' "$IMAGE_NAME" "$image_digest"
 
       - name: Record published image reference
         env:

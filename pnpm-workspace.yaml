@@ -7,6 +7,6 @@ minimumReleaseAgeExclude:
   - "@codemirror/view@6.43.15"
   - fast-uri@3.1.9
   - "@oxfmt/*"
-  - oxfmt@0.74.0
+  - oxfmt
   - "@oxlint/*"
-  - oxlint@1.89.0
+  - oxlint

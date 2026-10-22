@@ -1,6 +1,0 @@
-ignores:
-  - rule: cache-poisoning
-    file: .github/workflows/ci.yml
-    job: publish
-    step: Publish image
-    reason: Pull request caches use merge-ref scope and cannot be imported by the trusted main and tag builds that publish images.

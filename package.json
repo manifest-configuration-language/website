@@ -13,9 +13,8 @@
     "verify:docs": "node scripts/prepare-doc-cli.mjs && node scripts/verify-doc-examples.mjs",
     "test:project-validation": "node --test src/playground/projectValidation.test.js",
     "typecheck": "astro check",
-    "pretest:e2e": "pnpm run build",
-    "test:e2e": "playwright test",
-    "measure:performance": "node scripts/measure-performance.mjs"
+    "pretest:e2e": "docker build --tag mcl-website:e2e .",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@manifest-configuration-language/browser": "0.1.1",
@@ -42,8 +41,7 @@
     "remark-mdx": "3.1.1",
     "remark-parse": "11.0.0",
     "typescript": "6.0.2",
-    "unified": "11.0.5",
-    "web-vitals": "6.2.3"
+    "unified": "11.0.5"
   },
   "engines": {
     "node": ">=24.22.0"

@@ -6,52 +6,71 @@ const securityHeaders = readFileSync(
   new URL("../.build/security-headers.conf", import.meta.url),
   "utf8",
 );
-const contentSecurityPolicy = securityHeaders.match(
+const responseContentSecurityPolicy = securityHeaders.match(
   /^add_header Content-Security-Policy "(.+)" always;$/m,
 )?.[1];
 
-if (!contentSecurityPolicy)
-  throw new Error("The generated Content Security Policy is unavailable.");
+if (!responseContentSecurityPolicy)
+  throw new Error("The response Content Security Policy is unavailable.");
 
-const cspDirectiveEntries: [string, string[]][] = contentSecurityPolicy
-  .split(";")
-  .map((directive) => {
-    const [name, ...sources] = directive.trim().split(/\s+/);
-    return [name, sources];
-  });
-const cspDirectives = new Map<string, string[]>(cspDirectiveEntries);
+function parseCsp(policy: string): Map<string, string[]> {
+  const entries = policy
+    .split(";")
+    .map((directive) => directive.trim())
+    .filter(Boolean)
+    .map((directive) => {
+      const [name, ...sources] = directive.split(/\s+/);
+      return [name, sources] as [string, string[]];
+    });
+  return new Map(entries);
+}
+
+async function astroContentSecurityPolicy(page: import("@playwright/test").Page) {
+  const metas = page.locator('meta[http-equiv="content-security-policy"]');
+  await expect(metas).toHaveCount(1);
+  const content = await metas.getAttribute("content");
+  expect(content).toBeTruthy();
+  return parseCsp(content ?? "");
+}
 
 test.afterAll(async () => closeWasmAssetServer());
 
-test("generated CSP keeps its restrictive directives and source allowlist", () => {
-  expect(cspDirectives.size).toBe(cspDirectiveEntries.length);
-  expect([...cspDirectives.keys()].sort()).toEqual(
+test("response CSP keeps frame embedding disabled", () => {
+  const responseDirectives = parseCsp(responseContentSecurityPolicy);
+  expect([...responseDirectives.keys()]).toEqual(["frame-ancestors"]);
+  expect(responseDirectives.get("frame-ancestors")).toEqual(["'none'"]);
+});
+
+test("Astro CSP keeps its restrictive directives and source allowlist", async ({ page }) => {
+  await page.goto("/");
+  const directives = await astroContentSecurityPolicy(page);
+  expect([...directives.keys()].sort()).toEqual(
     [
       "base-uri",
       "connect-src",
       "default-src",
-      "form-action",
       "font-src",
-      "frame-ancestors",
+      "form-action",
       "img-src",
       "object-src",
       "script-src",
       "style-src",
+      "style-src-attr",
+      "style-src-elem",
       "worker-src",
     ].sort(),
   );
-  expect(cspDirectives.get("default-src")).toEqual(["'self'"]);
-  expect(cspDirectives.get("form-action")).toEqual(["'self'"]);
-  expect(cspDirectives.get("object-src")).toEqual(["'none'"]);
-  expect(cspDirectives.get("base-uri")).toEqual(["'self'"]);
-  expect(cspDirectives.get("frame-ancestors")).toEqual(["'none'"]);
-  expect(cspDirectives.get("worker-src")).toEqual(["'self'"]);
-  expect(cspDirectives.get("connect-src")).toEqual(["'self'"]);
-  expect(cspDirectives.get("img-src")).toEqual(["'self'", "data:"]);
-  expect(cspDirectives.get("font-src")).toEqual(["'self'", "data:"]);
-  expect(cspDirectives.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
+  expect(directives.get("default-src")).toEqual(["'self'"]);
+  expect(directives.get("form-action")).toEqual(["'self'"]);
+  expect(directives.get("object-src")).toEqual(["'none'"]);
+  expect(directives.get("base-uri")).toEqual(["'self'"]);
+  expect(directives.get("worker-src")).toEqual(["'self'"]);
+  expect(directives.get("connect-src")).toEqual(["'self'"]);
+  expect(directives.get("img-src")).toEqual(["'self'", "data:"]);
+  expect(directives.get("font-src")).toEqual(["'self'", "data:"]);
+  expect(directives.get("style-src")).toEqual(["'self'"]);
 
-  const scriptSources = cspDirectives.get("script-src") ?? [];
+  const scriptSources = directives.get("script-src") ?? [];
   expect(scriptSources).toContain("'self'");
   expect(scriptSources).toContain("'wasm-unsafe-eval'");
   expect(scriptSources).toContainEqual(expect.stringMatching(/^'sha256-[A-Za-z0-9+/]+={0,2}'$/));
@@ -63,6 +82,21 @@ test("generated CSP keeps its restrictive directives and source allowlist", () =
         !/^'sha256-[A-Za-z0-9+/]+={0,2}'$/.test(source),
     ),
   ).toEqual([]);
+  const styleElementSources = directives.get("style-src-elem") ?? [];
+  expect(styleElementSources).toContain("'self'");
+  expect(styleElementSources).toContain("'unsafe-inline'");
+  expect(directives.get("style-src-attr")).toEqual(["'unsafe-inline'"]);
+  expect(
+    await page.evaluate(() => {
+      const policy = document.querySelector('meta[http-equiv="content-security-policy"]');
+      const firstResource = document.head.querySelector('script, style, link[rel="stylesheet"]');
+      return Boolean(
+        policy &&
+        firstResource &&
+        policy.compareDocumentPosition(firstResource) & Node.DOCUMENT_POSITION_FOLLOWING,
+      );
+    }),
+  ).toBe(true);
 });
 
 test("home page highlights MCL code and switches themes", async ({ page }) => {
@@ -126,13 +160,16 @@ test("documentation and Playground work under the generated CSP", async ({ page 
     const response = await route.fetch();
     return route.fulfill({
       response,
-      headers: { ...response.headers(), "content-security-policy": contentSecurityPolicy },
+      headers: {
+        ...response.headers(),
+        "content-security-policy": responseContentSecurityPolicy,
+      },
     });
   });
   await addWasmAssetHeaders(page);
 
   const response = await page.goto("/");
-  expect(response?.headers()["content-security-policy"]).toBe(contentSecurityPolicy);
+  expect(response?.headers()["content-security-policy"]).toBe(responseContentSecurityPolicy);
   await expect(page.locator('pre[data-language="mcl"]')).toBeVisible();
   await page.locator("starlight-theme-select select").first().selectOption("light");
   await page.getByRole("button", { name: "検索" }).click();

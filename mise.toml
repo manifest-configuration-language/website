@@ -4,18 +4,6 @@ pnpm = "12.14.0"
 go = "1.27.3"
 jactionlint = "2.2.0"
 
-[tools."github:manifest-configuration-language/mcl"]
-version = "0.1.0"
-rename_exe = "mcl"
-
-[tools."github:manifest-configuration-language/mcl".platforms]
-macos-x64 = { asset_pattern = "mcl_{{ version }}_darwin_amd64.tar.gz" }
-macos-arm64 = { asset_pattern = "mcl_{{ version }}_darwin_arm64.tar.gz" }
-linux-x64 = { asset_pattern = "mcl_{{ version }}_linux_amd64.tar.gz" }
-linux-arm64 = { asset_pattern = "mcl_{{ version }}_linux_arm64.tar.gz" }
-windows-x64 = { asset_pattern = "mcl_{{ version }}_windows_amd64.zip", rename_exe = "mcl.exe" }
-windows-arm64 = { asset_pattern = "mcl_{{ version }}_windows_arm64.zip", rename_exe = "mcl.exe" }
-
 [tasks."actions:lint"]
 description = "Lint GitHub Actions workflows"
 run = "jactionlint .github/workflows/*.yml"

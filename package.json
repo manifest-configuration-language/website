@@ -15,7 +15,7 @@
     "lint": "oxlint astro.config.mjs playwright.config.ts scripts src e2e",
     "format": "oxfmt astro.config.mjs playwright.config.ts scripts src e2e",
     "format:check": "oxfmt --check astro.config.mjs playwright.config.ts scripts src e2e",
-    "verify:docs": "node scripts/verify-doc-examples.mjs",
+    "verify:docs": "pnpm run prepare:runtime && node scripts/verify-doc-examples.mjs",
     "test:project-validation": "node --test src/playground/projectValidation.test.js",
     "typecheck": "astro check",
     "pretest:e2e": "pnpm run build",

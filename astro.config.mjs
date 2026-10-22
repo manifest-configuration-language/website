@@ -46,6 +46,31 @@ function gzipWasmAssets() {
 export default defineConfig({
   site: "https://mcl.walnuts.dev",
   outDir: ".build/dist",
+  security: {
+    csp: {
+      algorithm: "SHA-256",
+      directives: [
+        "default-src 'self'",
+        "img-src 'self' data:",
+        "worker-src 'self'",
+        "connect-src 'self'",
+        "font-src 'self' data:",
+        "form-action 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+      ],
+      scriptDirective: {
+        resources: ["'self'", "'wasm-unsafe-eval'"],
+      },
+      styleDirective: {
+        resources: [
+          { resource: "'self'", kind: "element" },
+          { resource: "'unsafe-inline'", kind: "element" },
+          { resource: "'unsafe-inline'", kind: "attribute" },
+        ],
+      },
+    },
+  },
   redirects: {
     "/reference/language": "/reference/",
     "/reference/architecture/parser-ast": "/internals/parser-ast/",

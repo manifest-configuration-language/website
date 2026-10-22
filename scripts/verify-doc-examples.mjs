@@ -8,7 +8,9 @@ import { unified } from "unified";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 
-const cli = "mcl";
+const cli = fileURLToPath(
+  new URL(`../.build/bin/mcl${process.platform === "win32" ? ".exe" : ""}`, import.meta.url),
+);
 const modes = new Set(["verify", "expected-error", "fragment", "release-gap"]);
 const docsRoot = fileURLToPath(new URL("../src/content/docs/", import.meta.url));
 const fixturesRoot = fileURLToPath(new URL("./doc-example-fixtures/", import.meta.url));

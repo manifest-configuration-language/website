@@ -12,18 +12,21 @@ const archivePath = path.join(root, ".build/mcl-core.tar.gz");
 const runtimeDirectory = path.join(root, ".build/runtime");
 const sourceRuntimeDirectory = path.join(root, "src/playground/runtime");
 const stampPath = path.join(root, ".build/mcl-runtime-stamp.json");
+const cliPath = path.join(root, ".build/bin", `mcl${process.platform === "win32" ? ".exe" : ""}`);
 const buildFlags = ["-trimpath", "-ldflags=-s -w"];
 const buildTarget = "./cmd/mcl-wasm";
+const cliBuildTarget = "./cmd/mcl";
 const wasmEnvironment = {
   GOOS: "js",
   GOARCH: "wasm",
   CGO_ENABLED: "0",
 };
 
-const [goVersion, goRoot, goBuildSettings, scriptSource] = await Promise.all([
+const [goVersion, goRoot, goBuildSettings, goHostSettings, scriptSource] = await Promise.all([
   capture("go", ["version"]),
   capture("go", ["env", "GOROOT"]),
   capture("go", ["env", "GOFLAGS", "GOEXPERIMENT", "GOTOOLCHAIN"]),
+  capture("go", ["env", "GOOS", "GOARCH", "CGO_ENABLED"]),
   readFile(import.meta.filename),
 ]);
 const wasmExecPath = path.join(goRoot.trim(), "lib/wasm/wasm_exec.js");
@@ -39,6 +42,8 @@ const fingerprint = hash(
     wasmEnvironment,
     buildFlags,
     buildTarget,
+    cliBuildTarget,
+    goHostSettings: goHostSettings.trim().split("\n"),
     wasmExecHash,
     scriptHash: hash(scriptSource),
   }),
@@ -82,6 +87,10 @@ async function rebuildRuntime() {
       env: { ...process.env, ...wasmEnvironment },
     },
   );
+  await mkdir(path.dirname(cliPath), { recursive: true });
+  await run("go", ["build", ...buildFlags, "-o", cliPath, cliBuildTarget], {
+    cwd: buildDirectory,
+  });
   await cp(wasmExecPath, path.join(runtimeDirectory, "wasm_exec.js"));
   await rm(sourceRuntimeDirectory, { recursive: true, force: true });
   await mkdir(sourceRuntimeDirectory, { recursive: true });
@@ -92,12 +101,13 @@ async function rebuildRuntime() {
 }
 
 async function outputHashes() {
-  const [wasm, wasmExec] = await Promise.all([
+  const [wasm, wasmExec, cli] = await Promise.all([
     readFile(path.join(sourceRuntimeDirectory, "mcl.wasm")),
     readFile(path.join(sourceRuntimeDirectory, "wasm_exec.js")),
+    readFile(cliPath),
   ]);
 
-  return { wasm: hash(wasm), wasmExec: hash(wasmExec) };
+  return { wasm: hash(wasm), wasmExec: hash(wasmExec), cli: hash(cli) };
 }
 
 function hash(value) {

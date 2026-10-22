@@ -2,5 +2,15 @@
   "referenceInitialAssetsBytes": 227512,
   "playgroundInitialAssetsBytes": 832303,
   "referenceSearchAssetsBytes": 240907,
-  "playgroundExecutionAssetsBytes": 22926167
+  "playgroundExecutionAssetsBytes": 22926167,
+  "referenceNavigationLoadMs": 2500,
+  "referenceSearchMs": 5000,
+  "playgroundNavigationLoadMs": 2500,
+  "playgroundFirstRenderMs": 10000,
+  "playgroundWasmInstantiateMs": 5000,
+  "playgroundSecondRenderMs": 2000,
+  "cancellationUiLatencyMs": 2000,
+  "largeProjectImportMs": 2000,
+  "largeProjectEvaluationMs": 10000,
+  "largeProjectWasmMemoryBytes": 268435456
 }

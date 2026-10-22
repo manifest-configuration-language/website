@@ -16,13 +16,25 @@ const assetBudgetNames = [
   "referenceSearchAssetsBytes",
   "playgroundExecutionAssetsBytes",
 ];
+const runtimeBudgetNames = [
+  "referenceNavigationLoadMs",
+  "referenceSearchMs",
+  "playgroundNavigationLoadMs",
+  "playgroundFirstRenderMs",
+  "playgroundWasmInstantiateMs",
+  "playgroundSecondRenderMs",
+  "cancellationUiLatencyMs",
+  "largeProjectImportMs",
+  "largeProjectEvaluationMs",
+  "largeProjectWasmMemoryBytes",
+];
 if (
-  Object.keys(assetBudgets).length !== assetBudgetNames.length ||
-  assetBudgetNames.some(
+  Object.keys(assetBudgets).length !== assetBudgetNames.length + runtimeBudgetNames.length ||
+  [...assetBudgetNames, ...runtimeBudgetNames].some(
     (name) => !Number.isSafeInteger(assetBudgets[name]) || assetBudgets[name] <= 0,
   )
 )
-  throw new Error("The asset-byte budget configuration is invalid.");
+  throw new Error("The performance budget configuration is invalid.");
 async function reservePort(requestedPort = 0) {
   const listener = createNetServer();
   await new Promise((resolve, reject) => {
@@ -446,11 +458,29 @@ try {
     referenceSearchAssetsBytes: measurements[0].pagefindOnDemandAssets.total,
     playgroundExecutionAssetsBytes: measurements[1].afterExecutionAssets.total,
   };
-  const assetBudgetViolations = assetBudgetNames.flatMap((name) => {
-    const limit = assetBudgets[name];
-    const measured = assetBudgetMeasurements[name];
-    return measured > limit ? [{ limit, measured, metric: name }] : [];
-  });
+  const runtimeBudgetMeasurements = {
+    referenceNavigationLoadMs: measurements[0].navigationLoadMs,
+    referenceSearchMs: measurements[0].pagefindFirstSearchMs,
+    playgroundNavigationLoadMs: measurements[1].navigationLoadMs,
+    playgroundFirstRenderMs: measurements[1].wasmStartupAndFirstRenderMs,
+    playgroundWasmInstantiateMs: measurements[1].wasmStreamingInstantiateMs,
+    playgroundSecondRenderMs: measurements[1].secondRenderMs,
+    cancellationUiLatencyMs,
+    largeProjectImportMs: largeProject.projectImportMs,
+    largeProjectEvaluationMs: largeProject.evaluationMs,
+    largeProjectWasmMemoryBytes: largeProject.wasmLinearMemoryBytesAfterLargeProject,
+  };
+  const findViolations = (names, measurementsByName) =>
+    names.flatMap((name) => {
+      const limit = assetBudgets[name];
+      const measured = measurementsByName[name];
+      return Number.isFinite(measured) && measured <= limit
+        ? []
+        : [{ limit, measured, metric: name }];
+    });
+  const assetBudgetViolations = findViolations(assetBudgetNames, assetBudgetMeasurements);
+  const runtimeBudgetViolations = findViolations(runtimeBudgetNames, runtimeBudgetMeasurements);
+  const budgetViolations = [...assetBudgetViolations, ...runtimeBudgetViolations];
   const report = {
     measuredAt: new Date().toISOString(),
     node: process.version,
@@ -462,15 +492,25 @@ try {
     measurements,
     assetBudget: {
       status: assetBudgetViolations.length === 0 ? "pass" : "fail",
-      limits: assetBudgets,
+      limits: Object.fromEntries(assetBudgetNames.map((name) => [name, assetBudgets[name]])),
       measurements: assetBudgetMeasurements,
       violations: assetBudgetViolations,
     },
+    runtimeBudget: {
+      status: runtimeBudgetViolations.length === 0 ? "pass" : "fail",
+      limits: Object.fromEntries(runtimeBudgetNames.map((name) => [name, assetBudgets[name]])),
+      measurements: runtimeBudgetMeasurements,
+      violations: runtimeBudgetViolations,
+    },
+    performanceBudget: {
+      status: budgetViolations.length === 0 ? "pass" : "fail",
+      violations: budgetViolations,
+    },
   };
   console.log(JSON.stringify(report, null, 2));
-  if (assetBudgetViolations.length > 0) {
+  if (budgetViolations.length > 0) {
     process.exitCode = 1;
-    console.error(`Asset byte budgets exceeded: ${JSON.stringify(assetBudgetViolations)}`);
+    console.error(`Performance budgets exceeded: ${JSON.stringify(budgetViolations)}`);
   }
 } finally {
   try {

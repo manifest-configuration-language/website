@@ -149,7 +149,21 @@ test("shows a source diagnostic for an invalid program", async ({ page }) => {
   await editor(page).fill("emit missingValue\n");
   await page.getByRole("button", { name: "実行" }).click();
 
-  await expect(page.getByRole("button", { name: /MCL-UNDEFINED.*missingValue/ })).toBeVisible();
+  const diagnostic = page.getByRole("button", { name: /MCL-UNDEFINED.*missingValue/ });
+  await expect(diagnostic).toBeVisible();
+  await diagnostic.click();
+  await expect
+    .poll(() =>
+      editor(page).evaluate((element) => {
+        const selection = window.getSelection();
+        if (!selection?.anchorNode || !element.contains(selection.anchorNode)) return null;
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        range.setEnd(selection.anchorNode, selection.anchorOffset);
+        return range.toString().length;
+      }),
+    )
+    .toBe(5);
   await expect(page.getByLabel("レンダリング結果")).toHaveCount(0);
 
   await editor(page).fill('emit "recovered"\n');
@@ -201,6 +215,33 @@ test("rejects a project larger than the total size limit and keeps the loaded pr
     await expect(page.getByRole("alert")).toContainText(
       "The project exceeds the 32 MiB total limit.",
     );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+
+  await expect(editor(page)).toContainText('import "modules/resource.mcl"');
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
+});
+
+test("rejects a project larger than the file count limit and keeps the loaded project", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium");
+
+  await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(projectDirectory);
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
+
+  const directory = mkdtempSync(join(tmpdir(), "mcl-e2e-project-file-count-limit-"));
+  writeFileSync(join(directory, "main.mcl"), 'emit "oversized project"\n');
+  for (let index = 0; index < 4096; index += 1) {
+    writeFileSync(join(directory, `file-${index}.bin`), Buffer.alloc(0));
+  }
+  try {
+    await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(directory);
+    await expect(page.getByRole("alert")).toContainText(/at most [\d,]+ files\./);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

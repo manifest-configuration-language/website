@@ -50,9 +50,11 @@ jobs:
           cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=mcl-website-main,mode=max' || '' }}
 
       - name: Save production image
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         run: docker save mcl-website:ci -o /tmp/mcl-website.tar
 
       - name: Upload production image
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: website-container-${{ github.sha }}

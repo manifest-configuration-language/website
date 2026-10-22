@@ -39,7 +39,8 @@ const checksumEntry = (await checksumsResponse.text())
   .find((match) => match?.[2] === filename);
 if (!checksumEntry) throw new Error(`MCL ${version} SHA256SUMS has no entry for ${filename}`);
 const digest = createHash("sha256").update(archive).digest("hex");
-if (digest !== checksumEntry[1]) throw new Error(`MCL ${version} CLI checksum mismatch for ${filename}`);
+if (digest !== checksumEntry[1])
+  throw new Error(`MCL ${version} CLI checksum mismatch for ${filename}`);
 await writeFile(archivePath, archive);
 await rm(binaryPath, { force: true });
 try {

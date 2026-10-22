@@ -58,8 +58,14 @@ export function createPlaygroundClient(): PlaygroundClient {
       const controller = beginRequest();
       try {
         const project = runtime.openProject(toProjectFiles(source, files));
-        const lint = await project.lint({ signal: controller.signal, timeoutMs: operationTimeoutMs });
-        const rendered = await project.render({ signal: controller.signal, timeoutMs: operationTimeoutMs });
+        const lint = await project.lint({
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
+        const rendered = await project.render({
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
         return {
           requestId: revision,
           revision,

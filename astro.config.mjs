@@ -1,8 +1,4 @@
-import {
-  brotliCompressSync,
-  constants as zlibConstants,
-  gzipSync,
-} from "node:zlib";
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from "node:zlib";
 import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";

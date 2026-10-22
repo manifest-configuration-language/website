@@ -99,10 +99,10 @@ const webVitalsSource = await readFile(
   "utf8",
 );
 const wasmAssetName = (await readdir(wasmAssetDirectory)).find((name) =>
-  /^mcl\.wasm-[A-Za-z0-9_-]{8,}\.gz$/.test(name),
+  /^mcl\.wasm-[A-Za-z0-9_-]{8,}\.wasm\.gz$/.test(name),
 );
 if (!wasmAssetName) throw new Error("The fingerprinted MCL WebAssembly asset is missing.");
-const wasmAssetPath = `/_astro/${wasmAssetName.replace(/\.gz$/, ".wasm")}`;
+const wasmAssetPath = `/_astro/${wasmAssetName.replace(/\.gz$/, "")}`;
 const wasmAssetBytes = await readFile(new URL(wasmAssetName, wasmAssetDirectory));
 const server = spawn(
   process.execPath,

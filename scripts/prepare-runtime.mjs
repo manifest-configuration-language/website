@@ -82,7 +82,6 @@ async function rebuildRuntime() {
       env: { ...process.env, ...wasmEnvironment },
     },
   );
-  const wasmPath = path.join(runtimeDirectory, "mcl.wasm");
   await cp(wasmExecPath, path.join(runtimeDirectory, "wasm_exec.js"));
   await rm(sourceRuntimeDirectory, { recursive: true, force: true });
   await mkdir(sourceRuntimeDirectory, { recursive: true });

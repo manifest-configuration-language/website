@@ -14,6 +14,7 @@ const kustomizeProjectDirectory = fileURLToPath(
 const crossBrowserPlaygroundScenarios = new Set([
   "formats source in the editor",
   "loads a project folder and resolves its relative MCL import",
+  "shows the project loading state while files are being read",
   "shows a source diagnostic for an invalid program",
   "rejects a project file larger than the per-file limit",
   "cancels a run during worker startup and allows the next run",
@@ -92,6 +93,26 @@ test("loads a project folder and resolves its relative MCL import", async ({ pag
   await page.getByRole("button", { name: "実行" }).click();
 
   await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
+});
+
+test("shows the project loading state while files are being read", async ({ page }) => {
+  await page.evaluate(() => {
+    const readText = Blob.prototype.text;
+    Blob.prototype.text = async function () {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return readText.call(this);
+    };
+  });
+
+  await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(projectDirectory);
+
+  await expect(page.getByRole("status")).toHaveText("読み込み中");
+  await expect(page.locator(".playground")).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByRole("button", { name: "実行" })).toBeDisabled();
+
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.locator(".playground")).toHaveAttribute("aria-busy", "false");
+  await expect(editor(page)).toContainText('import "modules/resource.mcl"');
 });
 
 test("rejects duplicate project paths and keeps the loaded project", async ({ page }) => {

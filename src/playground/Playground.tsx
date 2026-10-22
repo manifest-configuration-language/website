@@ -148,7 +148,7 @@ export default function Playground() {
   }
 
   return (
-    <section className="playground" aria-label="MCLプレイグラウンド">
+    <section className="playground" aria-label="MCLプレイグラウンド" aria-busy={loadingProject}>
       <div className="playground-toolbar">
         {busy ? (
           <button type="button" onClick={cancel}>
@@ -178,6 +178,11 @@ export default function Playground() {
         />
         <a href="/playground/capabilities">対応機能</a>
       </div>
+      {loadingProject && (
+        <p role="status" aria-live="polite">
+          読み込み中
+        </p>
+      )}
       <MclEditor
         key={editorAttempt}
         onReady={onEditorReady}

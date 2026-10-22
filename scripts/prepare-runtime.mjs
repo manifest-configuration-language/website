@@ -127,7 +127,7 @@ function capture(command, args) {
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk) => (output += chunk));
     child.once("error", reject);
-    child.once("exit", (code) =>
+    child.once("close", (code) =>
       code === 0 ? resolve(output) : reject(new Error(`${command} exited with status ${code}`)),
     );
   });

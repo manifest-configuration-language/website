@@ -1,10 +1,8 @@
 import { Buffer } from "buffer/index.js";
 import path from "path-browserify";
-import compressedWasmURL from "./runtime/mcl.wasm.gz?url";
+import wasmURL from "./runtime/mcl.wasm?url";
 import "./runtime/wasm_exec.js";
 import { validateProjectInput } from "./projectValidation.js";
-
-const wasmURL = compressedWasmURL.replace(/\.gz$/, ".wasm");
 
 globalThis.Buffer = Buffer;
 

@@ -4,7 +4,6 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
-import { gzipSync } from "node:zlib";
 
 const root = path.resolve(import.meta.dirname, "..");
 const config = JSON.parse(await readFile(path.join(root, "mcl-runtime.json"), "utf8"));
@@ -14,7 +13,6 @@ const runtimeDirectory = path.join(root, ".build/runtime");
 const sourceRuntimeDirectory = path.join(root, "src/playground/runtime");
 const stampPath = path.join(root, ".build/mcl-runtime-stamp.json");
 const buildFlags = ["-trimpath", "-ldflags=-s -w"];
-const gzipOptions = { level: 9, mtime: 0 };
 const buildTarget = "./cmd/mcl-wasm";
 const wasmEnvironment = {
   GOOS: "js",
@@ -41,7 +39,6 @@ const fingerprint = hash(
     wasmEnvironment,
     buildFlags,
     buildTarget,
-    gzipOptions,
     wasmExecHash,
     scriptHash: hash(scriptSource),
   }),
@@ -86,8 +83,6 @@ async function rebuildRuntime() {
     },
   );
   const wasmPath = path.join(runtimeDirectory, "mcl.wasm");
-  await writeFile(`${wasmPath}.gz`, gzipSync(await readFile(wasmPath), gzipOptions));
-  await rm(wasmPath);
   await cp(wasmExecPath, path.join(runtimeDirectory, "wasm_exec.js"));
   await rm(sourceRuntimeDirectory, { recursive: true, force: true });
   await mkdir(sourceRuntimeDirectory, { recursive: true });
@@ -99,7 +94,7 @@ async function rebuildRuntime() {
 
 async function outputHashes() {
   const [wasm, wasmExec] = await Promise.all([
-    readFile(path.join(sourceRuntimeDirectory, "mcl.wasm.gz")),
+    readFile(path.join(sourceRuntimeDirectory, "mcl.wasm")),
     readFile(path.join(sourceRuntimeDirectory, "wasm_exec.js")),
   ]);
 

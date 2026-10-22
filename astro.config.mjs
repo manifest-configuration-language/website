@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { gzipSync } from "node:zlib";
 import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
@@ -24,6 +25,27 @@ function workerNodeBuiltinPlugin() {
   };
 }
 
+function gzipWasmAssets() {
+  return {
+    name: "mcl-gzip-wasm-assets",
+    apply: "build",
+    generateBundle(_options, bundle) {
+      for (const asset of Object.values(bundle)) {
+        if (
+          asset.type !== "asset" ||
+          !/^_astro\/mcl\.wasm-[A-Za-z0-9_-]{8,}\.wasm$/.test(asset.fileName)
+        )
+          continue;
+        bundle[`${asset.fileName}.gz`] = {
+          type: "asset",
+          fileName: `${asset.fileName}.gz`,
+          source: gzipSync(asset.source, { level: 9, mtime: 0 }),
+        };
+      }
+    },
+  };
+}
+
 export default defineConfig({
   site: "https://mcl.walnuts.dev",
   outDir: ".build/dist",
@@ -33,6 +55,7 @@ export default defineConfig({
     "/reference/architecture/deferred-evaluation": "/internals/deferred-evaluation/",
   },
   vite: {
+    plugins: [gzipWasmAssets()],
     optimizeDeps: { rolldownOptions: { plugins: [workerNodeBuiltinPlugin()] } },
     worker: {
       plugins: () => [workerNodeBuiltinPlugin()],

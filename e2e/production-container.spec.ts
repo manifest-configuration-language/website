@@ -112,7 +112,19 @@ test("serves and runs the production site in a hardened Nginx container", async 
     expect(wasmHeaders["cache-control"]).toMatch(/max-age=31536000.*immutable/i);
     const wasmAsset = await request.get(browserWasmResponse.url());
     expect(wasmAsset.status()).toBe(200);
+    expectGzipResponse(await wasmAsset.allHeaders(), /^application\/wasm(?:;|$)/i);
     expect(wasmPayload(await wasmAsset.body()).subarray(0, 4)).toEqual(
+      Buffer.from([0x00, 0x61, 0x73, 0x6d]),
+    );
+    const identityWasmAsset = await request.get(browserWasmResponse.url(), {
+      headers: { "accept-encoding": "identity" },
+    });
+    expect(identityWasmAsset.status()).toBe(200);
+    const identityHeaders = await identityWasmAsset.allHeaders();
+    expect(identityHeaders["content-type"]).toMatch(/^application\/wasm(?:;|$)/i);
+    expect(identityHeaders["content-encoding"]).toBeUndefined();
+    expect(identityHeaders.vary).toMatch(/(?:^|,)\s*accept-encoding\s*(?:,|$)/i);
+    expect((await identityWasmAsset.body()).subarray(0, 4)).toEqual(
       Buffer.from([0x00, 0x61, 0x73, 0x6d]),
     );
 

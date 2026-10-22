@@ -87,7 +87,8 @@ test("home page highlights MCL code and switches themes", async ({ page }) => {
 test("reference pages do not load the Playground runtime", async ({ page }) => {
   const runtimeRequests: string[] = [];
   page.on("request", (request) => {
-    if (/mcl\.wasm-|playground\.worker-/.test(request.url())) runtimeRequests.push(request.url());
+    if (/mcl-[A-Za-z0-9_-]{8,}\.wasm|playground\.worker-/.test(request.url()))
+      runtimeRequests.push(request.url());
   });
 
   await page.goto("/reference/");

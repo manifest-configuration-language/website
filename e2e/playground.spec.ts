@@ -326,7 +326,7 @@ test("denies uncached external manifest fetches", async ({ page }) => {
 test("cancels a run during worker startup and allows the next run", async ({ page }) => {
   let releaseFirstRequest: (() => void) | undefined;
   let wasmRequests = 0;
-  await page.route("**/mcl.wasm-*.wasm", async (route) => {
+  await page.route("**/mcl-*.wasm", async (route) => {
     wasmRequests += 1;
     if (wasmRequests === 1) {
       await new Promise<void>((resolve) => {
@@ -369,7 +369,7 @@ test("cancels a run during worker startup and allows the next run", async ({ pag
 
 test("retries after the WebAssembly worker reports an initialization failure", async ({ page }) => {
   let wasmRequests = 0;
-  await page.route("**/mcl.wasm-*.wasm", async (route) => {
+  await page.route("**/mcl-*.wasm", async (route) => {
     wasmRequests += 1;
     if (wasmRequests === 1) {
       await route.fulfill({ status: 503, body: "Unavailable" });
@@ -410,7 +410,7 @@ test("retries after the WebAssembly worker reports an initialization failure", a
 test("editing source cancels an active run and discards its result", async ({ page }) => {
   let releaseFirstRequest: (() => void) | undefined;
   let wasmRequests = 0;
-  await page.route("**/mcl.wasm-*.wasm", async (route) => {
+  await page.route("**/mcl-*.wasm", async (route) => {
     wasmRequests += 1;
     if (wasmRequests === 1) {
       await new Promise<void>((resolve) => {
@@ -496,7 +496,7 @@ test("terminates a timed-out worker and allows another run", async ({ page }) =>
 test("times out a stalled worker startup and allows another run", async ({ page }) => {
   let releaseFirstRequest: (() => void) | undefined;
   let wasmRequests = 0;
-  await page.route("**/mcl.wasm-*.wasm", async (route) => {
+  await page.route("**/mcl-*.wasm", async (route) => {
     wasmRequests += 1;
     if (wasmRequests === 1) {
       await new Promise<void>((resolve) => {

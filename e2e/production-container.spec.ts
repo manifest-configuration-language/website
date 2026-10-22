@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 
 const execFileAsync = promisify(execFile);
 const containerImage = process.env.PRODUCTION_CONTAINER_IMAGE;
-const wasmAssetPath = /\/_astro\/mcl\.wasm-[A-Za-z0-9_-]{8,}\.wasm$/;
+const wasmAssetPath = /\/_astro\/mcl-[A-Za-z0-9_-]{8,}\.wasm$/;
 
 async function startContainer(image: string) {
   const { stdout } = await execFileAsync("docker", [

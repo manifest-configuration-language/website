@@ -10,7 +10,7 @@ async function ensureWasmServer() {
 
 export async function addWasmAssetHeaders(page: Page) {
   const wasmServer = await ensureWasmServer();
-  await page.route("**/mcl.wasm-*.wasm", (route) => {
+  await page.route("**/mcl-*.wasm", (route) => {
     const requestName = new URL(route.request().url()).pathname.split("/").at(-1);
     if (requestName !== wasmServer.requestName) return route.continue();
     return route.continue({ url: `${wasmServer.url}/${wasmServer.requestName}` });

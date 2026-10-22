@@ -31,16 +31,13 @@ function gzipWasmAssets() {
     apply: "build",
     generateBundle(_options, bundle) {
       for (const asset of Object.values(bundle)) {
-        if (
-          asset.type !== "asset" ||
-          !/(?:^|\/)mcl\.wasm-[A-Za-z0-9_-]{8,}\.wasm$/.test(asset.fileName)
-        )
+        if (asset.type !== "asset" || !/(?:^|\/)mcl-[A-Za-z0-9_-]{8,}\.wasm$/.test(asset.fileName))
           continue;
-        bundle[`${asset.fileName}.gz`] = {
+        this.emitFile({
           type: "asset",
           fileName: `${asset.fileName}.gz`,
           source: gzipSync(asset.source, { level: 9, mtime: 0 }),
-        };
+        });
       }
     },
   };

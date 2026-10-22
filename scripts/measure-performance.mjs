@@ -99,7 +99,7 @@ const webVitalsSource = await readFile(
   "utf8",
 );
 const wasmAssetName = (await readdir(wasmAssetDirectory)).find((name) =>
-  /^mcl\.wasm-[A-Za-z0-9_-]{8,}\.wasm\.gz$/.test(name),
+  /^mcl-[A-Za-z0-9_-]{8,}\.wasm\.gz$/.test(name),
 );
 if (!wasmAssetName) throw new Error("The fingerprinted MCL WebAssembly asset is missing.");
 const wasmAssetPath = `/_astro/${wasmAssetName.replace(/\.gz$/, "")}`;
@@ -363,7 +363,7 @@ async function measureCancellation(browser) {
   const wasmRequested = new Promise((resolve) => (notifyWasmRequest = resolve));
   let releaseWasmRequest;
   const wasmHeld = new Promise((resolve) => (releaseWasmRequest = resolve));
-  await context.route("**/mcl.wasm-*.wasm", async (route) => {
+  await context.route("**/mcl-*.wasm", async (route) => {
     notifyWasmRequest();
     await wasmHeld;
     await route.continue();

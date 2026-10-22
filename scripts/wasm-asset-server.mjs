@@ -6,7 +6,7 @@ const assetDirectory = path.resolve(import.meta.dirname, "../.build/dist/_astro"
 
 export async function startWasmAssetServer() {
   const assetName = (await readdir(assetDirectory)).find((name) =>
-    /^mcl\.wasm-[A-Za-z0-9_-]{8,}\.wasm\.gz$/.test(name),
+    /^mcl-[A-Za-z0-9_-]{8,}\.wasm\.gz$/.test(name),
   );
   if (!assetName) throw new Error("The fingerprinted MCL WebAssembly asset is missing.");
   const requestName = assetName.replace(/\.gz$/, "");

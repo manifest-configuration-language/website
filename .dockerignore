@@ -10,6 +10,3 @@ test-results
 coverage
 playwright.config.ts
 README.md
-benchmark.md
-public/mcl.wasm.gz
-public/wasm_exec.js

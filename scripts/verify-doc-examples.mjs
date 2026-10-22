@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { deepStrictEqual } from "node:assert";
 import { execFileSync } from "node:child_process";
 import { cp, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -9,18 +8,7 @@ import { unified } from "unified";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 
-const releaseTag = JSON.parse(
-  await readFile(new URL("../mcl-cli-version.json", import.meta.url), "utf8"),
-).tag;
-if (typeof releaseTag !== "string" || !/^v\d+\.\d+\.\d+$/.test(releaseTag))
-  throw new Error("mcl-cli-version.json must specify a stable MCL release tag.");
-const releaseVersion = releaseTag.slice(1);
-const releaseAssets = {
-  "darwin-arm64": ["darwin_arm64", "mcl-darwin-arm64"],
-  "darwin-x64": ["darwin_amd64", "mcl-darwin-amd64"],
-  "linux-arm64": ["linux_arm64", "mcl-linux-arm64"],
-  "linux-x64": ["linux_amd64", "mcl-linux-amd64"],
-};
+const cli = "mcl";
 const modes = new Set(["verify", "expected-error", "fragment", "release-gap"]);
 const docsRoot = fileURLToPath(new URL("../src/content/docs/", import.meta.url));
 const fixturesRoot = fileURLToPath(new URL("./doc-example-fixtures/", import.meta.url));
@@ -140,40 +128,6 @@ function verifyOutput(output, expectation, operationOutput) {
   }
 }
 
-async function getCli() {
-  const platform = `${process.platform}-${process.arch}`;
-  const asset = releaseAssets[platform];
-  if (!asset) throw new Error(`No MCL ${releaseTag} binary for ${platform}`);
-  const [archivePlatform, executableName] = asset;
-  const name = `mcl_${releaseVersion}_${archivePlatform}.tar.gz`;
-  const directory = await mkdtemp(join(tmpdir(), "mcl-doc-verification-"));
-  const archive = join(directory, name);
-  const releaseUrl = `https://github.com/manifest-configuration-language/mcl/releases/download/${releaseTag}`;
-  const [archiveResponse, checksumsResponse] = await Promise.all([
-    fetch(`${releaseUrl}/${name}`),
-    fetch(`${releaseUrl}/SHA256SUMS`),
-  ]);
-  if (!archiveResponse.ok)
-    throw new Error(`Downloading MCL ${releaseTag} failed: HTTP ${archiveResponse.status}`);
-  if (!checksumsResponse.ok)
-    throw new Error(
-      `Downloading MCL ${releaseTag} SHA256SUMS failed: HTTP ${checksumsResponse.status}`,
-    );
-  const checksums = await checksumsResponse.text();
-  const checksumEntry = checksums
-    .split(/\r?\n/)
-    .map((line) => /^([a-f\d]{64})\s+\*?(.+)$/.exec(line))
-    .find((match) => match?.[2] === name);
-  if (!checksumEntry) throw new Error(`MCL ${releaseTag} SHA256SUMS has no entry for ${name}`);
-  const bytes = Buffer.from(await archiveResponse.arrayBuffer());
-  const digest = createHash("sha256").update(bytes).digest("hex");
-  if (digest !== checksumEntry[1])
-    throw new Error(`MCL ${releaseTag} checksum mismatch for ${name}: ${digest}`);
-  await writeFile(archive, bytes);
-  execFileSync("tar", ["-xzf", archive, "-C", directory], { stdio: "pipe" });
-  return { binary: join(directory, executableName), directory };
-}
-
 async function main() {
   const classifications = new Map([...modes].map((mode) => [mode, 0]));
   const executableExamples = [];
@@ -222,116 +176,111 @@ async function main() {
   if (executableExamples.length === 0)
     throw new Error("No executable MCL documentation examples are marked for verification");
 
-  const cli = await getCli();
-  try {
-    for (const example of [...executableExamples, ...expectedErrors]) {
-      const executable = executableExamples.includes(example);
-      const directory = await mkdtemp(join(tmpdir(), "mcl-doc-example-"));
-      const sourcePath = join(directory, "main.mcl");
-      if (example.fixture) {
-        const fixturePath = join(fixturesRoot, example.fixture);
-        try {
-          for (const name of await readdir(fixturePath)) {
-            await cp(join(fixturePath, name), join(directory, name), {
-              recursive: true,
-              errorOnExist: false,
-              force: true,
-            });
-          }
-        } catch (error) {
-          await rm(directory, { recursive: true, force: true });
-          throw new Error(`Missing fixture ${example.fixture}: ${error.message}`);
-        }
-      }
-      await writeFile(sourcePath, example.source);
-      let checkFailure;
-      let renderFailure;
-      let output = "";
-      let operationOutput;
+  for (const example of [...executableExamples, ...expectedErrors]) {
+    const executable = executableExamples.includes(example);
+    const directory = await mkdtemp(join(tmpdir(), "mcl-doc-example-"));
+    const sourcePath = join(directory, "main.mcl");
+    if (example.fixture) {
+      const fixturePath = join(fixturesRoot, example.fixture);
       try {
-        execFileSync(cli.binary, ["check", sourcePath], { cwd: directory, stdio: "pipe" });
+        for (const name of await readdir(fixturePath)) {
+          await cp(join(fixturePath, name), join(directory, name), {
+            recursive: true,
+            errorOnExist: false,
+            force: true,
+          });
+        }
       } catch (error) {
-        checkFailure = error;
-      }
-      if (!checkFailure && executable) {
-        try {
-          output = execFileSync(cli.binary, ["render", "--format", "json", sourcePath], {
-            cwd: directory,
-            stdio: "pipe",
-          }).toString();
-          if (example.expectation.split(",").some((entry) => entry.startsWith("lifecycle."))) {
-            const operationDirectory = join(directory, "operation-output");
-            execFileSync(
-              cli.binary,
-              [
-                "render",
-                "--operation",
-                "create",
-                "--output-dir",
-                operationDirectory,
-                "--format",
-                "json",
-                sourcePath,
-              ],
-              { cwd: directory, stdio: "pipe" },
-            );
-            operationOutput = {};
-            for (const name of (await readdir(operationDirectory)).sort()) {
-              const contents = await readFile(join(operationDirectory, name), "utf8");
-              try {
-                operationOutput[name] = JSON.parse(contents);
-              } catch {
-                operationOutput[name] = contents;
-              }
-            }
-          }
-        } catch (error) {
-          renderFailure = error;
-        }
-      }
-      await rm(directory, { recursive: true, force: true });
-      const checkOutput = (error) =>
-        `${error.stderr?.toString() ?? ""}${error.stdout?.toString() ?? ""}`.trim();
-      if (executable && checkFailure) {
-        throw new Error(
-          `${relative(docsRoot, example.file)}:${example.line}: MCL ${releaseTag} rejected example during check\n${checkOutput(checkFailure)}`,
-        );
-      }
-      if (executable && renderFailure) {
-        throw new Error(
-          `${relative(docsRoot, example.file)}:${example.line}: MCL ${releaseTag} could not render example\n${checkOutput(renderFailure)}`,
-        );
-      }
-      if (executable) {
-        try {
-          const actualSnapshot = { render: JSON.parse(output) };
-          if (operationOutput) actualSnapshot.operation = operationOutput;
-          const snapshotPath = join(snapshotsRoot, `${example.snapshot}.json`);
-          if (updateSnapshots) {
-            await writeFile(snapshotPath, `${JSON.stringify(actualSnapshot, null, 2)}\n`);
-          } else {
-            const expectedSnapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
-            deepStrictEqual(actualSnapshot, expectedSnapshot);
-          }
-          verifyOutput(output, example.expectation, operationOutput);
-        } catch (error) {
-          throw new Error(
-            `${relative(docsRoot, example.file)}:${example.line} [${example.snapshot}]: ${error.message}`,
-          );
-        }
-      } else {
-        if (!checkFailure)
-          throw new Error(
-            `${relative(docsRoot, example.file)}:${example.line}: ${example.mode === "release-gap" ? `release gap is resolved in MCL ${releaseTag}; mark this example verify and add an expectation` : `expected MCL ${releaseTag} to reject this example`}`,
-          );
-        if (!checkOutput(checkFailure).includes(example.expectedError))
-          throw new Error(
-            `${relative(docsRoot, example.file)}:${example.line}: expected diagnostic containing ${JSON.stringify(example.expectedError)}\n${checkOutput(checkFailure)}`,
-          );
+        await rm(directory, { recursive: true, force: true });
+        throw new Error(`Missing fixture ${example.fixture}: ${error.message}`);
       }
     }
-  } finally {
-    await rm(cli.directory, { recursive: true, force: true });
+    await writeFile(sourcePath, example.source);
+    let checkFailure;
+    let renderFailure;
+    let output = "";
+    let operationOutput;
+    try {
+      execFileSync(cli, ["check", sourcePath], { cwd: directory, stdio: "pipe" });
+    } catch (error) {
+      checkFailure = error;
+    }
+    if (!checkFailure && executable) {
+      try {
+        output = execFileSync(cli, ["render", "--format", "json", sourcePath], {
+          cwd: directory,
+          stdio: "pipe",
+        }).toString();
+        if (example.expectation.split(",").some((entry) => entry.startsWith("lifecycle."))) {
+          const operationDirectory = join(directory, "operation-output");
+          execFileSync(
+            cli,
+            [
+              "render",
+              "--operation",
+              "create",
+              "--output-dir",
+              operationDirectory,
+              "--format",
+              "json",
+              sourcePath,
+            ],
+            { cwd: directory, stdio: "pipe" },
+          );
+          operationOutput = {};
+          for (const name of (await readdir(operationDirectory)).sort()) {
+            const contents = await readFile(join(operationDirectory, name), "utf8");
+            try {
+              operationOutput[name] = JSON.parse(contents);
+            } catch {
+              operationOutput[name] = contents;
+            }
+          }
+        }
+      } catch (error) {
+        renderFailure = error;
+      }
+    }
+    await rm(directory, { recursive: true, force: true });
+    const checkOutput = (error) =>
+      `${error.stderr?.toString() ?? ""}${error.stdout?.toString() ?? ""}`.trim();
+    if (executable && checkFailure) {
+      throw new Error(
+        `${relative(docsRoot, example.file)}:${example.line}: MCL CLI rejected example during check\n${checkOutput(checkFailure)}`,
+      );
+    }
+    if (executable && renderFailure) {
+      throw new Error(
+        `${relative(docsRoot, example.file)}:${example.line}: MCL CLI could not render example\n${checkOutput(renderFailure)}`,
+      );
+    }
+    if (executable) {
+      try {
+        const actualSnapshot = { render: JSON.parse(output) };
+        if (operationOutput) actualSnapshot.operation = operationOutput;
+        const snapshotPath = join(snapshotsRoot, `${example.snapshot}.json`);
+        if (updateSnapshots) {
+          await writeFile(snapshotPath, `${JSON.stringify(actualSnapshot, null, 2)}\n`);
+        } else {
+          const expectedSnapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+          deepStrictEqual(actualSnapshot, expectedSnapshot);
+        }
+        verifyOutput(output, example.expectation, operationOutput);
+      } catch (error) {
+        throw new Error(
+          `${relative(docsRoot, example.file)}:${example.line} [${example.snapshot}]: ${error.message}`,
+        );
+      }
+    } else {
+      if (!checkFailure)
+        throw new Error(
+          `${relative(docsRoot, example.file)}:${example.line}: ${example.mode === "release-gap" ? `release gap is resolved in the installed MCL CLI; mark this example verify and add an expectation` : `expected the installed MCL CLI to reject this example`}`,
+        );
+      if (!checkOutput(checkFailure).includes(example.expectedError))
+        throw new Error(
+          `${relative(docsRoot, example.file)}:${example.line}: expected diagnostic containing ${JSON.stringify(example.expectedError)}\n${checkOutput(checkFailure)}`,
+        );
+    }
   }
 
   if (!updateSnapshots) {
@@ -343,7 +292,7 @@ async function main() {
   }
 
   console.log(
-    `Verified ${executableExamples.length} valid, ${classifications.get("expected-error")} expected-error, and ${classifications.get("release-gap")} release-gap MCL examples with MCL ${releaseTag}.`,
+    `Verified ${executableExamples.length} valid, ${classifications.get("expected-error")} expected-error, and ${classifications.get("release-gap")} release-gap MCL examples with the installed MCL CLI.`,
   );
   console.log(
     `Classified MCL fences: ${[...classifications].map(([mode, count]) => `${mode}=${count}`).join(", ")}.`,

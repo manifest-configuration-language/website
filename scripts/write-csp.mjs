@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { parse } from "parse5";
@@ -181,9 +181,9 @@ function addFallbackHashes(policy, hashesByDirective, filePath) {
   };
 }
 
-const [siteDirectory, outputPath] = process.argv.slice(2);
-if (!siteDirectory || !outputPath) {
-  throw new Error("Usage: node write-csp.mjs <site-directory> <output-file>");
+const [siteDirectory] = process.argv.slice(2);
+if (!siteDirectory || process.argv.length !== 3) {
+  throw new Error("Usage: node write-csp.mjs <site-directory>");
 }
 
 const files = await htmlFiles(siteDirectory);
@@ -235,7 +235,3 @@ for (const filePath of files) {
     await writeFile(filePath, withHashes);
   }
 }
-
-const headerPath = new URL("../security-headers.conf", import.meta.url);
-await mkdir(path.dirname(outputPath), { recursive: true });
-await copyFile(headerPath, outputPath);

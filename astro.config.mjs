@@ -1,38 +1,31 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { gzipSync } from "node:zlib";
+import {
+  brotliCompressSync,
+  constants as zlibConstants,
+  gzipSync,
+} from "node:zlib";
 import { defineConfig } from "astro/config";
 import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
+import grammar from "@manifest-configuration-language/language/textmate" with { type: "json" };
 
-const grammar = JSON.parse(readFileSync("src/playground/mcl.tmLanguage.json", "utf8"));
-const workerNodeModules = {
-  "node:buffer": "buffer/index.js",
-  "node:events": "events/events.js",
-  "node:path": "path-browserify",
-  "node:stream": "stream-browserify",
-  "node:url": "url/url.js",
-};
-
-function workerNodeBuiltinPlugin() {
+function compressFingerprintedAssets() {
   return {
-    name: "mcl-worker-node-builtins",
-    enforce: "pre",
-    resolveId(source) {
-      if (Object.hasOwn(workerNodeModules, source))
-        return fileURLToPath(import.meta.resolve(workerNodeModules[source]));
-    },
-  };
-}
-
-function gzipWasmAssets() {
-  return {
-    name: "mcl-gzip-wasm-assets",
+    name: "mcl-precompressed-assets",
     apply: "build",
     generateBundle(_options, bundle) {
       for (const asset of Object.values(bundle)) {
-        if (asset.type !== "asset" || !/(?:^|\/)mcl-[A-Za-z0-9_-]{8,}\.wasm$/.test(asset.fileName))
+        if (
+          asset.type !== "asset" ||
+          !/(?:^|\/)[^/]+[.-][A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/.test(asset.fileName)
+        )
           continue;
+        this.emitFile({
+          type: "asset",
+          fileName: `${asset.fileName}.br`,
+          source: brotliCompressSync(asset.source, {
+            params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 9 },
+          }),
+        });
         this.emitFile({
           type: "asset",
           fileName: `${asset.fileName}.gz`,
@@ -77,11 +70,7 @@ export default defineConfig({
     "/reference/architecture/deferred-evaluation": "/internals/deferred-evaluation/",
   },
   vite: {
-    plugins: [gzipWasmAssets()],
-    optimizeDeps: { rolldownOptions: { plugins: [workerNodeBuiltinPlugin()] } },
-    worker: {
-      plugins: () => [workerNodeBuiltinPlugin()],
-    },
+    plugins: [compressFingerprintedAssets()],
   },
   integrations: [
     react(),

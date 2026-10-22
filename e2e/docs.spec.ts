@@ -1,17 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
-import { addWasmAssetHeaders, closeWasmAssetServer } from "./previewRoutes";
-
-const securityHeaders = readFileSync(
-  new URL("../.build/security-headers.conf", import.meta.url),
-  "utf8",
-);
-const responseContentSecurityPolicy = securityHeaders.match(
-  /^add_header Content-Security-Policy "(.+)" always;$/m,
-)?.[1];
-
-if (!responseContentSecurityPolicy)
-  throw new Error("The response Content Security Policy is unavailable.");
 
 function parseCsp(policy: string): Map<string, string[]> {
   const entries = policy
@@ -32,14 +19,6 @@ async function astroContentSecurityPolicy(page: import("@playwright/test").Page)
   expect(content).toBeTruthy();
   return parseCsp(content ?? "");
 }
-
-test.afterAll(async () => closeWasmAssetServer());
-
-test("response CSP keeps frame embedding disabled", () => {
-  const responseDirectives = parseCsp(responseContentSecurityPolicy);
-  expect([...responseDirectives.keys()]).toEqual(["frame-ancestors"]);
-  expect(responseDirectives.get("frame-ancestors")).toEqual(["'none'"]);
-});
 
 test("Astro CSP keeps its restrictive directives and source allowlist", async ({ page }) => {
   await page.goto("/");
@@ -155,21 +134,8 @@ test("documentation and Playground work under the generated CSP", async ({ page 
       state.__cspViolations.push(`${event.violatedDirective}: ${event.blockedURI}`);
     });
   });
-  await page.route("**/*", async (route) => {
-    if (!route.request().isNavigationRequest()) return route.continue();
-    const response = await route.fetch();
-    return route.fulfill({
-      response,
-      headers: {
-        ...response.headers(),
-        "content-security-policy": responseContentSecurityPolicy,
-      },
-    });
-  });
-  await addWasmAssetHeaders(page);
-
   const response = await page.goto("/");
-  expect(response?.headers()["content-security-policy"]).toBe(responseContentSecurityPolicy);
+  expect(response?.headers()["content-security-policy"]).toBeUndefined();
   await expect(page.locator('pre[data-language="mcl"]')).toBeVisible();
   await page.locator("starlight-theme-select select").first().selectOption("light");
   await page.getByRole("button", { name: "検索" }).click();

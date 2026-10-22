@@ -15,32 +15,4 @@
       pinDigests: true,
     },
   ],
-  customManagers: [
-    {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/^mcl-runtime\\.json$/',
-      ],
-      matchStrings: [
-        '"ref"\\s*:\\s*"(?<currentDigest>[a-f0-9]{40})"',
-      ],
-      currentValueTemplate: 'main',
-      depNameTemplate: 'manifest-configuration-language/mcl',
-      packageNameTemplate: 'https://github.com/manifest-configuration-language/mcl',
-      datasourceTemplate: 'git-refs',
-    },
-    {
-      customType: 'regex',
-      managerFilePatterns: [
-        '/^vscode-grammar\\.json$/',
-      ],
-      matchStrings: [
-        '"ref"\\s*:\\s*"(?<currentDigest>[a-f0-9]{40})"',
-      ],
-      currentValueTemplate: 'main',
-      depNameTemplate: 'manifest-configuration-language/vscode',
-      packageNameTemplate: 'https://github.com/manifest-configuration-language/vscode',
-      datasourceTemplate: 'git-refs',
-    },
-  ],
 }

@@ -15,6 +15,7 @@ const assetBudgetNames = [
   "playgroundInitialAssetsBytes",
   "referenceSearchAssetsBytes",
   "playgroundExecutionAssetsBytes",
+  "playgroundWasmBrotliBytes",
 ];
 const runtimeBudgetNames = [
   "referenceNavigationLoadMs",
@@ -99,11 +100,11 @@ const webVitalsSource = await readFile(
   "utf8",
 );
 const wasmAssetName = (await readdir(wasmAssetDirectory)).find((name) =>
-  /^mcl-[A-Za-z0-9_-]{8,}\.wasm\.gz$/.test(name),
+  /^mcl-[A-Za-z0-9_-]{8,}\.wasm$/.test(name),
 );
 if (!wasmAssetName) throw new Error("The fingerprinted MCL WebAssembly asset is missing.");
-const wasmAssetPath = `/_astro/${wasmAssetName.replace(/\.gz$/, "")}`;
-const wasmAssetBytes = await readFile(new URL(wasmAssetName, wasmAssetDirectory));
+const wasmAssetPath = `/_astro/${wasmAssetName}`;
+const wasmAssetBytes = await readFile(new URL(`${wasmAssetName}.br`, wasmAssetDirectory));
 const server = spawn(
   process.execPath,
   [astroCli, "preview", "--host", "127.0.0.1", "--port", String(previewPort)],
@@ -112,16 +113,30 @@ const server = spawn(
     env: { ...process.env, ASTRO_PREVIEW_BACKGROUND: "1" },
   },
 );
-const proxyServer = createServer((request, response) => {
-  if (new URL(request.url ?? "/", origin).pathname === wasmAssetPath) {
+const proxyServer = createServer(async (request, response) => {
+  const pathname = new URL(request.url ?? "/", origin).pathname;
+  if (/^\/_astro\/.+\.(?:css|js|wasm)$/.test(pathname)) {
+    const accepted = request.headers["accept-encoding"] ?? "";
+    const encoding = /(?:^|,)\s*br(?:\s*;\s*q=(?!0(?:\.0*)?(?:\s|,|$))[^,]*)?(?:,|$)/i.test(accepted)
+      ? "br"
+      : /(?:^|,)\s*gzip(?:\s*;\s*q=(?!0(?:\.0*)?(?:\s|,|$))[^,]*)?(?:,|$)/i.test(accepted)
+        ? "gzip"
+        : undefined;
+    const assetName = pathname.slice("/_astro/".length);
+    const body = await readFile(new URL(encoding ? `${assetName}.${encoding}` : assetName, wasmAssetDirectory));
+    const contentType = assetName.endsWith(".wasm")
+      ? "application/wasm"
+      : assetName.endsWith(".css")
+        ? "text/css"
+        : "text/javascript";
     response.writeHead(200, {
       "cache-control": "public, max-age=31536000, immutable",
-      "content-encoding": "gzip",
-      "content-length": String(wasmAssetBytes.byteLength),
-      "content-type": "application/wasm",
+      ...(encoding ? { "content-encoding": encoding } : {}),
+      "content-length": String(body.byteLength),
+      "content-type": contentType,
       vary: "Accept-Encoding",
     });
-    response.end(wasmAssetBytes);
+    response.end(body);
     return;
   }
 
@@ -175,34 +190,43 @@ function totals(assets) {
 
 async function instrumentWasmWorker(page) {
   await page.addInitScript(() => {
+    const metrics = {
+      wasmInstantiateMs: undefined,
+      memoryBytesAfterInstantiation: undefined,
+      memoryBytes: undefined,
+    };
+    Reflect.set(window, "__mclRuntimeMetrics", metrics);
     const NativeWorker = window.Worker;
     window.Worker = new Proxy(NativeWorker, {
       construct(target, argumentsList) {
         const [scriptURL, ...workerOptions] = argumentsList;
         const workerURL = new URL(scriptURL, window.location.href);
-        workerURL.searchParams.set("__mcl_test_performance", "1");
-        return Reflect.construct(target, [workerURL, ...workerOptions]);
+        const worker = Reflect.construct(target, [workerURL, ...workerOptions]);
+        worker.addEventListener("message", (event) => {
+          if (event.data?.type === "ready") {
+            metrics.wasmInstantiateMs = event.data.wasmInstantiateMs;
+            metrics.memoryBytesAfterInstantiation = event.data.wasmMemoryBytes;
+          }
+          if (event.data?.type === "response" && Number.isFinite(event.data.wasmMemoryBytes))
+            metrics.memoryBytes = event.data.wasmMemoryBytes;
+        });
+        return worker;
       },
     });
   });
 }
 
 async function wasmWorkerMetrics(page) {
-  const worker = page
-    .workers()
-    .find((candidate) => new URL(candidate.url()).searchParams.has("__mcl_test_performance"));
-  if (!worker) return null;
-  return worker.evaluate(() => ({
-    wasmStreamingInstantiateMs: Number.isFinite(
-      globalThis.__mclTestPerformanceMetrics?.wasmStreamingInstantiateMs,
-    )
-      ? globalThis.__mclTestPerformanceMetrics.wasmStreamingInstantiateMs
-      : null,
-    wasmLinearMemoryBytesAfterInstantiation:
-      globalThis.__mclTestPerformanceMetrics?.wasmLinearMemoryBytesAfterInstantiation ?? null,
-    wasmLinearMemoryCurrentBytes:
-      globalThis.__mclTestPerformanceMetrics?.wasmMemory?.buffer.byteLength ?? null,
-  }));
+  return page.evaluate(() => {
+    const metrics = Reflect.get(window, "__mclRuntimeMetrics");
+    return {
+      wasmStreamingInstantiateMs: Number.isFinite(metrics?.wasmInstantiateMs)
+        ? Math.round(metrics.wasmInstantiateMs)
+        : null,
+      wasmLinearMemoryBytesAfterInstantiation: metrics?.memoryBytesAfterInstantiation ?? null,
+      wasmLinearMemoryCurrentBytes: metrics?.memoryBytes ?? null,
+    };
+  });
 }
 
 async function measurePage(
@@ -230,6 +254,7 @@ async function measurePage(
           return;
         }
         const body = await response.body();
+        const contentLength = Number(response.headers()["content-length"]);
         const type = request.resourceType();
         const category =
           type === "document"
@@ -239,7 +264,10 @@ async function measurePage(
               : type === "stylesheet"
                 ? "css"
                 : "other";
-        assets.set(url.pathname, { bytes: body.byteLength, category });
+        assets.set(url.pathname, {
+          bytes: Number.isSafeInteger(contentLength) && contentLength >= 0 ? contentLength : body.byteLength,
+          category,
+        });
       } catch {
         // A response may be canceled during navigation.
       }
@@ -478,6 +506,7 @@ try {
     playgroundInitialAssetsBytes: measurements[1].initialAssets.total,
     referenceSearchAssetsBytes: measurements[0].pagefindOnDemandAssets.total,
     playgroundExecutionAssetsBytes: measurements[1].afterExecutionAssets.total,
+    playgroundWasmBrotliBytes: wasmAssetBytes.byteLength,
   };
   const runtimeBudgetMeasurements = {
     referenceNavigationLoadMs: measurements[0].navigationLoadMs,

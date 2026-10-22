@@ -11,6 +11,7 @@
     "playgroundInitialAssetsBytes": 724311,
     "referenceSearchAssetsBytes": 207558,
     "playgroundExecutionAssetsBytes": 19958107,
+    "playgroundWasmBrotliBytes": 12231514,
     "referenceNavigationLoadMs": 125,
     "referenceSearchMs": 898,
     "playgroundNavigationLoadMs": 126,

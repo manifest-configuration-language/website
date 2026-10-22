@@ -4,14 +4,16 @@
 
 ## ローカル開発
 
-Node.js、pnpm、Goは`mise.toml`に記載したバージョンを使用します。
+Node.jsとpnpmは`mise.toml`に記載したバージョンを使用します。
 
 ```sh
 mise run install
 mise run dev
 ```
 
-初回の開発起動とビルドでは、`mcl-runtime.json`で固定したMCL本体のコミットからWASMランタイムとドキュメント検証用CLIを生成し、`vscode-grammar.json`で固定したVS Code拡張のコミットから構文Grammarを取得します。2つの参照コミットはRenovateが更新します。WASMと`wasm_exec.js`は`src/playground/runtime/`へ出力され、Workerへ同梱するJavaScriptとフィンガープリント付きWASMアセットにビルドされます。CLIは`.build/bin/`へ出力されます。生成ファイルはGitで管理しません。
+`@manifest-configuration-language/browser`の固定バージョンがPlaygroundのWASMと対応する`wasm_exec.js`を供給します。`@manifest-configuration-language/language`はTextMate GrammarとCodeMirror LanguageSupportを提供します。依存バージョンは`package.json`と`pnpm-lock.yaml`で管理し、Renovateのnpm更新で追従します。ビルドではフィンガープリント付きのCSS、JavaScript、WASMをBrotli Quality 9とgzip Level 9で事前圧縮し、元ファイルも残します。
+
+ドキュメント例の検証では、`@manifest-configuration-language/browser`と同じバージョンのMCL CLIリリースアーカイブをSHA-256で検証して`.build/bin/`へ取得します。WebsiteのビルドではMCLのGoソースを取得せず、Goコンパイラも使いません。
 
 ## Docker
 
@@ -20,7 +22,7 @@ docker build -t mcl-website:latest .
 docker run --rm -p 8080:8080 mcl-website:latest
 ```
 
-`http://localhost:8080/`でサイトを開きます。Nginxは静的ファイルを配信し、Playgroundは初回操作時にWorkerと圧縮WASMを読み込みます。
+`http://localhost:8080/`でサイトを開きます。Caddyは静的ファイルを非rootで配信し、Playgroundは初回操作時にBrowser SDKのWorkerとWASMを読み込みます。WASMは`Accept-Encoding`に応じてBrotli、gzip、非圧縮の順に配信します。
 
 ## コンテナイメージ
 

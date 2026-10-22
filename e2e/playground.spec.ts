@@ -4,7 +4,6 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { addWasmAssetHeaders, closeWasmAssetServer } from "./previewRoutes";
 
 const projectDirectory = fileURLToPath(new URL("./fixtures/project", import.meta.url));
 const helmProjectDirectory = fileURLToPath(new URL("./fixtures/helm-project", import.meta.url));
@@ -54,11 +53,8 @@ test.beforeEach(async ({ page, browserName }, testInfo) => {
     browserName !== "chromium" && !crossBrowserPlaygroundScenarios.has(testInfo.title),
     "Detailed Playground scenarios run in Chromium; Docs CSP and Browser SDK smoke tests cover all three browsers.",
   );
-  await addWasmAssetHeaders(page);
   await page.goto("/playground/");
 });
-
-test.afterAll(async () => closeWasmAssetServer());
 
 test.afterEach(async ({ page }, testInfo) => {
   if (testInfo.status === testInfo.expectedStatus) return;

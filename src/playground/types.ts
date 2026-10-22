@@ -1,24 +1,20 @@
 export type PlaygroundDiagnostic = {
   code: string;
   message: string;
-  severity: "error" | "warning";
+  severity: string;
   line: number;
   column: number;
-};
-
-export type PlaygroundRequest = {
-  requestId: number;
-  revision: number;
-  operation: "parse" | "lint" | "evaluate" | "render" | "format";
-  source: string;
-  files?: Record<string, ProjectFile>;
-};
-
-export type PlaygroundFileMetadata = { encoding: "utf8"; content: string } | { encoding: "binary" };
-
-export type PlaygroundWorkerRequest = Omit<PlaygroundRequest, "files"> & {
-  files?: Record<string, PlaygroundFileMetadata>;
-  binaryFiles?: Record<string, Uint8Array>;
+  path?: string;
+  endLine?: number;
+  endColumn?: number;
+  related?: Array<{
+    path?: string;
+    line: number;
+    column: number;
+    endLine?: number;
+    endColumn?: number;
+    message: string;
+  }>;
 };
 
 export type ProjectFile =
@@ -40,7 +36,7 @@ export type PlaygroundReply = {
   result?: {
     yaml?: string;
     source?: string;
-    artifacts?: unknown[];
+    artifacts?: number;
     renderedBytes?: number;
     diagnostics?: PlaygroundDiagnostic[];
   };

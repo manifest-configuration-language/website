@@ -1,125 +1,53 @@
-import type {
-  PlaygroundClient,
-  PlaygroundReply,
-  PlaygroundRequest,
-  PlaygroundWorkerRequest,
-  ProjectFile,
-} from "./types";
+import {
+  createMclRuntime,
+  MclRuntimeError,
+  type ProjectFiles,
+} from "@manifest-configuration-language/browser";
+import type { PlaygroundClient, PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
 import { readProject } from "./projectFiles.js";
-
-type WorkerMessage =
-  | { type: "ready" }
-  | { type: "result"; response: PlaygroundReply }
-  | { type: "failure"; message: string };
-
-type PendingRequest = {
-  request: PlaygroundRequest;
-  resolve: (reply: PlaygroundReply) => void;
-  reject: (error: Error) => void;
-  timeout: number;
-};
 
 const operationTimeoutMs = 10_000;
 
+function toProjectFiles(source: string, files: Record<string, ProjectFile> = {}): ProjectFiles {
+  const project = Object.create(null) as Record<string, string | Uint8Array>;
+  project["main.mcl"] = source;
+  for (const [filePath, file] of Object.entries(files)) {
+    project[filePath] = file.encoding === "utf8" ? file.content : file.bytes;
+  }
+  return project;
+}
+
+function toError(error: unknown): PlaygroundDiagnostic {
+  if (error instanceof MclRuntimeError) {
+    return {
+      code: error.code,
+      message: error.message,
+      severity: "error",
+      line: error.line ?? 1,
+      column: error.column ?? 1,
+      ...(error.path === undefined ? {} : { path: error.path }),
+      ...(error.endLine === undefined ? {} : { endLine: error.endLine }),
+      ...(error.endColumn === undefined ? {} : { endColumn: error.endColumn }),
+      ...(error.related === undefined ? {} : { related: error.related }),
+    };
+  }
+  return {
+    code: "MCL-WASM-RUNTIME",
+    message: error instanceof Error ? error.message : String(error),
+    severity: "error",
+    line: 1,
+    column: 1,
+  };
+}
+
 export function createPlaygroundClient(): PlaygroundClient {
-  let worker: Worker | undefined;
-  let ready: Promise<void> | undefined;
-  let rejectReady: ((error: Error) => void) | undefined;
-  let requestId = 0;
-  let pending: PendingRequest | undefined;
+  const runtime = createMclRuntime({ operationTimeoutMs });
+  let activeController: AbortController | undefined;
 
-  function terminate(reason: Error): void {
-    worker?.terminate();
-    worker = undefined;
-    ready = undefined;
-    rejectReady?.(reason);
-    rejectReady = undefined;
-    if (pending) {
-      window.clearTimeout(pending.timeout);
-      pending.reject(reason);
-      pending = undefined;
-    }
-  }
-
-  function ensureWorker(): Promise<void> {
-    if (ready) return ready;
-    ready = new Promise<void>((resolve, reject) => {
-      rejectReady = reject;
-      worker = new Worker(new URL("./playground.worker.js", import.meta.url), { type: "module" });
-      worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
-        const message = event.data;
-        if (message.type === "ready") {
-          rejectReady = undefined;
-          resolve();
-        } else if (message.type === "failure") {
-          terminate(new Error(message.message));
-        } else if (
-          pending?.request.requestId === message.response.requestId &&
-          pending.request.revision === message.response.revision
-        ) {
-          window.clearTimeout(pending.timeout);
-          pending.resolve(message.response);
-          pending = undefined;
-        }
-      };
-      worker.onerror = (event) => {
-        event.preventDefault();
-        terminate(new Error(`The WebAssembly worker failed to start: ${event.message}`));
-      };
-    });
-    return ready;
-  }
-
-  async function invoke(
-    operation: PlaygroundRequest["operation"],
-    source: string,
-    revision: number,
-    files?: Record<string, ProjectFile>,
-  ): Promise<PlaygroundReply> {
-    return new Promise((resolve, reject) => {
-      const request: PlaygroundRequest = {
-        requestId: ++requestId,
-        revision,
-        operation,
-        source,
-        files,
-      };
-      const timeout = window.setTimeout(() => {
-        terminate(new Error("The MCL operation timed out. Run it again."));
-      }, operationTimeoutMs);
-      pending = { request, resolve, reject, timeout };
-      void ensureWorker()
-        .then(() => {
-          if (pending?.request.requestId !== request.requestId || !worker) return;
-          const { files: projectFiles, ...requestMetadata } = request;
-          const metadata = Object.create(null) as NonNullable<PlaygroundWorkerRequest["files"]>;
-          const binaryFiles = Object.create(null) as Record<string, Uint8Array>;
-          const transfer: ArrayBuffer[] = [];
-          for (const [filePath, file] of Object.entries(projectFiles ?? {})) {
-            if (file.encoding === "utf8") {
-              metadata![filePath] = file;
-              continue;
-            }
-            const bytes = new Uint8Array(file.bytes.byteLength);
-            bytes.set(file.bytes);
-            binaryFiles[filePath] = bytes;
-            transfer.push(bytes.buffer as ArrayBuffer);
-            metadata![filePath] = { encoding: "binary" };
-          }
-          const workerRequest: PlaygroundWorkerRequest = {
-            ...requestMetadata,
-            ...(projectFiles ? { files: metadata } : {}),
-            ...(Object.keys(binaryFiles).length > 0 ? { binaryFiles } : {}),
-          };
-          worker.postMessage(workerRequest, transfer);
-        })
-        .catch((error: unknown) => {
-          if (pending?.request.requestId !== request.requestId) return;
-          window.clearTimeout(pending.timeout);
-          pending = undefined;
-          reject(error instanceof Error ? error : new Error(String(error)));
-        });
-    });
+  function beginRequest(): AbortController {
+    activeController?.abort();
+    activeController = new AbortController();
+    return activeController;
   }
 
   return {
@@ -127,24 +55,51 @@ export function createPlaygroundClient(): PlaygroundClient {
       return readProject(files);
     },
     async run(source, revision, files) {
-      if (pending) this.cancel();
-      const lint = await invoke("lint", source, revision);
-      if (!lint.ok) return lint;
-      const rendered = await invoke("render", source, revision, files);
-      if (rendered.ok)
-        rendered.diagnostics = (lint as PlaygroundReply & { result?: unknown })
-          .result as PlaygroundReply["diagnostics"];
-      return rendered;
+      const controller = beginRequest();
+      try {
+        const project = runtime.openProject(toProjectFiles(source, files));
+        const lint = await project.lint({ signal: controller.signal, timeoutMs: operationTimeoutMs });
+        const rendered = await project.render({ signal: controller.signal, timeoutMs: operationTimeoutMs });
+        return {
+          requestId: revision,
+          revision,
+          ok: true,
+          diagnostics: lint.diagnostics,
+          result: { yaml: rendered.yaml, artifacts: rendered.artifacts },
+        };
+      } catch (error) {
+        return { requestId: revision, revision, ok: false, error: toError(error) };
+      } finally {
+        if (activeController === controller) activeController = undefined;
+      }
     },
-    format(source, revision) {
-      if (pending) this.cancel();
-      return invoke("format", source, revision);
+    async format(source, revision) {
+      const controller = beginRequest();
+      try {
+        const formatted = await runtime.format(source, {
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
+        return {
+          requestId: revision,
+          revision,
+          ok: true,
+          result: { source: formatted.source },
+        };
+      } catch (error) {
+        return { requestId: revision, revision, ok: false, error: toError(error) };
+      } finally {
+        if (activeController === controller) activeController = undefined;
+      }
     },
     cancel() {
-      if (worker) terminate(new Error("Evaluation cancelled."));
+      activeController?.abort();
+      activeController = undefined;
     },
     dispose() {
-      if (worker) terminate(new Error("The playground was closed."));
+      activeController?.abort();
+      activeController = undefined;
+      runtime.dispose();
     },
   };
 }

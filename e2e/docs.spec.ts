@@ -13,7 +13,55 @@ const contentSecurityPolicy = securityHeaders.match(
 if (!contentSecurityPolicy)
   throw new Error("The generated Content Security Policy is unavailable.");
 
+const cspDirectiveEntries: [string, string[]][] = contentSecurityPolicy
+  .split(";")
+  .map((directive) => {
+    const [name, ...sources] = directive.trim().split(/\s+/);
+    return [name, sources];
+  });
+const cspDirectives = new Map<string, string[]>(cspDirectiveEntries);
+
 test.afterAll(async () => closeWasmAssetServer());
+
+test("generated CSP keeps its restrictive directives and source allowlist", () => {
+  expect(cspDirectives.size).toBe(cspDirectiveEntries.length);
+  expect([...cspDirectives.keys()].sort()).toEqual(
+    [
+      "base-uri",
+      "connect-src",
+      "default-src",
+      "font-src",
+      "frame-ancestors",
+      "img-src",
+      "object-src",
+      "script-src",
+      "style-src",
+      "worker-src",
+    ].sort(),
+  );
+  expect(cspDirectives.get("default-src")).toEqual(["'self'"]);
+  expect(cspDirectives.get("object-src")).toEqual(["'none'"]);
+  expect(cspDirectives.get("base-uri")).toEqual(["'self'"]);
+  expect(cspDirectives.get("frame-ancestors")).toEqual(["'none'"]);
+  expect(cspDirectives.get("worker-src")).toEqual(["'self'"]);
+  expect(cspDirectives.get("connect-src")).toEqual(["'self'"]);
+  expect(cspDirectives.get("img-src")).toEqual(["'self'", "data:"]);
+  expect(cspDirectives.get("font-src")).toEqual(["'self'", "data:"]);
+  expect(cspDirectives.get("style-src")).toEqual(["'self'", "'unsafe-inline'"]);
+
+  const scriptSources = cspDirectives.get("script-src") ?? [];
+  expect(scriptSources).toContain("'self'");
+  expect(scriptSources).toContain("'wasm-unsafe-eval'");
+  expect(scriptSources).toContainEqual(expect.stringMatching(/^'sha256-[A-Za-z0-9+/]+={0,2}'$/));
+  expect(
+    scriptSources.filter(
+      (source) =>
+        source !== "'self'" &&
+        source !== "'wasm-unsafe-eval'" &&
+        !/^'sha256-[A-Za-z0-9+/]+={0,2}'$/.test(source),
+    ),
+  ).toEqual([]);
+});
 
 test("home page highlights MCL code and switches themes", async ({ page }) => {
   await page.goto("/");

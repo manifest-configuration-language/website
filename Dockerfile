@@ -10,7 +10,9 @@ COPY scripts/prepare-runtime.mjs scripts/prepare-grammar.mjs scripts/
 RUN node scripts/prepare-runtime.mjs && node scripts/prepare-grammar.mjs
 
 COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN corepack enable && pnpm install --frozen-lockfile
+RUN PNPM_PACKAGE=$(node -p "require('./package.json').packageManager.split('+')[0]") \
+    && npm install --global "$PNPM_PACKAGE" --fetch-retries=5 --fetch-timeout=300000 \
+    && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build
 

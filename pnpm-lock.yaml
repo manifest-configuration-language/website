@@ -254,6 +254,9 @@ importers:
       unified:
         specifier: 11.0.5
         version: 11.0.5
+      web-vitals:
+        specifier: 6.2.3
+        version: 6.2.3
 
 packages:
 
@@ -3176,6 +3179,9 @@ packages:
 
   web-namespaces@2.0.1:
     resolution: {integrity: sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ==}
+
+  web-vitals@6.2.3:
+    resolution: {integrity: sha512-Dmy+vdO1UPMqXiAtZSNayhl4f794Bxfd94W4HIj2HlYtczEQfEOon969memlcpcHrTuOKLa5baFjX7WbgmOq+A==}
 
   wrap-ansi@7.0.0:
     resolution: {integrity: sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==}
@@ -6578,6 +6584,8 @@ snapshots:
 
   web-namespaces@2.0.1:
     optional: true
+
+  web-vitals@6.2.3: {}
 
   wrap-ansi@7.0.0:
     dependencies:

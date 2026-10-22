@@ -15,7 +15,7 @@
   "largeProjectWasmMemoryBytes": 268435456,
   "referenceLargestContentfulPaintMs": 2500,
   "referenceCumulativeLayoutShift": 0.1,
-  "referenceInteractionLatencyProxyMs": 200,
+  "referenceInpMs": 200,
   "baselineTolerance": {
     "referenceInitialAssetsBytes": { "relative": 0.02, "absolute": 1024 },
     "playgroundInitialAssetsBytes": { "relative": 0.02, "absolute": 1024 },
@@ -33,6 +33,6 @@
     "largeProjectWasmMemoryBytes": { "relative": 0.15, "absolute": 8388608 },
     "referenceLargestContentfulPaintMs": { "relative": 0.25, "absolute": 150 },
     "referenceCumulativeLayoutShift": { "relative": 0, "absolute": 0.02 },
-    "referenceInteractionLatencyProxyMs": { "relative": 0.5, "absolute": 30 }
+    "referenceInpMs": { "relative": 0.5, "absolute": 30 }
   }
 }

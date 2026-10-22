@@ -22,7 +22,6 @@
     "largeProjectEvaluationMs": 1678,
     "largeProjectWasmMemoryBytes": 140050432,
     "referenceLargestContentfulPaintMs": 116,
-    "referenceCumulativeLayoutShift": 0,
-    "referenceInteractionLatencyProxyMs": 72
+    "referenceCumulativeLayoutShift": 0
   }
 }

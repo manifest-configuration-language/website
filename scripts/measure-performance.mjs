@@ -29,7 +29,7 @@ const runtimeBudgetNames = [
   "largeProjectWasmMemoryBytes",
   "referenceLargestContentfulPaintMs",
   "referenceCumulativeLayoutShift",
-  "referenceInteractionLatencyProxyMs",
+  "referenceInpMs",
 ];
 const allBudgetNames = [...assetBudgetNames, ...runtimeBudgetNames];
 const captureArgument = process.argv.find((argument) => argument.startsWith("--record-baseline"));
@@ -69,7 +69,11 @@ if (!capturePath) {
     performanceBaseline.schemaVersion !== 1 ||
     !performanceBaseline.environment ||
     !performanceBaseline.measurements ||
-    allBudgetNames.some((name) => !Number.isFinite(performanceBaseline.measurements[name]))
+    allBudgetNames.some(
+      (name) =>
+        performanceBaseline.measurements[name] !== undefined &&
+        !Number.isFinite(performanceBaseline.measurements[name]),
+    )
   )
     throw new Error("The committed performance baseline is invalid.");
 }
@@ -90,6 +94,10 @@ const port = await reservePort(Number(process.env.PERFORMANCE_PORT ?? 0));
 const previewPort = await reservePort();
 const origin = `http://127.0.0.1:${port}`;
 const wasmAssetDirectory = new URL("../.build/dist/_astro/", import.meta.url);
+const webVitalsSource = await readFile(
+  new URL("../node_modules/web-vitals/dist/web-vitals.iife.js", import.meta.url),
+  "utf8",
+);
 const wasmAssetName = (await readdir(wasmAssetDirectory)).find((name) =>
   /^mcl\.wasm-[A-Za-z0-9_-]{8,}\.gz$/.test(name),
 );
@@ -241,10 +249,9 @@ async function measurePage(
     responseTasks.push(task);
   });
 
-  await page.addInitScript(() => {
+  await page.addInitScript(`${webVitalsSource}\n;(() => {
     Reflect.set(window, "__performanceLcp", 0);
     Reflect.set(window, "__performanceCls", 0);
-    Reflect.set(window, "__performanceInteractions", []);
     new PerformanceObserver((entries) => {
       for (const entry of entries.getEntries()) {
         Reflect.set(window, "__performanceLcp", entry.startTime);
@@ -261,21 +268,11 @@ async function measurePage(
         }
       }
     }).observe({ type: "layout-shift", buffered: true });
-    if (PerformanceObserver.supportedEntryTypes.includes("event")) {
-      new PerformanceObserver((entries) => {
-        const interactions = Reflect.get(window, "__performanceInteractions");
-        for (const entry of entries.getEntries()) {
-          if (entry.interactionId > 0) {
-            interactions.push({
-              duration: entry.duration,
-              interactionId: entry.interactionId,
-              name: entry.name,
-            });
-          }
-        }
-      }).observe({ type: "event", buffered: true, durationThreshold: 16 });
-    }
-  });
+    webVitals.onINP(
+      (metric) => Reflect.set(window, "__performanceInp", metric.value),
+      { reportAllChanges: true },
+    );
+  })();`);
   const navigationStartedAt = performance.now();
   await page.goto(`${origin}${pathname}`, { waitUntil: "load" });
   await Promise.all(responseTasks);
@@ -328,23 +325,9 @@ async function measurePage(
     path: pathname,
     navigationLoadMs: Math.round(loadMs),
     browserTimingProxies,
-    interactionLatencyProxy: await page.evaluate(() => {
-      const interactions = Reflect.get(window, "__performanceInteractions");
-      const durations = new Map();
-      for (const entry of interactions) {
-        const current = durations.get(entry.interactionId);
-        if (!current || entry.duration > current.duration) {
-          durations.set(entry.interactionId, { duration: entry.duration, name: entry.name });
-        }
-      }
-      const longest = [...durations.values()].sort(
-        (left, right) => right.duration - left.duration,
-      )[0];
-      return {
-        observedInteractionCount: durations.size,
-        maxObservedInteractionMs: longest ? Math.round(longest.duration) : null,
-        maxObservedInteractionEvent: longest?.name ?? null,
-      };
+    inpMs: await page.evaluate(() => {
+      const value = Reflect.get(window, "__performanceInp");
+      return Number.isFinite(value) ? Math.round(value) : null;
     }),
     initialAssets: totals(initialAssets),
     ...(pagefindOnDemandAssets === undefined ? {} : { pagefindOnDemandAssets }),
@@ -511,8 +494,7 @@ try {
     referenceLargestContentfulPaintMs:
       measurements[0].browserTimingProxies.largestContentfulPaintMs,
     referenceCumulativeLayoutShift: measurements[0].browserTimingProxies.cumulativeLayoutShift,
-    referenceInteractionLatencyProxyMs:
-      measurements[0].interactionLatencyProxy.maxObservedInteractionMs,
+    referenceInpMs: measurements[0].inpMs,
   };
   const findViolations = (names, measurementsByName) =>
     names.flatMap((name) => {
@@ -530,9 +512,13 @@ try {
     performanceBaseline.environment.platform !== `${process.platform}-${process.arch}`
       ? runtimeBudgetNames
       : [];
+  const missingBaselineMetrics = performanceBaseline
+    ? allBudgetNames.filter((metric) => !Number.isFinite(performanceBaseline.measurements[metric]))
+    : [];
   const baselineComparisonViolations = performanceBaseline
     ? allBudgetNames.flatMap((metric) => {
-        if (incompatibleBaselineMetrics.includes(metric)) return [];
+        if (incompatibleBaselineMetrics.includes(metric) || missingBaselineMetrics.includes(metric))
+          return [];
         const baseline = performanceBaseline.measurements[metric];
         const measured = baselineMeasurements[metric];
         const tolerance = assetBudgets.baselineTolerance[metric];
@@ -582,15 +568,18 @@ try {
           status:
             baselineComparisonViolations.length > 0
               ? "fail"
-              : incompatibleBaselineMetrics.length > 0
+              : incompatibleBaselineMetrics.length > 0 || missingBaselineMetrics.length > 0
                 ? "partial"
                 : "pass",
           capturedAt: performanceBaseline.measuredAt,
           environment: performanceBaseline.environment,
           comparedMetrics: allBudgetNames.filter(
-            (metric) => !incompatibleBaselineMetrics.includes(metric),
+            (metric) =>
+              !incompatibleBaselineMetrics.includes(metric) &&
+              !missingBaselineMetrics.includes(metric),
           ),
           skippedForPlatformMismatch: incompatibleBaselineMetrics,
+          skippedForMissingBaseline: missingBaselineMetrics,
           tolerances: assetBudgets.baselineTolerance,
           baseline: performanceBaseline.measurements,
           measurements: baselineMeasurements,

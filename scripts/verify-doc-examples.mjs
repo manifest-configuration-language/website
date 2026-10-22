@@ -9,53 +9,23 @@ import { unified } from "unified";
 import remarkMdx from "remark-mdx";
 import remarkParse from "remark-parse";
 
-const release = "v0.1.0";
+const releaseTag = JSON.parse(
+  await readFile(new URL("../mcl-cli-version.json", import.meta.url), "utf8"),
+).tag;
+if (typeof releaseTag !== "string" || !/^v\d+\.\d+\.\d+$/.test(releaseTag))
+  throw new Error("mcl-cli-version.json must specify a stable MCL release tag.");
+const releaseVersion = releaseTag.slice(1);
 const releaseAssets = {
-  "darwin-arm64": [
-    "mcl_0.1.0_darwin_arm64.tar.gz",
-    "0c8cbb96548bd25b4e8ecc9d5cb6c61467f1a3cfca975a6469843890b4c1b78d",
-    "mcl-darwin-arm64",
-  ],
-  "darwin-x64": [
-    "mcl_0.1.0_darwin_amd64.tar.gz",
-    "21167d353f0c8b1ffab1f4f0da68f010db0ba78e4b83cb44f67ce96c4ce1c0aa",
-    "mcl-darwin-amd64",
-  ],
-  "linux-arm64": [
-    "mcl_0.1.0_linux_arm64.tar.gz",
-    "5a8b7c517ae289bb607b32db71733628611a74c82972e03c98603439f52cbcca",
-    "mcl-linux-arm64",
-  ],
-  "linux-x64": [
-    "mcl_0.1.0_linux_amd64.tar.gz",
-    "e2b230c2d81b3fad715433e231b766b41600395d0ac3462c3f85be3c986ec4ba",
-    "mcl-linux-amd64",
-  ],
+  "darwin-arm64": ["darwin_arm64", "mcl-darwin-arm64"],
+  "darwin-x64": ["darwin_amd64", "mcl-darwin-amd64"],
+  "linux-arm64": ["linux_arm64", "mcl-linux-arm64"],
+  "linux-x64": ["linux_amd64", "mcl-linux-amd64"],
 };
 const modes = new Set(["verify", "expected-error", "fragment", "release-gap"]);
 const docsRoot = fileURLToPath(new URL("../src/content/docs/", import.meta.url));
 const fixturesRoot = fileURLToPath(new URL("./doc-example-fixtures/", import.meta.url));
 const snapshotsRoot = fileURLToPath(new URL("./doc-example-snapshots/", import.meta.url));
 const updateSnapshots = process.argv.includes("--update-snapshots");
-
-async function verifyLatestRelease() {
-  const headers = { accept: "application/vnd.github+json" };
-  if (process.env.GH_TOKEN) headers.authorization = `Bearer ${process.env.GH_TOKEN}`;
-  const response = await fetch(
-    "https://api.github.com/repos/manifest-configuration-language/mcl/releases/latest",
-    {
-      headers,
-    },
-  );
-  if (!response.ok)
-    throw new Error(`Checking the latest MCL release failed: HTTP ${response.status}`);
-  const latestRelease = (await response.json()).tag_name;
-  if (latestRelease !== release) {
-    throw new Error(
-      `Documentation examples use MCL ${release}, but the latest stable release is ${latestRelease}`,
-    );
-  }
-}
 
 async function markdownFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -173,24 +143,38 @@ function verifyOutput(output, expectation, operationOutput) {
 async function getCli() {
   const platform = `${process.platform}-${process.arch}`;
   const asset = releaseAssets[platform];
-  if (!asset) throw new Error(`No checksum-pinned MCL ${release} binary for ${platform}`);
-  const [name, expectedDigest, executableName] = asset;
+  if (!asset) throw new Error(`No MCL ${releaseTag} binary for ${platform}`);
+  const [archivePlatform, executableName] = asset;
+  const name = `mcl_${releaseVersion}_${archivePlatform}.tar.gz`;
   const directory = await mkdtemp(join(tmpdir(), "mcl-doc-verification-"));
   const archive = join(directory, name);
-  const response = await fetch(
-    `https://github.com/manifest-configuration-language/mcl/releases/download/${release}/${name}`,
-  );
-  if (!response.ok) throw new Error(`Downloading MCL ${release} failed: HTTP ${response.status}`);
-  const bytes = Buffer.from(await response.arrayBuffer());
+  const releaseUrl = `https://github.com/manifest-configuration-language/mcl/releases/download/${releaseTag}`;
+  const [archiveResponse, checksumsResponse] = await Promise.all([
+    fetch(`${releaseUrl}/${name}`),
+    fetch(`${releaseUrl}/SHA256SUMS`),
+  ]);
+  if (!archiveResponse.ok)
+    throw new Error(`Downloading MCL ${releaseTag} failed: HTTP ${archiveResponse.status}`);
+  if (!checksumsResponse.ok)
+    throw new Error(
+      `Downloading MCL ${releaseTag} SHA256SUMS failed: HTTP ${checksumsResponse.status}`,
+    );
+  const checksums = await checksumsResponse.text();
+  const checksumEntry = checksums
+    .split(/\r?\n/)
+    .map((line) => /^([a-f\d]{64})\s+\*?(.+)$/.exec(line))
+    .find((match) => match?.[2] === name);
+  if (!checksumEntry) throw new Error(`MCL ${releaseTag} SHA256SUMS has no entry for ${name}`);
+  const bytes = Buffer.from(await archiveResponse.arrayBuffer());
   const digest = createHash("sha256").update(bytes).digest("hex");
-  if (digest !== expectedDigest) throw new Error(`MCL ${release} checksum mismatch: ${digest}`);
+  if (digest !== checksumEntry[1])
+    throw new Error(`MCL ${releaseTag} checksum mismatch for ${name}: ${digest}`);
   await writeFile(archive, bytes);
   execFileSync("tar", ["-xzf", archive, "-C", directory], { stdio: "pipe" });
   return { binary: join(directory, executableName), directory };
 }
 
 async function main() {
-  await verifyLatestRelease();
   const classifications = new Map([...modes].map((mode) => [mode, 0]));
   const executableExamples = [];
   const snapshotIds = new Map();
@@ -310,12 +294,12 @@ async function main() {
         `${error.stderr?.toString() ?? ""}${error.stdout?.toString() ?? ""}`.trim();
       if (executable && checkFailure) {
         throw new Error(
-          `${relative(docsRoot, example.file)}:${example.line}: MCL ${release} rejected example during check\n${checkOutput(checkFailure)}`,
+          `${relative(docsRoot, example.file)}:${example.line}: MCL ${releaseTag} rejected example during check\n${checkOutput(checkFailure)}`,
         );
       }
       if (executable && renderFailure) {
         throw new Error(
-          `${relative(docsRoot, example.file)}:${example.line}: MCL ${release} could not render example\n${checkOutput(renderFailure)}`,
+          `${relative(docsRoot, example.file)}:${example.line}: MCL ${releaseTag} could not render example\n${checkOutput(renderFailure)}`,
         );
       }
       if (executable) {
@@ -338,7 +322,7 @@ async function main() {
       } else {
         if (!checkFailure)
           throw new Error(
-            `${relative(docsRoot, example.file)}:${example.line}: ${example.mode === "release-gap" ? `release gap is resolved in MCL ${release}; mark this example verify and add an expectation` : `expected MCL ${release} to reject this example`}`,
+            `${relative(docsRoot, example.file)}:${example.line}: ${example.mode === "release-gap" ? `release gap is resolved in MCL ${releaseTag}; mark this example verify and add an expectation` : `expected MCL ${releaseTag} to reject this example`}`,
           );
         if (!checkOutput(checkFailure).includes(example.expectedError))
           throw new Error(
@@ -359,7 +343,7 @@ async function main() {
   }
 
   console.log(
-    `Verified ${executableExamples.length} valid, ${classifications.get("expected-error")} expected-error, and ${classifications.get("release-gap")} release-gap MCL examples with MCL ${release}.`,
+    `Verified ${executableExamples.length} valid, ${classifications.get("expected-error")} expected-error, and ${classifications.get("release-gap")} release-gap MCL examples with MCL ${releaseTag}.`,
   );
   console.log(
     `Classified MCL fences: ${[...classifications].map(([mode, count]) => `${mode}=${count}`).join(", ")}.`,

@@ -42,5 +42,17 @@
       packageNameTemplate: 'https://github.com/manifest-configuration-language/vscode',
       datasourceTemplate: 'git-refs',
     },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^mcl-cli-version\\.json$/',
+      ],
+      matchStrings: [
+        '"tag"\\s*:\\s*"(?<currentValue>v[0-9]+\\.[0-9]+\\.[0-9]+)"',
+      ],
+      depNameTemplate: 'manifest-configuration-language/mcl',
+      packageNameTemplate: 'manifest-configuration-language/mcl',
+      datasourceTemplate: 'github-releases',
+    },
   ],
 }

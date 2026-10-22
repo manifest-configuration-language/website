@@ -104,7 +104,6 @@ const wasmAssetName = (await readdir(wasmAssetDirectory)).find((name) =>
 if (!wasmAssetName) throw new Error("The fingerprinted MCL WebAssembly asset is missing.");
 const wasmAssetPath = `/_astro/${wasmAssetName.replace(/\.gz$/, ".wasm")}`;
 const wasmAssetBytes = await readFile(new URL(wasmAssetName, wasmAssetDirectory));
-const workerInstrumentation = `**/playground.worker-*.js`;
 const server = spawn(
   process.execPath,
   [astroCli, "preview", "--host", "127.0.0.1", "--port", String(previewPort)],
@@ -174,24 +173,18 @@ function totals(assets) {
   return { ...result, total: Object.values(result).reduce((sum, bytes) => sum + bytes, 0) };
 }
 
-async function instrumentWasmWorker(context) {
-  await context.route(workerInstrumentation, async (route) => {
-    const response = await route.fetch();
-    const source = await response.text();
-    const instantiateCall = /WebAssembly\.instantiateStreaming\(([^,]+),([^)]*)\)/g;
-    const matches = [...source.matchAll(instantiateCall)];
-    if (matches.length !== 1)
-      throw new Error(
-        `Expected one WebAssembly.instantiateStreaming call in ${route.request().url()}`,
-      );
-    const instrumented = source.replace(
-      instantiateCall,
-      "(globalThis.__mclWasmInstantiateStartedAt=performance.now(),WebAssembly.instantiateStreaming($1,$2).then(result=>{globalThis.__mclWasmInstantiateMs=performance.now()-globalThis.__mclWasmInstantiateStartedAt;globalThis.__mclWasmMemoryAtInstantiationBytes=result.instance.exports.mem?.buffer.byteLength??null;globalThis.__mclWasmMemory=result.instance.exports.mem??null;return result}))",
-    );
-    const headers = { ...response.headers() };
-    delete headers["content-encoding"];
-    delete headers["content-length"];
-    await route.fulfill({ response, body: instrumented, headers });
+async function instrumentWasmWorker(page) {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    window.Worker = new Proxy(NativeWorker, {
+      construct(target, argumentsList) {
+        const [scriptURL, ...workerOptions] = argumentsList;
+        const workerURL = new URL(scriptURL, window.location.href);
+        if (workerURL.pathname.includes("playground.worker-"))
+          workerURL.searchParams.set("__mcl_test_performance", "1");
+        return Reflect.construct(target, [workerURL, ...workerOptions]);
+      },
+    });
   });
 }
 
@@ -199,11 +192,15 @@ async function wasmWorkerMetrics(page) {
   const worker = page.workers().find((candidate) => candidate.url().includes("playground.worker-"));
   if (!worker) return null;
   return worker.evaluate(() => ({
-    wasmStreamingInstantiateMs: Number.isFinite(globalThis.__mclWasmInstantiateMs)
-      ? Math.round(globalThis.__mclWasmInstantiateMs)
+    wasmStreamingInstantiateMs: Number.isFinite(
+      globalThis.__mclTestPerformanceMetrics?.wasmStreamingInstantiateMs,
+    )
+      ? globalThis.__mclTestPerformanceMetrics.wasmStreamingInstantiateMs
       : null,
-    wasmLinearMemoryBytesAfterInstantiation: globalThis.__mclWasmMemoryAtInstantiationBytes ?? null,
-    wasmLinearMemoryCurrentBytes: globalThis.__mclWasmMemory?.buffer.byteLength ?? null,
+    wasmLinearMemoryBytesAfterInstantiation:
+      globalThis.__mclTestPerformanceMetrics?.wasmLinearMemoryBytesAfterInstantiation ?? null,
+    wasmLinearMemoryCurrentBytes:
+      globalThis.__mclTestPerformanceMetrics?.wasmMemory?.buffer.byteLength ?? null,
   }));
 }
 
@@ -213,8 +210,8 @@ async function measurePage(
   { renderPlayground = false, measureSearch = false } = {},
 ) {
   const context = await browser.newContext();
-  await instrumentWasmWorker(context);
   const page = await context.newPage();
+  await instrumentWasmWorker(page);
   const assets = new Map();
   const responseTasks = [];
   context.on("response", async (response) => {
@@ -386,8 +383,8 @@ async function measureCancellation(browser) {
 
 async function measureLargeProject(browser) {
   const context = await browser.newContext();
-  await instrumentWasmWorker(context);
   const page = await context.newPage();
+  await instrumentWasmWorker(page);
   await page.goto(`${origin}/playground/`, { waitUntil: "load" });
 
   const projectBytes = 15.9 * 1024 * 1024;

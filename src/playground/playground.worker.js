@@ -13,6 +13,9 @@ let constants;
 let started;
 let activeVolume;
 let workingDirectory = "/mcl-project";
+const testPerformanceEnabled =
+  new URL(self.location.href).searchParams.get("__mcl_test_performance") === "1";
+const testPerformanceMetrics = testPerformanceEnabled ? {} : null;
 
 function makeFsAdapter() {
   return new Proxy(
@@ -84,7 +87,17 @@ async function startRuntime() {
   const go = new globalThis.Go();
   const response = await fetch(wasmURL);
   if (!response.ok) throw new Error("Unable to download the MCL WebAssembly runtime.");
+  const instantiateStartedAt = testPerformanceEnabled ? performance.now() : 0;
   const { instance } = await WebAssembly.instantiateStreaming(response, go.importObject);
+  if (testPerformanceMetrics) {
+    testPerformanceMetrics.wasmStreamingInstantiateMs = Math.round(
+      performance.now() - instantiateStartedAt,
+    );
+    testPerformanceMetrics.wasmLinearMemoryBytesAfterInstantiation =
+      instance.exports.mem?.buffer.byteLength ?? null;
+    testPerformanceMetrics.wasmMemory = instance.exports.mem ?? null;
+    globalThis.__mclTestPerformanceMetrics = testPerformanceMetrics;
+  }
   go.run(instance).catch((error) => self.postMessage({ type: "failure", message: String(error) }));
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {

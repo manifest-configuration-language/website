@@ -11,6 +11,13 @@ const helmProjectDirectory = fileURLToPath(new URL("./fixtures/helm-project", im
 const kustomizeProjectDirectory = fileURLToPath(
   new URL("./fixtures/kustomize-project", import.meta.url),
 );
+const crossBrowserPlaygroundScenarios = new Set([
+  "formats source in the editor",
+  "loads a project folder and resolves its relative MCL import",
+  "shows a source diagnostic for an invalid program",
+  "rejects a project file larger than the per-file limit",
+  "cancels a run during worker startup and allows the next run",
+]);
 
 function editor(page: import("@playwright/test").Page) {
   return page.locator('[aria-label="MCLソース"]');
@@ -32,7 +39,11 @@ async function expectRendered(page: import("@playwright/test").Page, ...fragment
   for (const fragment of fragments) await expect(output).toContainText(fragment);
 }
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, browserName }, testInfo) => {
+  test.skip(
+    browserName !== "chromium" && !crossBrowserPlaygroundScenarios.has(testInfo.title),
+    "Detailed Playground scenarios run in Chromium; Docs CSP and Browser SDK smoke tests cover all three browsers.",
+  );
   await addWasmAssetHeaders(page);
   await page.goto("/playground/");
 });

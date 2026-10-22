@@ -1,5 +1,6 @@
 import { useRef, type ChangeEvent, type InputHTMLAttributes } from "react";
 import type { LoadedProject } from "./types";
+import { projectLimits } from "./projectValidation.js";
 
 const directoryInputProps = {
   webkitdirectory: "",
@@ -52,7 +53,8 @@ export function ProjectFileInput({
         />
       </label>
       <span>
-        {fileCount} files · {(projectSize / 1024 / 1024).toFixed(1)} / 32 MiB
+        {fileCount} files · {(projectSize / 1024 / 1024).toFixed(1)} /{" "}
+        {projectLimits.projectBytes / (1024 * 1024)} MiB
       </span>
     </>
   );

@@ -340,9 +340,12 @@ test("terminates a timed-out worker and allows another run", async ({ page }) =>
   });
 
   await page.getByRole("button", { name: "実行" }).click();
-  await expect(page.getByRole("alert")).toContainText("Evaluation timed out. Run it again.", {
-    timeout: 10_000,
-  });
+  await expect(page.getByRole("alert")).toContainText(
+    "The MCL operation timed out. Run it again.",
+    {
+      timeout: 15_000,
+    },
+  );
   await expect
     .poll(() =>
       page.evaluate(
@@ -355,4 +358,51 @@ test("terminates a timed-out worker and allows another run", async ({ page }) =>
 
   await page.getByRole("button", { name: "実行" }).click();
   await expectRendered(page, 'kind: "ConfigMap"');
+});
+
+test("times out a stalled worker startup and allows another run", async ({ page }) => {
+  let releaseFirstRequest: (() => void) | undefined;
+  let wasmRequests = 0;
+  await page.route("**/mcl.wasm-*.gz", async (route) => {
+    wasmRequests += 1;
+    if (wasmRequests === 1) {
+      await new Promise<void>((resolve) => {
+        releaseFirstRequest = resolve;
+      });
+      await route.fallback().catch(() => {});
+      return;
+    }
+    await route.fallback();
+  });
+  await page.evaluate(() => {
+    const state = { terminated: 0 };
+    Object.defineProperty(window, "__playgroundWorkerState", { value: state });
+    const originalTerminate = Worker.prototype.terminate;
+    Worker.prototype.terminate = function () {
+      state.terminated += 1;
+      return originalTerminate.call(this);
+    };
+  });
+
+  await page.getByRole("button", { name: "実行" }).click();
+  await expect.poll(() => wasmRequests).toBe(1);
+  await expect(page.getByRole("alert")).toContainText(
+    "The MCL operation timed out. Run it again.",
+    {
+      timeout: 15_000,
+    },
+  );
+  releaseFirstRequest?.();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __playgroundWorkerState?: { terminated: number } })
+            .__playgroundWorkerState?.terminated ?? 0,
+      ),
+    )
+    .toBe(1);
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'kind: "ConfigMap"');
+  expect(wasmRequests).toBe(2);
 });

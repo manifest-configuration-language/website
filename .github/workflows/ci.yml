@@ -133,6 +133,21 @@ jobs:
           grep -qi '^X-Content-Type-Options: nosniff' /tmp/mcl-website.headers
           grep -qi '^Permissions-Policy: camera=(), microphone=(), geolocation=()' /tmp/mcl-website.headers
 
+          curl --fail --silent --show-error --header 'Accept-Encoding: gzip' --dump-header /tmp/mcl-website-gzip.headers --output /tmp/mcl-website.html.gz http://127.0.0.1:8080/
+          grep -qi '^HTTP/[^ ]* 200' /tmp/mcl-website-gzip.headers
+          grep -qi '^Content-Encoding: *gzip' /tmp/mcl-website-gzip.headers
+          grep -qi '^Vary:.*Accept-Encoding' /tmp/mcl-website-gzip.headers
+          gzip -t /tmp/mcl-website.html.gz
+          gzip -dc /tmp/mcl-website.html.gz > /tmp/mcl-website-gzip.html
+          cmp /tmp/mcl-website.html /tmp/mcl-website-gzip.html
+
+          js_url="$(grep -oE '/_astro/[^" ]+\.js' /tmp/mcl-website.html | sed -n '1p')"
+          [ -n "$js_url" ]
+          curl --fail --silent --show-error --header 'Accept-Encoding: gzip' --dump-header /tmp/mcl-website-js-gzip.headers --output /tmp/mcl-website.js.gz "http://127.0.0.1:8080${js_url}"
+          grep -qi '^Content-Type: *application/javascript' /tmp/mcl-website-js-gzip.headers
+          grep -qi '^Content-Encoding: *gzip' /tmp/mcl-website-js-gzip.headers
+          gzip -t /tmp/mcl-website.js.gz
+
           wasm_url="$(docker exec "$container_id" sh -c "grep -RhoE '/_astro/mcl\\.wasm-[A-Za-z0-9_-]{8,}\\.gz' /usr/share/nginx/html/_astro/*.js | sed -n '1p'")"
           [ -n "$wasm_url" ]
           curl --fail --silent --show-error --dump-header /tmp/mcl-website-wasm.headers --output /tmp/mcl-website-wasm.gz "http://127.0.0.1:8080${wasm_url}"

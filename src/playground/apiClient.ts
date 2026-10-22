@@ -19,6 +19,8 @@ type PendingRequest = {
   timeout: number;
 };
 
+const operationTimeoutMs = 10_000;
+
 export function createPlaygroundClient(): PlaygroundClient {
   let worker: Worker | undefined;
   let ready: Promise<void> | undefined;
@@ -74,8 +76,6 @@ export function createPlaygroundClient(): PlaygroundClient {
     revision: number,
     files?: Record<string, ProjectFile>,
   ): Promise<PlaygroundReply> {
-    await ensureWorker();
-    if (!worker) throw new Error("The WebAssembly worker is unavailable.");
     return new Promise((resolve, reject) => {
       const request: PlaygroundRequest = {
         requestId: ++requestId,
@@ -85,30 +85,40 @@ export function createPlaygroundClient(): PlaygroundClient {
         files,
       };
       const timeout = window.setTimeout(() => {
-        terminate(new Error("Evaluation timed out. Run it again."));
-      }, 4500);
+        terminate(new Error("The MCL operation timed out. Run it again."));
+      }, operationTimeoutMs);
       pending = { request, resolve, reject, timeout };
-      const { files: projectFiles, ...requestMetadata } = request;
-      const metadata = Object.create(null) as NonNullable<PlaygroundWorkerRequest["files"]>;
-      const binaryFiles = Object.create(null) as Record<string, Uint8Array>;
-      const transfer: ArrayBuffer[] = [];
-      for (const [filePath, file] of Object.entries(projectFiles ?? {})) {
-        if (file.encoding === "utf8") {
-          metadata![filePath] = file;
-          continue;
-        }
-        const bytes = new Uint8Array(file.bytes.byteLength);
-        bytes.set(file.bytes);
-        binaryFiles[filePath] = bytes;
-        transfer.push(bytes.buffer as ArrayBuffer);
-        metadata![filePath] = { encoding: "binary" };
-      }
-      const workerRequest: PlaygroundWorkerRequest = {
-        ...requestMetadata,
-        ...(projectFiles ? { files: metadata } : {}),
-        ...(Object.keys(binaryFiles).length > 0 ? { binaryFiles } : {}),
-      };
-      worker?.postMessage(workerRequest, transfer);
+      void ensureWorker()
+        .then(() => {
+          if (pending?.request.requestId !== request.requestId || !worker) return;
+          const { files: projectFiles, ...requestMetadata } = request;
+          const metadata = Object.create(null) as NonNullable<PlaygroundWorkerRequest["files"]>;
+          const binaryFiles = Object.create(null) as Record<string, Uint8Array>;
+          const transfer: ArrayBuffer[] = [];
+          for (const [filePath, file] of Object.entries(projectFiles ?? {})) {
+            if (file.encoding === "utf8") {
+              metadata![filePath] = file;
+              continue;
+            }
+            const bytes = new Uint8Array(file.bytes.byteLength);
+            bytes.set(file.bytes);
+            binaryFiles[filePath] = bytes;
+            transfer.push(bytes.buffer as ArrayBuffer);
+            metadata![filePath] = { encoding: "binary" };
+          }
+          const workerRequest: PlaygroundWorkerRequest = {
+            ...requestMetadata,
+            ...(projectFiles ? { files: metadata } : {}),
+            ...(Object.keys(binaryFiles).length > 0 ? { binaryFiles } : {}),
+          };
+          worker.postMessage(workerRequest, transfer);
+        })
+        .catch((error: unknown) => {
+          if (pending?.request.requestId !== request.requestId) return;
+          window.clearTimeout(pending.timeout);
+          pending = undefined;
+          reject(error instanceof Error ? error : new Error(String(error)));
+        });
     });
   }
 

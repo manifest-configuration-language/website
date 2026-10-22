@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -31,13 +31,48 @@ const runtimeBudgetNames = [
   "referenceCumulativeLayoutShift",
   "referenceInteractionLatencyProxyMs",
 ];
+const allBudgetNames = [...assetBudgetNames, ...runtimeBudgetNames];
+const captureArgument = process.argv.find((argument) => argument.startsWith("--record-baseline"));
+const capturePath = captureArgument
+  ? captureArgument.includes("=")
+    ? captureArgument.slice(captureArgument.indexOf("=") + 1)
+    : "scripts/performance-baseline.candidate.json"
+  : null;
 if (
-  Object.keys(assetBudgets).length !== assetBudgetNames.length + runtimeBudgetNames.length ||
-  [...assetBudgetNames, ...runtimeBudgetNames].some(
-    (name) => !Number.isFinite(assetBudgets[name]) || assetBudgets[name] <= 0,
-  )
+  captureArgument &&
+  (capturePath.length === 0 ||
+    process.argv.filter((arg) => arg.startsWith("--record-baseline")).length > 1)
+)
+  throw new Error("Use --record-baseline[=<output-path>] once.");
+if (
+  Object.keys(assetBudgets).length !== allBudgetNames.length + 1 ||
+  allBudgetNames.some((name) => !Number.isFinite(assetBudgets[name]) || assetBudgets[name] <= 0) ||
+  !assetBudgets.baselineTolerance ||
+  Object.keys(assetBudgets.baselineTolerance).length !== allBudgetNames.length ||
+  allBudgetNames.some((name) => {
+    const tolerance = assetBudgets.baselineTolerance[name];
+    return (
+      !tolerance ||
+      !Number.isFinite(tolerance.relative) ||
+      tolerance.relative < 0 ||
+      !Number.isFinite(tolerance.absolute) ||
+      tolerance.absolute < 0
+    );
+  })
 )
   throw new Error("The performance budget configuration is invalid.");
+const baselinePath = new URL("./performance-baseline.json", import.meta.url);
+let performanceBaseline;
+if (!capturePath) {
+  performanceBaseline = JSON.parse(await readFile(baselinePath, "utf8"));
+  if (
+    performanceBaseline.schemaVersion !== 1 ||
+    !performanceBaseline.environment ||
+    !performanceBaseline.measurements ||
+    allBudgetNames.some((name) => !Number.isFinite(performanceBaseline.measurements[name]))
+  )
+    throw new Error("The committed performance baseline is invalid.");
+}
 async function reservePort(requestedPort = 0) {
   const listener = createNetServer();
   await new Promise((resolve, reject) => {
@@ -489,7 +524,37 @@ try {
     });
   const assetBudgetViolations = findViolations(assetBudgetNames, assetBudgetMeasurements);
   const runtimeBudgetViolations = findViolations(runtimeBudgetNames, runtimeBudgetMeasurements);
-  const budgetViolations = [...assetBudgetViolations, ...runtimeBudgetViolations];
+  const baselineMeasurements = { ...assetBudgetMeasurements, ...runtimeBudgetMeasurements };
+  const incompatibleBaselineMetrics =
+    performanceBaseline &&
+    performanceBaseline.environment.platform !== `${process.platform}-${process.arch}`
+      ? runtimeBudgetNames
+      : [];
+  const baselineComparisonViolations = performanceBaseline
+    ? allBudgetNames.flatMap((metric) => {
+        if (incompatibleBaselineMetrics.includes(metric)) return [];
+        const baseline = performanceBaseline.measurements[metric];
+        const measured = baselineMeasurements[metric];
+        const tolerance = assetBudgets.baselineTolerance[metric];
+        const allowedIncrease = Math.max(baseline * tolerance.relative, tolerance.absolute);
+        return Number.isFinite(measured) && measured <= baseline + allowedIncrease
+          ? []
+          : [
+              {
+                baseline,
+                allowedIncrease,
+                limit: baseline + allowedIncrease,
+                measured,
+                metric,
+              },
+            ];
+      })
+    : [];
+  const budgetViolations = [
+    ...assetBudgetViolations,
+    ...runtimeBudgetViolations,
+    ...baselineComparisonViolations,
+  ];
   const report = {
     measuredAt: new Date().toISOString(),
     node: process.version,
@@ -511,11 +576,40 @@ try {
       measurements: runtimeBudgetMeasurements,
       violations: runtimeBudgetViolations,
     },
+    baselineComparison: capturePath
+      ? { status: "capture", source: capturePath }
+      : {
+          status:
+            baselineComparisonViolations.length > 0
+              ? "fail"
+              : incompatibleBaselineMetrics.length > 0
+                ? "partial"
+                : "pass",
+          capturedAt: performanceBaseline.measuredAt,
+          environment: performanceBaseline.environment,
+          comparedMetrics: allBudgetNames.filter(
+            (metric) => !incompatibleBaselineMetrics.includes(metric),
+          ),
+          skippedForPlatformMismatch: incompatibleBaselineMetrics,
+          tolerances: assetBudgets.baselineTolerance,
+          baseline: performanceBaseline.measurements,
+          measurements: baselineMeasurements,
+          violations: baselineComparisonViolations,
+        },
     performanceBudget: {
       status: budgetViolations.length === 0 ? "pass" : "fail",
       violations: budgetViolations,
     },
   };
+  if (capturePath && budgetViolations.length === 0) {
+    const baselineCandidate = {
+      schemaVersion: 1,
+      measuredAt: report.measuredAt,
+      environment: { node: report.node, platform: report.platform, chromium: report.chromium },
+      measurements: baselineMeasurements,
+    };
+    await writeFile(capturePath, `${JSON.stringify(baselineCandidate, null, 2)}\n`);
+  }
   console.log(JSON.stringify(report, null, 2));
   if (budgetViolations.length > 0) {
     process.exitCode = 1;

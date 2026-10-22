@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "measuredAt": "2026-10-22T05:17:53.074Z",
+  "environment": {
+    "node": "v26.8.2",
+    "platform": "darwin-arm64",
+    "chromium": "156.0.8078.4"
+  },
+  "measurements": {
+    "referenceInitialAssetsBytes": 197998,
+    "playgroundInitialAssetsBytes": 724311,
+    "referenceSearchAssetsBytes": 207835,
+    "playgroundExecutionAssetsBytes": 19937668,
+    "referenceNavigationLoadMs": 75,
+    "referenceSearchMs": 865,
+    "playgroundNavigationLoadMs": 37,
+    "playgroundFirstRenderMs": 829,
+    "playgroundWasmInstantiateMs": 167,
+    "playgroundSecondRenderMs": 35,
+    "cancellationUiLatencyMs": 36,
+    "largeProjectImportMs": 70,
+    "largeProjectEvaluationMs": 507,
+    "largeProjectWasmMemoryBytes": 142344192,
+    "referenceLargestContentfulPaintMs": 72,
+    "referenceCumulativeLayoutShift": 0,
+    "referenceInteractionLatencyProxyMs": 40
+  }
+}

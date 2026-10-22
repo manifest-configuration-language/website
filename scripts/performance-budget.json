@@ -15,5 +15,24 @@
   "largeProjectWasmMemoryBytes": 268435456,
   "referenceLargestContentfulPaintMs": 2500,
   "referenceCumulativeLayoutShift": 0.1,
-  "referenceInteractionLatencyProxyMs": 200
+  "referenceInteractionLatencyProxyMs": 200,
+  "baselineTolerance": {
+    "referenceInitialAssetsBytes": { "relative": 0.02, "absolute": 1024 },
+    "playgroundInitialAssetsBytes": { "relative": 0.02, "absolute": 1024 },
+    "referenceSearchAssetsBytes": { "relative": 0.02, "absolute": 1024 },
+    "playgroundExecutionAssetsBytes": { "relative": 0.01, "absolute": 65536 },
+    "referenceNavigationLoadMs": { "relative": 0.2, "absolute": 150 },
+    "referenceSearchMs": { "relative": 0.2, "absolute": 150 },
+    "playgroundNavigationLoadMs": { "relative": 0.2, "absolute": 150 },
+    "playgroundFirstRenderMs": { "relative": 0.25, "absolute": 300 },
+    "playgroundWasmInstantiateMs": { "relative": 0.2, "absolute": 150 },
+    "playgroundSecondRenderMs": { "relative": 0.25, "absolute": 60 },
+    "cancellationUiLatencyMs": { "relative": 0.25, "absolute": 50 },
+    "largeProjectImportMs": { "relative": 0.2, "absolute": 150 },
+    "largeProjectEvaluationMs": { "relative": 0.25, "absolute": 250 },
+    "largeProjectWasmMemoryBytes": { "relative": 0.15, "absolute": 8388608 },
+    "referenceLargestContentfulPaintMs": { "relative": 0.25, "absolute": 150 },
+    "referenceCumulativeLayoutShift": { "relative": 0, "absolute": 0.02 },
+    "referenceInteractionLatencyProxyMs": { "relative": 0.5, "absolute": 30 }
+  }
 }

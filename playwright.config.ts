@@ -9,7 +9,7 @@ export default defineConfig({
   reporter: "list",
   workers: process.env.CI ? 2 : undefined,
   use: {
-    baseURL: "http://127.0.0.1:4322",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4322",
     trace: "retain-on-failure",
   },
   projects: [
@@ -17,10 +17,12 @@ export default defineConfig({
     { name: "firefox", use: { ...devices["Desktop Firefox"] } },
     { name: "webkit", use: { ...devices["Desktop Safari"] } },
   ],
-  webServer: {
-    command: "pnpm exec astro preview --host 127.0.0.1 --port 4322",
-    url: "http://127.0.0.1:4322",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: process.env.PLAYWRIGHT_BASE_URL
+    ? undefined
+    : {
+        command: "pnpm exec astro preview --host 127.0.0.1 --port 4322",
+        url: "http://127.0.0.1:4322",
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      },
 });

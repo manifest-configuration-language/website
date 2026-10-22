@@ -12,5 +12,8 @@
   "cancellationUiLatencyMs": 2000,
   "largeProjectImportMs": 2000,
   "largeProjectEvaluationMs": 10000,
-  "largeProjectWasmMemoryBytes": 268435456
+  "largeProjectWasmMemoryBytes": 268435456,
+  "referenceLargestContentfulPaintMs": 2500,
+  "referenceCumulativeLayoutShift": 0.1,
+  "referenceInteractionLatencyProxyMs": 200
 }

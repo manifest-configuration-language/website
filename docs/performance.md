@@ -2,7 +2,7 @@
 
 Run `pnpm run build && pnpm exec playwright install chromium && node scripts/measure-performance.mjs` after a production build. The script starts an Astro preview server behind a local HTTP proxy, opens `/reference/` and `/playground/` in fresh Chromium contexts, measures the first Pagefind search for `型`, runs the Playground twice, measures cancellation UI response, and renders a project with two 15.9 MiB binary files. The proxy serves the fingerprinted WASM from the production build with `Content-Type: application/wasm` and `Content-Encoding: gzip` on the same origin, so Chromium uses `WebAssembly.instantiateStreaming` with HTTP decompression. The worker bundle is instrumented in the test context to time that call and inspect the exported Go WASM memory. The script also records the maximum Event Timing duration among its synthetic page interactions.
 
-Baseline captured on 2026-10-22 from a local Apple Silicon macOS machine with Node.js 26.8.2 and Chromium 156.0.8078.4. Asset totals use response body bytes and exclude HTTP headers. The Playground downloads the fingerprinted 19,598,887-byte gzip WASM asset only when the user runs MCL. Timings are single-run observations affected by machine load and browser state; they are diagnostic values, not acceptance thresholds.
+Baseline captured on 2026-10-22 from a local Apple Silicon macOS machine with Node.js 26.8.2 and Chromium 156.0.8078.4. Asset totals use response body bytes and exclude HTTP headers. The Playground downloads the fingerprinted 19,598,887-byte gzip WASM asset only when the user runs MCL. The values in this table are single-run observations affected by machine load and browser state; the CI thresholds below use separate, broader limits.
 
 | Page           | Initial HTML | Initial JavaScript | Initial CSS | Initial other | Navigation load | FCP proxy | LCP proxy | CLS proxy | Max interaction proxy |
 | -------------- | -----------: | -----------------: | ----------: | ------------: | --------------: | --------: | --------: | --------: | --------------------: |
@@ -33,7 +33,10 @@ The same workflows also enforce broad runtime ceilings. They use one Chromium ru
 | 31.8 MiB project import | 2 s |
 | 31.8 MiB project evaluation | 10 s |
 | WASM linear-memory capacity after the large-project render | 256 MiB |
+| Reference page LCP proxy | 2.5 s |
+| Reference page CLS proxy | 0.1 |
+| Reference page maximum interaction proxy | 200 ms |
 
-The performance workflow records measurements, limits, and pass/fail results in its summary. Website CI runs the same check after browser E2E tests. Update the limits and this documentation when an intentional change establishes a new baseline. FCP, LCP, CLS, and the synthetic interaction proxy remain diagnostic because this lab run does not represent field Web Vitals.
+The performance workflow records measurements, limits, and pass/fail results in its summary and retains the JSON report as a 30-day artifact. Website CI runs the same check after browser E2E tests. Update the limits and this documentation when an intentional change establishes a new baseline. FCP and the Playground page's LCP, CLS, and interaction measurements remain diagnostic. The reference page LCP, CLS, and synthetic interaction limits catch large lab regressions; the interaction value is not field INP and does not represent the 98th percentile across real visits.
 
 The results do not measure a production CDN, real user devices, or a field Web Vitals session.

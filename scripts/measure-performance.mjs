@@ -27,11 +27,14 @@ const runtimeBudgetNames = [
   "largeProjectImportMs",
   "largeProjectEvaluationMs",
   "largeProjectWasmMemoryBytes",
+  "referenceLargestContentfulPaintMs",
+  "referenceCumulativeLayoutShift",
+  "referenceInteractionLatencyProxyMs",
 ];
 if (
   Object.keys(assetBudgets).length !== assetBudgetNames.length + runtimeBudgetNames.length ||
   [...assetBudgetNames, ...runtimeBudgetNames].some(
-    (name) => !Number.isSafeInteger(assetBudgets[name]) || assetBudgets[name] <= 0,
+    (name) => !Number.isFinite(assetBudgets[name]) || assetBudgets[name] <= 0,
   )
 )
   throw new Error("The performance budget configuration is invalid.");
@@ -470,6 +473,11 @@ try {
     largeProjectImportMs: largeProject.projectImportMs,
     largeProjectEvaluationMs: largeProject.evaluationMs,
     largeProjectWasmMemoryBytes: largeProject.wasmLinearMemoryBytesAfterLargeProject,
+    referenceLargestContentfulPaintMs:
+      measurements[0].browserTimingProxies.largestContentfulPaintMs,
+    referenceCumulativeLayoutShift: measurements[0].browserTimingProxies.cumulativeLayoutShift,
+    referenceInteractionLatencyProxyMs:
+      measurements[0].interactionLatencyProxy.maxObservedInteractionMs,
   };
   const findViolations = (names, measurementsByName) =>
     names.flatMap((name) => {

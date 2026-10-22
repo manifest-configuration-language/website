@@ -6,11 +6,6 @@
 node_modules
 src/playground/runtime
 src/playground/mcl.tmLanguage.json
-e2e
-playwright-report
-test-results
-coverage
-playwright.config.ts
 README.md
 public/mcl.wasm.gz
 public/wasm_exec.js

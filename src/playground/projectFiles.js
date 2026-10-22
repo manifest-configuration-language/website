@@ -1,4 +1,4 @@
-import { projectLimits } from "./projectValidation.js";
+import { isSafeProjectPath, projectLimits } from "./projectValidation.js";
 
 const textExtensions = new Set([
   "mcl",
@@ -18,13 +18,7 @@ const textExtensions = new Set([
 ]);
 
 function validatePath(path) {
-  if (
-    !path ||
-    path.startsWith("/") ||
-    path.includes("\\") ||
-    path.split("/").some((part) => !part || part === "." || part === "..")
-  )
-    throw new Error(`Invalid project path: ${path}`);
+  if (!isSafeProjectPath(path)) throw new Error(`Invalid project path: ${path}`);
 }
 
 export async function readProject(files) {

@@ -37,3 +37,9 @@ test("enforces the project file count including the entrypoint", () => {
   assert.equal(validateProjectInput("", atLimit), true);
   assert.equal(validateProjectInput("", overLimit), false);
 });
+
+test("rejects project paths rooted on a Windows drive", () => {
+  for (const path of ["C:/manifest.mcl", "c:manifest.mcl"]) {
+    assert.equal(validateProjectInput("", { [path]: { encoding: "utf8", content: "" } }), false);
+  }
+});

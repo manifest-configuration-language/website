@@ -5,6 +5,17 @@ export const projectLimits = {
   projectBytes: 32 * 1024 * 1024,
 };
 
+export function isSafeProjectPath(filePath) {
+  return (
+    typeof filePath === "string" &&
+    filePath.length > 0 &&
+    !/^[a-z]:/i.test(filePath) &&
+    !filePath.startsWith("/") &&
+    !filePath.includes("\\") &&
+    filePath.split("/").every((part) => part && part !== "." && part !== "..")
+  );
+}
+
 function projectFileBytes(file, binary) {
   if (!file) return undefined;
   if (file.encoding === "utf8") {
@@ -34,12 +45,7 @@ export function validateProjectInput(source, files, binaryFiles = {}) {
 
   let totalBytes = new TextEncoder().encode(source).byteLength;
   for (const [filePath, file] of entries) {
-    const safePath =
-      typeof filePath === "string" &&
-      filePath.length > 0 &&
-      !filePath.startsWith("/") &&
-      !filePath.includes("\\") &&
-      filePath.split("/").every((part) => part && part !== "." && part !== "..");
+    const safePath = isSafeProjectPath(filePath);
     const binary = binaryPaths.has(filePath)
       ? Object.hasOwn(binaryFiles, filePath) && binaryFiles[filePath]
       : undefined;

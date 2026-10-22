@@ -115,61 +115,11 @@ jobs:
       - run: mise run install
       - run: pnpm exec playwright install --with-deps chromium
 
-      - name: Run image with a read-only root filesystem
-        run: |
-          set -euo pipefail
-          container_id="$(docker run --detach --read-only --cap-drop=ALL --security-opt=no-new-privileges --user 101:101 --tmpfs /tmp:rw,noexec,nosuid,size=16m --publish 127.0.0.1:8080:8080 mcl-website:ci)"
-          trap 'docker rm --force "$container_id" >/dev/null' EXIT
-
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error --dump-header /tmp/mcl-website.headers --output /tmp/mcl-website.html http://127.0.0.1:8080/; then
-              break
-            fi
-            if [ "$attempt" -eq 30 ]; then
-              docker logs "$container_id"
-              exit 1
-            fi
-            sleep 1
-          done
-
-          grep -qi '^HTTP/[^ ]* 200' /tmp/mcl-website.headers
-          grep -qi '<title>MCL' /tmp/mcl-website.html
-          grep -qi "^Content-Security-Policy:.*default-src 'self'.*frame-ancestors 'none'" /tmp/mcl-website.headers
-          grep -qi "^Content-Security-Policy:.*form-action 'self'" /tmp/mcl-website.headers
-          grep -qi '^Cross-Origin-Resource-Policy: same-origin' /tmp/mcl-website.headers
-          grep -qi '^Referrer-Policy: no-referrer' /tmp/mcl-website.headers
-          grep -qi '^X-Content-Type-Options: nosniff' /tmp/mcl-website.headers
-          grep -qi '^Permissions-Policy: camera=(), microphone=(), geolocation=()' /tmp/mcl-website.headers
-
-          curl --fail --silent --show-error --header 'Accept-Encoding: gzip' --dump-header /tmp/mcl-website-gzip.headers --output /tmp/mcl-website.html.gz http://127.0.0.1:8080/
-          grep -qi '^HTTP/[^ ]* 200' /tmp/mcl-website-gzip.headers
-          grep -qi '^Content-Encoding: *gzip' /tmp/mcl-website-gzip.headers
-          grep -qi '^Vary:.*Accept-Encoding' /tmp/mcl-website-gzip.headers
-          gzip -t /tmp/mcl-website.html.gz
-          gzip -dc /tmp/mcl-website.html.gz > /tmp/mcl-website-gzip.html
-          cmp /tmp/mcl-website.html /tmp/mcl-website-gzip.html
-
-          js_url="$(grep -oE '/_astro/[^" ]+\.js' /tmp/mcl-website.html | sed -n '1p')"
-          [ -n "$js_url" ]
-          curl --fail --silent --show-error --header 'Accept-Encoding: gzip' --dump-header /tmp/mcl-website-js-gzip.headers --output /tmp/mcl-website.js.gz "http://127.0.0.1:8080${js_url}"
-          grep -qi '^Content-Type: *application/javascript' /tmp/mcl-website-js-gzip.headers
-          grep -qi '^Content-Encoding: *gzip' /tmp/mcl-website-js-gzip.headers
-          gzip -t /tmp/mcl-website.js.gz
-
-          wasm_url="$(docker exec "$container_id" sh -c "grep -RhoE '/_astro/mcl\\.wasm-[A-Za-z0-9_-]{8,}\\.gz' /usr/share/nginx/html/_astro/*.js | sed -n '1p' | sed 's/\\.gz$/.wasm/'")"
-          [ -n "$wasm_url" ]
-          curl --fail --silent --show-error --header 'Accept-Encoding: gzip' --dump-header /tmp/mcl-website-wasm.headers --output /tmp/mcl-website-wasm.gz "http://127.0.0.1:8080${wasm_url}"
-          grep -qi '^HTTP/[^ ]* 200' /tmp/mcl-website-wasm.headers
-          grep -qi '^Content-Type: *application/wasm' /tmp/mcl-website-wasm.headers
-          grep -qi '^Content-Encoding: *gzip' /tmp/mcl-website-wasm.headers
-          grep -qi '^Vary:.*Accept-Encoding' /tmp/mcl-website-wasm.headers
-          grep -qi '^Cache-Control:.*max-age=31536000.*immutable' /tmp/mcl-website-wasm.headers
-          gzip -t /tmp/mcl-website-wasm.gz
-          gzip -dc /tmp/mcl-website-wasm.gz > /tmp/mcl-website.wasm
-          wasm_magic="$(od -An -tx1 -N4 /tmp/mcl-website.wasm | tr -d ' \n')"
-          [ "$wasm_magic" = 0061736d ]
-
-          PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 pnpm exec playwright test e2e/production-container.spec.ts --project=chromium
+      - name: Test the production container in Chromium
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4322
+          PRODUCTION_CONTAINER_IMAGE: mcl-website:ci
+        run: pnpm exec playwright test e2e/production-container.spec.ts --project=chromium
 
   publish:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')

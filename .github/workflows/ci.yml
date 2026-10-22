@@ -111,7 +111,7 @@ jobs:
       - name: Run image with a read-only root filesystem
         run: |
           set -euo pipefail
-          container_id="$(docker run --detach --read-only --user 101:101 --tmpfs /tmp:rw,noexec,nosuid,size=16m --publish 127.0.0.1:8080:8080 mcl-website:ci)"
+          container_id="$(docker run --detach --read-only --cap-drop=ALL --security-opt=no-new-privileges --user 101:101 --tmpfs /tmp:rw,noexec,nosuid,size=16m --publish 127.0.0.1:8080:8080 mcl-website:ci)"
           trap 'docker rm --force "$container_id" >/dev/null' EXIT
 
           for attempt in $(seq 1 30); do
@@ -213,14 +213,15 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           cache-to: type=gha,scope=mcl-website,mode=max
 
-      - name: Report main image reference
-        if: github.ref == 'refs/heads/main'
+      - name: Record published image reference
         env:
           IMAGE_DIGEST: ${{ steps.push.outputs.digest }}
+          IMAGE_TAGS: ${{ steps.metadata.outputs.tags }}
         run: |
-          image_ref="${IMAGE_NAME}:main@${IMAGE_DIGEST}"
-          echo "Published image: ${image_ref}"
-          printf 'Published image: %s\n' "$image_ref" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Published image: %s@%s\nSource ref: %s\nTags:\n%s\n' \
+            "$IMAGE_NAME" "$IMAGE_DIGEST" "$GITHUB_REF" "$IMAGE_TAGS" \
+            >> "$GITHUB_STEP_SUMMARY"
+          printf 'Published image: %s@%s\n' "$IMAGE_NAME" "$IMAGE_DIGEST"
 
       - name: Attest image provenance
         if: github.repository_visibility == 'public'

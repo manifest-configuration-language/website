@@ -2,8 +2,10 @@
 .github
 .DS_Store
 .build
+.astro
 node_modules
 src/playground/runtime
+src/playground/mcl.tmLanguage.json
 e2e
 playwright-report
 test-results

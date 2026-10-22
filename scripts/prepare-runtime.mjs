@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
@@ -10,55 +11,101 @@ const buildDirectory = path.join(root, ".build/mcl-core");
 const archivePath = path.join(root, ".build/mcl-core.tar.gz");
 const runtimeDirectory = path.join(root, ".build/runtime");
 const sourceRuntimeDirectory = path.join(root, "src/playground/runtime");
-const stampPath = path.join(root, ".build/mcl-runtime-ref");
+const stampPath = path.join(root, ".build/mcl-runtime-stamp.json");
+const buildFlags = ["-trimpath", "-ldflags=-s -w"];
+const gzipFlags = ["-9", "-n", "-f"];
+const buildTarget = "./cmd/mcl-wasm";
+const wasmEnvironment = {
+  GOOS: "js",
+  GOARCH: "wasm",
+  CGO_ENABLED: "0",
+};
 
+const [goVersion, goRoot, goBuildSettings, gzipVersion, scriptSource] = await Promise.all([
+  capture("go", ["version"]),
+  capture("go", ["env", "GOROOT"]),
+  capture("go", ["env", "GOFLAGS", "GOEXPERIMENT", "GOTOOLCHAIN"]),
+  capture("gzip", ["--version"]),
+  readFile(import.meta.filename),
+]);
+const wasmExecPath = path.join(goRoot.trim(), "lib/wasm/wasm_exec.js");
+const wasmExecHash = hash(await readFile(wasmExecPath));
+const fingerprint = hash(
+  JSON.stringify({
+    repository: config.repository,
+    ref: config.ref,
+    goVersion: goVersion.trim(),
+    goBuildSettings: goBuildSettings.trim().split("\n"),
+    wasmEnvironment,
+    buildFlags,
+    buildTarget,
+    gzipVersion: gzipVersion.trim(),
+    gzipFlags,
+    wasmExecHash,
+    scriptHash: hash(scriptSource),
+  }),
+);
+
+let cacheHit = false;
 try {
-  const [currentRef] = await Promise.all([
-    readFile(stampPath, "utf8"),
-    access(path.join(sourceRuntimeDirectory, "mcl.wasm.gz")),
-    access(path.join(sourceRuntimeDirectory, "wasm_exec.js")),
-  ]);
-  if (currentRef === config.ref) process.exit(0);
+  const stamp = JSON.parse(await readFile(stampPath, "utf8"));
+  const outputs = await outputHashes();
+  if (
+    stamp.fingerprint === fingerprint &&
+    JSON.stringify(stamp.outputs) === JSON.stringify(outputs)
+  ) {
+    cacheHit = true;
+  }
 } catch {}
 
-await mkdir(path.dirname(archivePath), { recursive: true });
-const response = await fetch(
-  `https://github.com/${config.repository}/archive/${config.ref}.tar.gz`,
-  { headers: { "User-Agent": "mcl-website-build" } },
-);
-if (!response.ok) throw new Error(`Unable to download MCL source: HTTP ${response.status}`);
-await pipeline(response.body, createWriteStream(archivePath));
-await rm(buildDirectory, { recursive: true, force: true });
-await mkdir(buildDirectory, { recursive: true });
-await run("tar", ["-xzf", archivePath, "--strip-components=1", "-C", buildDirectory]);
-await mkdir(runtimeDirectory, { recursive: true });
-await run(
-  "go",
-  [
-    "build",
-    "-trimpath",
-    "-ldflags=-s -w",
-    "-o",
-    path.join(runtimeDirectory, "mcl.wasm"),
-    "./cmd/mcl-wasm",
-  ],
-  {
-    cwd: buildDirectory,
-    env: { ...process.env, GOOS: "js", GOARCH: "wasm", CGO_ENABLED: "0" },
-  },
-);
-await run("gzip", ["-9", "-n", "-f", path.join(runtimeDirectory, "mcl.wasm")]);
-const goRoot = await capture("go", ["env", "GOROOT"]);
-await run("cp", [
-  path.join(goRoot.trim(), "lib/wasm/wasm_exec.js"),
-  path.join(runtimeDirectory, "wasm_exec.js"),
-]);
-await rm(sourceRuntimeDirectory, { recursive: true, force: true });
-await mkdir(sourceRuntimeDirectory, { recursive: true });
-await cp(runtimeDirectory, sourceRuntimeDirectory, { recursive: true });
-await rm(path.join(root, "public/mcl.wasm.gz"), { force: true });
-await rm(path.join(root, "public/wasm_exec.js"), { force: true });
-await writeFile(stampPath, config.ref);
+if (cacheHit) {
+  console.log("MCL runtime fingerprint matches; skipping the build.");
+} else {
+  await rebuildRuntime();
+}
+
+async function rebuildRuntime() {
+  await mkdir(path.dirname(archivePath), { recursive: true });
+  const response = await fetch(
+    `https://github.com/${config.repository}/archive/${config.ref}.tar.gz`,
+    { headers: { "User-Agent": "mcl-website-build" } },
+  );
+  if (!response.ok) throw new Error(`Unable to download MCL source: HTTP ${response.status}`);
+  await pipeline(response.body, createWriteStream(archivePath));
+  await rm(buildDirectory, { recursive: true, force: true });
+  await mkdir(buildDirectory, { recursive: true });
+  await run("tar", ["-xzf", archivePath, "--strip-components=1", "-C", buildDirectory]);
+  await mkdir(runtimeDirectory, { recursive: true });
+  await run(
+    "go",
+    ["build", ...buildFlags, "-o", path.join(runtimeDirectory, "mcl.wasm"), buildTarget],
+    {
+      cwd: buildDirectory,
+      env: { ...process.env, ...wasmEnvironment },
+    },
+  );
+  await run("gzip", [...gzipFlags, path.join(runtimeDirectory, "mcl.wasm")]);
+  await cp(wasmExecPath, path.join(runtimeDirectory, "wasm_exec.js"));
+  await rm(sourceRuntimeDirectory, { recursive: true, force: true });
+  await mkdir(sourceRuntimeDirectory, { recursive: true });
+  await cp(runtimeDirectory, sourceRuntimeDirectory, { recursive: true });
+  await rm(path.join(root, "public/mcl.wasm.gz"), { force: true });
+  await rm(path.join(root, "public/wasm_exec.js"), { force: true });
+  await writeFile(stampPath, `${JSON.stringify({ fingerprint, outputs: await outputHashes() })}\n`);
+}
+
+async function outputHashes() {
+  const [wasm, wasmExec] = await Promise.all([
+    readFile(path.join(sourceRuntimeDirectory, "mcl.wasm.gz")),
+    readFile(path.join(sourceRuntimeDirectory, "wasm_exec.js")),
+  ]);
+
+  return { wasm: hash(wasm), wasmExec: hash(wasmExec) };
+}
+
+function hash(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {

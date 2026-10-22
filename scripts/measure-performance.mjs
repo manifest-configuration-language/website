@@ -273,6 +273,7 @@ async function measurePage(
   })();`);
   const navigationStartedAt = performance.now();
   await page.goto(`${origin}${pathname}`, { waitUntil: "load" });
+  await page.waitForLoadState("networkidle");
   await Promise.all(responseTasks);
   const loadMs = performance.now() - navigationStartedAt;
   await page.waitForTimeout(200);

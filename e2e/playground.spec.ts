@@ -18,6 +18,8 @@ const crossBrowserPlaygroundScenarios = new Set([
   "shows a source diagnostic for an invalid program",
   "rejects a project file larger than the per-file limit",
   "cancels a run during worker startup and allows the next run",
+  "editing source cancels an active run and discards its result",
+  "retries after the WebAssembly worker reports an initialization failure",
 ]);
 
 function editor(page: import("@playwright/test").Page) {
@@ -338,6 +340,92 @@ test("cancels a run during worker startup and allows the next run", async ({ pag
 
   await page.getByRole("button", { name: "実行" }).click();
   await expectRendered(page, 'kind: "ConfigMap"');
+  expect(wasmRequests).toBe(2);
+});
+
+test("retries after the WebAssembly worker reports an initialization failure", async ({ page }) => {
+  let wasmRequests = 0;
+  await page.route("**/mcl.wasm-*.wasm", async (route) => {
+    wasmRequests += 1;
+    if (wasmRequests === 1) {
+      await route.fulfill({ status: 503, body: "Unavailable" });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.evaluate(() => {
+    const state = { terminated: 0 };
+    Object.defineProperty(window, "__playgroundWorkerState", { value: state });
+    const originalTerminate = Worker.prototype.terminate;
+    Worker.prototype.terminate = function () {
+      state.terminated += 1;
+      return originalTerminate.call(this);
+    };
+  });
+
+  await page.getByRole("button", { name: "実行" }).click();
+  await expect.poll(() => wasmRequests).toBe(1);
+  await expect(page.getByRole("alert")).toContainText(
+    "Unable to download the MCL WebAssembly runtime.",
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __playgroundWorkerState?: { terminated: number } })
+            .__playgroundWorkerState?.terminated ?? 0,
+      ),
+    )
+    .toBe(1);
+
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'kind: "ConfigMap"');
+  expect(wasmRequests).toBe(2);
+});
+
+test("editing source cancels an active run and discards its result", async ({ page }) => {
+  let releaseFirstRequest: (() => void) | undefined;
+  let wasmRequests = 0;
+  await page.route("**/mcl.wasm-*.wasm", async (route) => {
+    wasmRequests += 1;
+    if (wasmRequests === 1) {
+      await new Promise<void>((resolve) => {
+        releaseFirstRequest = resolve;
+      });
+      await route.fallback().catch(() => {});
+      return;
+    }
+    await route.fallback();
+  });
+  await page.evaluate(() => {
+    const state = { terminated: 0 };
+    Object.defineProperty(window, "__playgroundWorkerState", { value: state });
+    const originalTerminate = Worker.prototype.terminate;
+    Worker.prototype.terminate = function () {
+      state.terminated += 1;
+      return originalTerminate.call(this);
+    };
+  });
+
+  await page.getByRole("button", { name: "実行" }).click();
+  await expect.poll(() => wasmRequests).toBe(1);
+  await editor(page).fill('emit "new source"\n');
+  releaseFirstRequest?.();
+
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as Window & { __playgroundWorkerState?: { terminated: number } })
+            .__playgroundWorkerState?.terminated ?? 0,
+      ),
+    )
+    .toBe(1);
+  await expect(page.getByLabel("レンダリング結果")).toHaveCount(0);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, '"new source"');
   expect(wasmRequests).toBe(2);
 });
 

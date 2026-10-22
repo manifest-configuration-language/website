@@ -14,10 +14,15 @@ const kustomizeProjectDirectory = fileURLToPath(
 const crossBrowserPlaygroundScenarios = new Set([
   "formats source in the editor",
   "loads a project folder and resolves its relative MCL import",
+  "rejects duplicate project paths and keeps the loaded project",
+  "renders a local Helm Chart from the selected project folder",
+  "builds a local Kustomize overlay from the selected project folder",
   "shows the project loading state while files are being read",
   "shows a source diagnostic for an invalid program",
+  "rejects a project import that escapes the project root",
   "rejects a project file larger than the per-file limit",
   "cancels a run during worker startup and allows the next run",
+  "terminates a timed-out worker and allows another run",
   "denies uncached external manifest fetches",
   "editing source cancels an active run and discards its result",
   "retries after the WebAssembly worker reports an initialization failure",
@@ -99,20 +104,36 @@ test("loads a project folder and resolves its relative MCL import", async ({ pag
 });
 
 test("shows the project loading state while files are being read", async ({ page }) => {
+  let markReadStarted!: () => void;
+  const readStarted = new Promise<void>((resolve) => {
+    markReadStarted = resolve;
+  });
+  let releaseRead!: () => void;
+  const readGate = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
+  await page.exposeFunction("__waitForProjectRead", async () => {
+    markReadStarted();
+    await readGate;
+  });
   await page.evaluate(() => {
     const readText = Blob.prototype.text;
     Blob.prototype.text = async function () {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await (
+        window as Window & { __waitForProjectRead: () => Promise<void> }
+      ).__waitForProjectRead();
       return readText.call(this);
     };
   });
 
   await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(projectDirectory);
+  await readStarted;
 
   await expect(page.getByRole("status")).toHaveText("読み込み中");
   await expect(page.locator(".playground")).toHaveAttribute("aria-busy", "true");
   await expect(page.getByRole("button", { name: "実行" })).toBeDisabled();
 
+  releaseRead();
   await expect(page.getByRole("status")).toHaveCount(0);
   await expect(page.locator(".playground")).toHaveAttribute("aria-busy", "false");
   await expect(editor(page)).toContainText('import "modules/resource.mcl"');

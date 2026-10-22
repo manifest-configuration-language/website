@@ -120,7 +120,7 @@ test("shows the project loading state while files are being read", async ({ page
     const readText = Blob.prototype.text;
     Blob.prototype.text = async function () {
       await (
-        window as Window & { __waitForProjectRead: () => Promise<void> }
+        window as unknown as Window & { __waitForProjectRead: () => Promise<void> }
       ).__waitForProjectRead();
       return readText.call(this);
     };

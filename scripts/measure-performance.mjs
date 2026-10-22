@@ -180,8 +180,7 @@ async function instrumentWasmWorker(page) {
       construct(target, argumentsList) {
         const [scriptURL, ...workerOptions] = argumentsList;
         const workerURL = new URL(scriptURL, window.location.href);
-        if (workerURL.pathname.includes("playground.worker-"))
-          workerURL.searchParams.set("__mcl_test_performance", "1");
+        workerURL.searchParams.set("__mcl_test_performance", "1");
         return Reflect.construct(target, [workerURL, ...workerOptions]);
       },
     });
@@ -189,7 +188,9 @@ async function instrumentWasmWorker(page) {
 }
 
 async function wasmWorkerMetrics(page) {
-  const worker = page.workers().find((candidate) => candidate.url().includes("playground.worker-"));
+  const worker = page
+    .workers()
+    .find((candidate) => new URL(candidate.url()).searchParams.has("__mcl_test_performance"));
   if (!worker) return null;
   return worker.evaluate(() => ({
     wasmStreamingInstantiateMs: Number.isFinite(

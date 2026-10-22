@@ -3,6 +3,14 @@
   "extends": ["local>walnuts1018/renovate-config"],
   "packageRules": [
     {
+      "description": "Update the MCL browser and language packages together",
+      "matchPackageNames": [
+        "@manifest-configuration-language/browser",
+        "@manifest-configuration-language/language"
+      ],
+      "groupName": "MCL JavaScript packages"
+    },
+    {
       "description": "Pin digests for Dockerfile base images",
       "matchDatasources": ["docker"],
       "matchManagers": ["dockerfile"],

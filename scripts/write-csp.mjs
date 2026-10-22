@@ -3,6 +3,8 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "parse5";
 
+const maxCspDirectiveBytes = 4 * 1024;
+
 async function htmlFiles(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -48,4 +50,16 @@ const template = await readFile("security-headers.conf", "utf8");
 const placeholder = "{{SCRIPT_HASHES}}";
 if (template.split(placeholder).length !== 2)
   throw new Error("CSP template must contain exactly one inline script hash placeholder.");
-await writeFile(outputPath, template.replace("{{SCRIPT_HASHES}}", [...hashes].join(" ")));
+const output = template.replace("{{SCRIPT_HASHES}}", [...hashes].join(" "));
+const cspDirective = output
+  .split("\n")
+  .find((line) => line.startsWith("add_header Content-Security-Policy "));
+if (!cspDirective)
+  throw new Error("CSP template must contain a Content-Security-Policy directive.");
+const directiveBytes = Buffer.byteLength(cspDirective);
+if (directiveBytes > maxCspDirectiveBytes) {
+  throw new Error(
+    `Generated CSP directive is ${directiveBytes} bytes; the ${maxCspDirectiveBytes}-byte budget was exceeded.`,
+  );
+}
+await writeFile(outputPath, output);

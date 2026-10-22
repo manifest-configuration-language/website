@@ -21,6 +21,7 @@ const crossBrowserPlaygroundScenarios = new Set([
   "shows a source diagnostic for an invalid program",
   "rejects a project import that escapes the project root",
   "rejects a project file larger than the per-file limit",
+  "rejects a project larger than the total size limit and keeps the loaded project",
   "cancels a run during worker startup and allows the next run",
   "terminates a timed-out worker and allows another run",
   "denies uncached external manifest fetches",
@@ -253,10 +254,7 @@ test("rejects a project file larger than the per-file limit", async ({ page }) =
 
 test("rejects a project larger than the total size limit and keeps the loaded project", async ({
   page,
-  browserName,
 }) => {
-  test.skip(browserName !== "chromium");
-
   await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(projectDirectory);
   await page.getByRole("button", { name: "実行" }).click();
   await expectRendered(page, 'name: "imported"', 'origin: "project folder"');

@@ -30,6 +30,7 @@ test("generated CSP keeps its restrictive directives and source allowlist", () =
       "base-uri",
       "connect-src",
       "default-src",
+      "form-action",
       "font-src",
       "frame-ancestors",
       "img-src",
@@ -40,6 +41,7 @@ test("generated CSP keeps its restrictive directives and source allowlist", () =
     ].sort(),
   );
   expect(cspDirectives.get("default-src")).toEqual(["'self'"]);
+  expect(cspDirectives.get("form-action")).toEqual(["'self'"]);
   expect(cspDirectives.get("object-src")).toEqual(["'none'"]);
   expect(cspDirectives.get("base-uri")).toEqual(["'self'"]);
   expect(cspDirectives.get("frame-ancestors")).toEqual(["'none'"]);

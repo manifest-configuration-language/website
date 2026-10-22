@@ -128,6 +128,7 @@ jobs:
           grep -qi '^HTTP/[^ ]* 200' /tmp/mcl-website.headers
           grep -qi '<title>MCL' /tmp/mcl-website.html
           grep -qi "^Content-Security-Policy:.*default-src 'self'.*frame-ancestors 'none'" /tmp/mcl-website.headers
+          grep -qi "^Content-Security-Policy:.*form-action 'self'" /tmp/mcl-website.headers
           grep -qi '^Cross-Origin-Resource-Policy: same-origin' /tmp/mcl-website.headers
           grep -qi '^Referrer-Policy: no-referrer' /tmp/mcl-website.headers
           grep -qi '^X-Content-Type-Options: nosniff' /tmp/mcl-website.headers

@@ -9,10 +9,11 @@ export async function startWasmAssetServer() {
     /^mcl\.wasm-[A-Za-z0-9_-]{8,}\.gz$/.test(name),
   );
   if (!assetName) throw new Error("The fingerprinted MCL WebAssembly asset is missing.");
+  const requestName = assetName.replace(/\.gz$/, ".wasm");
   const bytes = await readFile(path.join(assetDirectory, assetName));
   const server = createServer((request, response) => {
     const requestedAsset = new URL(request.url ?? "/", "http://localhost").pathname.slice(1);
-    if (requestedAsset !== assetName) {
+    if (requestedAsset !== requestName) {
       response.writeHead(404).end();
       return;
     }
@@ -23,6 +24,7 @@ export async function startWasmAssetServer() {
       "content-encoding": "gzip",
       "content-length": String(bytes.byteLength),
       "content-type": "application/wasm",
+      vary: "Accept-Encoding",
     });
     response.end(bytes);
   });
@@ -36,6 +38,7 @@ export async function startWasmAssetServer() {
 
   return {
     assetName,
+    requestName,
     byteLength: bytes.byteLength,
     url: `http://127.0.0.1:${address.port}`,
     close: () =>

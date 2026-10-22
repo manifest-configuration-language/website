@@ -279,7 +279,7 @@ test("denies uncached external manifest fetches", async ({ page }) => {
 test("cancels a run during worker startup and allows the next run", async ({ page }) => {
   let releaseFirstRequest: (() => void) | undefined;
   let wasmRequests = 0;
-  await page.route("**/mcl.wasm-*.gz", async (route) => {
+  await page.route("**/mcl.wasm-*.wasm", async (route) => {
     wasmRequests += 1;
     if (wasmRequests === 1) {
       await new Promise<void>((resolve) => {
@@ -363,7 +363,7 @@ test("terminates a timed-out worker and allows another run", async ({ page }) =>
 test("times out a stalled worker startup and allows another run", async ({ page }) => {
   let releaseFirstRequest: (() => void) | undefined;
   let wasmRequests = 0;
-  await page.route("**/mcl.wasm-*.gz", async (route) => {
+  await page.route("**/mcl.wasm-*.wasm", async (route) => {
     wasmRequests += 1;
     if (wasmRequests === 1) {
       await new Promise<void>((resolve) => {

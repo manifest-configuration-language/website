@@ -148,12 +148,13 @@ jobs:
           grep -qi '^Content-Encoding: *gzip' /tmp/mcl-website-js-gzip.headers
           gzip -t /tmp/mcl-website.js.gz
 
-          wasm_url="$(docker exec "$container_id" sh -c "grep -RhoE '/_astro/mcl\\.wasm-[A-Za-z0-9_-]{8,}\\.gz' /usr/share/nginx/html/_astro/*.js | sed -n '1p'")"
+          wasm_url="$(docker exec "$container_id" sh -c "grep -RhoE '/_astro/mcl\\.wasm-[A-Za-z0-9_-]{8,}\\.gz' /usr/share/nginx/html/_astro/*.js | sed -n '1p' | sed 's/\\.gz$/.wasm/'")"
           [ -n "$wasm_url" ]
-          curl --fail --silent --show-error --dump-header /tmp/mcl-website-wasm.headers --output /tmp/mcl-website-wasm.gz "http://127.0.0.1:8080${wasm_url}"
+          curl --fail --silent --show-error --header 'Accept-Encoding: gzip' --dump-header /tmp/mcl-website-wasm.headers --output /tmp/mcl-website-wasm.gz "http://127.0.0.1:8080${wasm_url}"
           grep -qi '^HTTP/[^ ]* 200' /tmp/mcl-website-wasm.headers
           grep -qi '^Content-Type: *application/wasm' /tmp/mcl-website-wasm.headers
           grep -qi '^Content-Encoding: *gzip' /tmp/mcl-website-wasm.headers
+          grep -qi '^Vary:.*Accept-Encoding' /tmp/mcl-website-wasm.headers
           grep -qi '^Cache-Control:.*max-age=31536000.*immutable' /tmp/mcl-website-wasm.headers
           gzip -t /tmp/mcl-website-wasm.gz
           gzip -dc /tmp/mcl-website-wasm.gz > /tmp/mcl-website.wasm

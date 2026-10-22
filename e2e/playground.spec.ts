@@ -18,6 +18,7 @@ const crossBrowserPlaygroundScenarios = new Set([
   "shows a source diagnostic for an invalid program",
   "rejects a project file larger than the per-file limit",
   "cancels a run during worker startup and allows the next run",
+  "denies uncached external manifest fetches",
   "editing source cancels an active run and discards its result",
   "retries after the WebAssembly worker reports an initialization failure",
 ]);
@@ -295,7 +296,11 @@ test("denies uncached external manifest fetches", async ({ page }) => {
   );
   await page.getByRole("button", { name: "実行" }).click();
 
-  await expect(page.getByRole("button", { name: /MCL-.*(manifest|lock|cache)/i })).toBeVisible();
+  const networkError = page.getByRole("alert");
+  await expect(networkError).toContainText("MCL-WASM-NETWORK");
+  await expect(networkError).toContainText(
+    "remote dependency access is unavailable in this browser runtime; include dependencies in the project files",
+  );
   expect(externalRequests).toEqual([]);
 });
 

@@ -13,7 +13,7 @@ mise run dev
 
 `@manifest-configuration-language/browser`の固定バージョンがPlaygroundのWASMと対応する`wasm_exec.js`を供給します。`@manifest-configuration-language/language`はTextMate GrammarとCodeMirror LanguageSupportを提供します。依存バージョンは`package.json`と`pnpm-lock.yaml`で管理し、Renovateのnpm更新で追従します。ビルドではフィンガープリント付きのCSS、JavaScript、WASMをBrotli Quality 9とgzip Level 9で事前圧縮し、元ファイルも残します。
 
-ドキュメント例の検証では、`@manifest-configuration-language/browser`と同じバージョンのMCL CLIリリースアーカイブをSHA-256で検証して`.build/bin/`へ取得します。WebsiteのビルドではMCLのGoソースを取得せず、Goコンパイラも使いません。
+WebsiteのビルドではMCLのGoソースを取得せず、Goコンパイラも使いません。
 
 ## Docker
 

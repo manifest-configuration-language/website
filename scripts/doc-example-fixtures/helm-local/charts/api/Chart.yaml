@@ -1,5 +1,0 @@
-apiVersion: v2
-name: api
-description: Documentation verifier fixture
-type: application
-version: 0.1.0

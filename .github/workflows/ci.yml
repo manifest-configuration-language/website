@@ -151,7 +151,6 @@ jobs:
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=tag
-            type=sha,format=long
 
       - name: Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'

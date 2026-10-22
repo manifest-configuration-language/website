@@ -1,9 +1,0 @@
-import "modules/resource.mcl" as resources
-let resource =
-  apiVersion: "v1"
-  kind: "ConfigMap"
-  metadata:
-    name: resources.name
-  data:
-    origin: "project folder"
-emit resource

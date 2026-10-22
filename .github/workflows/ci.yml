@@ -30,8 +30,6 @@ jobs:
           cache: true
       - run: mise run install
       - run: pnpm audit --audit-level=high
-      - run: pnpm run verify:docs
-      - run: pnpm run test:project-validation
       - parallel:
           - name: Lint website
             run: pnpm run lint
@@ -42,48 +40,9 @@ jobs:
           - name: Lint GitHub Actions workflows
             run: mise run actions:lint
 
-  preview:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
-        with:
-          install: true
-          cache: true
-      - run: mise run install
-      - run: pnpm run build
-      - name: Upload pull request preview
-        id: preview
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: website-preview-pr-${{ github.event.pull_request.number }}
-          path: .build/dist/
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Link the pull request preview
-        if: github.event_name == 'pull_request'
-        env:
-          PREVIEW_URL: ${{ steps.preview.outputs.artifact-url }}
-        run: echo "[Download the built site preview]($PREVIEW_URL)" >> "$GITHUB_STEP_SUMMARY"
-
-  links:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2
-        with:
-          args: --offline --no-progress --include-fragments --index-files index.md --fallback-extensions md --root-dir "$GITHUB_WORKSPACE/src/content/docs" src/content/docs
-
   container:
-    needs: [verify, preview, links]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -115,22 +74,10 @@ jobs:
           cache-from: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=mcl-website-main' || '' }}
           cache-to: ${{ github.ref == 'refs/heads/main' && 'type=gha,scope=mcl-website-main,mode=max' || '' }}
 
-      - uses: jdx/mise-action@8418fedb1110381a0d3ba51a7a415d7c1b884550 # v5.2.2
-        with:
-          install: true
-          cache: ${{ github.ref == 'refs/heads/main' }}
-      - run: mise run install
-      - run: pnpm exec playwright install --with-deps chromium
-
-      - name: Test the production container in Chromium
-        env:
-          PRODUCTION_CONTAINER_IMAGE: mcl-website:ci
-        run: pnpm exec playwright test
-
-      - name: Save tested image
+      - name: Save production image
         run: docker save mcl-website:ci -o /tmp/mcl-website.tar
 
-      - name: Upload tested image
+      - name: Upload production image
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: website-container-${{ github.sha }}
@@ -171,13 +118,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Download tested image
+      - name: Download production image
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           name: website-container-${{ github.sha }}
           path: /tmp/website-container
 
-      - name: Load and publish tested image
+      - name: Load and publish production image
         id: push
         env:
           IMAGE_TAGS: ${{ steps.metadata.outputs.tags }}

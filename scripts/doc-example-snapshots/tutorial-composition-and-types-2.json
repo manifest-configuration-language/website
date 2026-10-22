@@ -1,0 +1,10 @@
+{
+  "render": [
+    {
+      "securityContext": {
+        "allowPrivilegeEscalation": false,
+        "capabilities": {}
+      }
+    }
+  ]
+}

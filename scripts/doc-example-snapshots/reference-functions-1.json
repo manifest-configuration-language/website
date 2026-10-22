@@ -1,0 +1,12 @@
+{
+  "render": [
+    {
+      "name": "api",
+      "image": "example/api:latest"
+    },
+    {
+      "name": "worker",
+      "image": "example/worker:latest"
+    }
+  ]
+}

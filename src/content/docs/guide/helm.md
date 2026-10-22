@@ -6,7 +6,7 @@ sidebar:
 
 `helm.render`はChartを評価してBundleを返します。ローカルChartを使う場合は、Chartのファイルをプロジェクト内に置き、MCLファイルからの相対パスを指定します。
 
-```mcl verify fixture=helm-local expect=0.data.image-tag=1.2.3
+```mcl verify snapshot=guide-helm-1 fixture=helm-local expect=0.data.image-tag=1.2.3
 import "std:helm" as helm
 
 let renderOptions =

@@ -8,7 +8,7 @@ sidebar:
 
 名前付き関数とラムダを使って、値の変換や条件判定を再利用できます。次の例はListから本番用の値だけを選びます。
 
-```mcl verify expect=0.spec.replicas=3,0.metadata.name=catalog
+```mcl verify snapshot=tutorial-functions-and-validation-1 expect=0.spec.replicas=3,0.metadata.name=catalog
 let environments =
   - name: "development"
     replicas: 1

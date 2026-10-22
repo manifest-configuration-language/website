@@ -1,0 +1,14 @@
+{
+  "render": [
+    {
+      "apiVersion": "v1",
+      "data": {
+        "setting": "enabled"
+      },
+      "kind": "ConfigMap",
+      "metadata": {
+        "name": "example"
+      }
+    }
+  ]
+}

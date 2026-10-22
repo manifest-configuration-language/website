@@ -6,7 +6,7 @@ sidebar:
 
 `kustomize.build`はKustomizeディレクトリをビルドし、ManifestをBundleとして返します。ローカルのoverlayまたはbaseを指定する例です。
 
-```mcl verify fixture=kustomize-local expect=0.metadata.name=example
+```mcl verify snapshot=guide-kustomize-1 fixture=kustomize-local expect=0.metadata.name=example
 import "std:kustomize" as kustomize
 
 let resources = kustomize.build(

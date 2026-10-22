@@ -1,0 +1,9 @@
+{
+  "render": [
+    {
+      "key": "APP_MODE",
+      "containsWorker": true,
+      "count": 2
+    }
+  ]
+}

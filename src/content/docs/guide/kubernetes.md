@@ -6,7 +6,7 @@ sidebar:
 
 MCLはKubernetes ResourceをMapとして定義し、`emit`で出力します。複数Resourceを別々のYAML文書として出力するには`emit each`を使います。
 
-```mcl verify expect=0.metadata.name=api
+```mcl verify snapshot=guide-kubernetes-1 expect=0.metadata.name=api
 let appName = "api"
 
 let deployment =

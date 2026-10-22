@@ -1,0 +1,8 @@
+{
+  "render": [
+    {
+      "name": "api",
+      "image": "example.test/api:v1"
+    }
+  ]
+}

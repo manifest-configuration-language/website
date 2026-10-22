@@ -1,0 +1,9 @@
+{
+  "render": [
+    {
+      "name": "catalog",
+      "image": "example.test/catalog:v1",
+      "ports": [8080]
+    }
+  ]
+}

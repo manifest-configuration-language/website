@@ -6,7 +6,7 @@ sidebar:
 
 次の内容を`main.mcl`として保存します。
 
-```mcl verify expect=0.metadata.name=catalog
+```mcl verify snapshot=getting-started-quickstart-1 expect=0.metadata.name=catalog
 let appName = "catalog"
 
 let service =
@@ -40,7 +40,7 @@ mcl render main.mcl
 
 ManifestをListにまとめると、出力順を保ったまま複数の値を定義できます。複数の`emit`も同じように複数のYAML文書を出力します。
 
-```mcl verify expect=0.metadata.name=api,1.metadata.name=worker
+```mcl verify snapshot=getting-started-quickstart-2 expect=0.metadata.name=api,1.metadata.name=worker
 let names =
   - "api"
   - "worker"

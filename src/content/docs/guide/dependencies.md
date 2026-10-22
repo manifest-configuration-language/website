@@ -6,7 +6,7 @@ sidebar:
 
 MCLプロジェクト内で共有する定義は、相対パスのモジュールに分けて`import`します。公開する定義には`export`を付けます。
 
-```mcl verify fixture=modules-container expect=0.name=api
+```mcl verify snapshot=guide-dependencies-1 fixture=modules-container expect=0.name=api
 import "./components/container.mcl" as defaults
 
 let container = defaults.container with:

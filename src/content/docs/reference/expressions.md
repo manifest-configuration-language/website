@@ -21,7 +21,7 @@ let modified = original with:
   config: replace("disabled")
 ```
 
-```mcl verify expect=0.name=api
+```mcl verify snapshot=reference-expressions-1 expect=0.name=api
 let defaults =
   securityContext:
     allowPrivilegeEscalation: false
@@ -50,7 +50,7 @@ let restricted = container without:
 
 `node:`は評価中の同一性を持つMapまたはListを作ります。`std:helm`、`std:kustomize`、`std:manifest`のBundleに含まれるMapまたはListも、それぞれNode同一性を持ちます。AdapterのResourceは`exactlyOne`などで選択し、`with:`で合成するか`ref(node)`で参照できます。YAML出力には同一性を含めません。`ref(node)`はNodeの内容を返し、`ref(node).field`は全`emit`値の確定後に対象Nodeのフィールドを読み取ります。対象Nodeが出力に存在しない場合はエラーにします。`ref(root, child).field`はroot Nodeの内部にあるchild Nodeのフィールドを読み取ります。同じNodeを複数回出力するとエラーになります。`with:`でNodeのMapを合成した場合は同一性を保ちます。`clone(value)`は値を複製し、含まれるすべてのNodeに新しい同一性を割り当てます。複製したNode内の`ref`は複製先のNodeを参照します。
 
-```mcl verify fixture=manifest-load expect=0.metadata.name=catalog
+```mcl verify snapshot=reference-expressions-2 fixture=manifest-load expect=0.metadata.name=catalog
 import "std:manifest" as manifest
 
 let resources = manifest.load("resources.yaml")
@@ -59,7 +59,7 @@ emit resources
 
 `manifest.load`はScalarの`!!null`、`!!bool`、`!!int`、`!!float`、`!!str`、Sequenceの`!!seq`、Mappingの`!!map`だけを受け入れます。その他の明示tagはYAMLの行・列を示すエラーになります。
 
-```mcl verify expect=0.spec.ports.0.name=http,1.targetPort=http
+```mcl verify snapshot=reference-expressions-3 expect=0.spec.ports.0.name=http,1.targetPort=http
 let port = node:
   name: "http"
   containerPort: 8080

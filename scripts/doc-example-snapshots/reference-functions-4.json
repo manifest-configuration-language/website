@@ -1,0 +1,64 @@
+{
+  "render": [],
+  "operation": {
+    ".mcl-manifest.json": {
+      "files": [
+        {
+          "name": "bootstrap.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "name": "before.json",
+          "sha256": "db436c6624217d3ff70465d1c009f73065098787951585d37cd417b2c157bcd0"
+        },
+        {
+          "name": "main.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "name": "after.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "name": "verify.json",
+          "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+        },
+        {
+          "name": "lifecycle.json",
+          "sha256": "96801709a142c50aca115c727477c7546976f27948bf8a84c9a936882b558b46"
+        }
+      ]
+    },
+    "after.json": [],
+    "before.json": [
+      {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+          "name": "migration"
+        }
+      }
+    ],
+    "bootstrap.json": [],
+    "lifecycle.json": {
+      "operation": "create",
+      "artifacts": [
+        {
+          "index": 0,
+          "events": ["before.create", "before.update"],
+          "priority": -10,
+          "cleanup": ["before-next-run", "on-success"],
+          "wait": true,
+          "documents": [
+            {
+              "file": "before.json",
+              "document": 1
+            }
+          ]
+        }
+      ]
+    },
+    "main.json": [],
+    "verify.json": []
+  }
+}

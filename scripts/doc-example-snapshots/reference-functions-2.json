@@ -1,0 +1,8 @@
+{
+  "render": [
+    {
+      "app": "api-web",
+      "app.kubernetes.io/name": "api-web"
+    }
+  ]
+}

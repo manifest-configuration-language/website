@@ -19,7 +19,7 @@ sidebar:
 
 MCLソースはエントリーファイル、import先、文字列からの解析のいずれも1ファイル16 MiBまでです。
 
-```mcl verify expect=0.metadata.name=sample,0.data.MODE=production
+```mcl verify snapshot=reference-syntax-1 expect=0.metadata.name=sample,0.data.MODE=production
 let name = "sample"
 let resource =
   apiVersion: "v1"

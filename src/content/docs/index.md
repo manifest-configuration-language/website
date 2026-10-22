@@ -6,7 +6,7 @@ title: "MCL"
 
 MCLは、YAML Manifestを型付きの値として組み立て、検証するための設定言語です。
 
-```mcl verify expect=0.metadata.name=api
+```mcl verify snapshot=index-1 expect=0.metadata.name=api
 let service =
   apiVersion: "v1"
   kind: "Service"

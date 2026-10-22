@@ -1,0 +1,8 @@
+{
+  "render": [
+    {
+      "distinctPorts": [8080, 9090],
+      "key": "mode"
+    }
+  ]
+}

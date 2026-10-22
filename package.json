@@ -6,11 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build && node scripts/write-csp.mjs .build/dist",
-    "preview": "astro preview",
-    "lint": "oxlint astro.config.mjs scripts src",
-    "format": "oxfmt astro.config.mjs scripts src",
-    "format:check": "oxfmt --check astro.config.mjs scripts src",
-    "typecheck": "astro check"
+    "preview": "astro preview"
   },
   "dependencies": {
     "@codemirror/autocomplete": "6.20.4",
@@ -24,14 +20,11 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@astrojs/check": "0.9.8",
     "@astrojs/react": "7.1.0",
     "@astrojs/starlight": "0.42.6",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "astro": "7.2.10",
-    "oxfmt": "0.74.0",
-    "oxlint": "1.89.0",
     "parse5": "8.0.1",
     "typescript": "6.0.2"
   },

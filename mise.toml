@@ -1,11 +1,6 @@
 [tools]
 node = "24.22.0"
 pnpm = "12.14.0"
-jactionlint = "2.2.0"
-
-[tasks."actions:lint"]
-description = "Lint GitHub Actions workflows"
-run = "jactionlint .github/workflows/*.yml"
 
 [tasks.install]
 run = "pnpm install --frozen-lockfile"
@@ -16,12 +11,3 @@ run = "pnpm run dev"
 
 [tasks.build]
 run = "pnpm run build"
-
-[tasks.lint]
-run = "pnpm run lint"
-
-[tasks.typecheck]
-run = "pnpm run typecheck"
-
-[tasks."format:check"]
-run = "pnpm run format:check"

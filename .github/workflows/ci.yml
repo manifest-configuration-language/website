@@ -58,7 +58,7 @@ jobs:
       - run: mise run install
       - run: pnpm exec playwright install --with-deps
       - run: pnpm run test:e2e
-      - name: Measure performance and enforce asset-byte budgets
+      - name: Measure performance and enforce budgets
         run: pnpm run measure:performance
 
       - name: Upload pull request preview

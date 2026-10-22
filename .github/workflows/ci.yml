@@ -169,6 +169,7 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+          cache-from: type=gha,scope=mcl-website
           cache-to: type=gha,scope=mcl-website,mode=max
 
       - name: Record published image reference

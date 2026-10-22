@@ -8,7 +8,7 @@ RUN PNPM_PACKAGE=$(node -p "require('./package.json').packageManager.split('+')[
 COPY . .
 RUN pnpm run build
 
-FROM caddy:2.11.7-alpine@sha256:4c989fd92fe0c67a045def7acd32242f7eddf50ab16ae399dc63dd6d3ebc5ce5
+FROM caddy:2.11.7-alpine@sha256:24ec7b05bc532c7bb57f727030c5056e257ff7138b4b50460306819ff79362bd
 
 LABEL org.opencontainers.image.source="https://github.com/manifest-configuration-language/website"
 LABEL org.opencontainers.image.description="MCL language documentation and playground"

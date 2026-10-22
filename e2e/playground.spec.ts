@@ -181,6 +181,35 @@ test("rejects a project file larger than the per-file limit", async ({ page }) =
   await expect(editor(page)).toContainText('let appName = "catalog"');
 });
 
+test("rejects a project larger than the total size limit and keeps the loaded project", async ({
+  page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium");
+
+  await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(projectDirectory);
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
+
+  const directory = mkdtempSync(join(tmpdir(), "mcl-e2e-project-size-limit-"));
+  writeFileSync(join(directory, "main.mcl"), 'emit "oversized project"\n');
+  const file = Buffer.alloc(16 * 1024 * 1024);
+  writeFileSync(join(directory, "first.bin"), file);
+  writeFileSync(join(directory, "second.bin"), file);
+  try {
+    await page.getByLabel("MCLプロジェクトフォルダー").setInputFiles(directory);
+    await expect(page.getByRole("alert")).toContainText(
+      "The project exceeds the 32 MiB total limit.",
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+
+  await expect(editor(page)).toContainText('import "modules/resource.mcl"');
+  await page.getByRole("button", { name: "実行" }).click();
+  await expectRendered(page, 'name: "imported"', 'origin: "project folder"');
+});
+
 test("denies uncached external manifest fetches", async ({ page }) => {
   const externalRequests: string[] = [];
   page.on("request", (request) => {

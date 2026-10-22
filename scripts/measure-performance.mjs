@@ -273,9 +273,9 @@ async function measurePage(
   })();`);
   const navigationStartedAt = performance.now();
   await page.goto(`${origin}${pathname}`, { waitUntil: "load" });
+  const loadMs = performance.now() - navigationStartedAt;
   await page.waitForLoadState("networkidle");
   await Promise.all(responseTasks);
-  const loadMs = performance.now() - navigationStartedAt;
   await page.waitForTimeout(200);
   await Promise.all(responseTasks);
   const initialAssets = new Map(assets);

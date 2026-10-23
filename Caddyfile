@@ -2,9 +2,7 @@
 	admin off
 	root * /srv
 	encode gzip
-	file_server {
-		precompressed br gzip
-	}
+	file_server
 
 	header {
 		Content-Security-Policy "frame-ancestors 'none'"

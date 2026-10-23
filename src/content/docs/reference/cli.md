@@ -8,22 +8,9 @@ sidebar:
 
 `mcl help`と`mcl --help`はコマンド一覧と主要なflagを表示します。`mcl help <command>`と`mcl <command> --help`は指定したコマンドの使い方とflagを表示します。
 
-### Kubernetes Resource Catalog
+### 組み込みScope情報
 
-`mcl.toml`の`[kubernetes.resourceCatalog]`で、組み込みCatalog revisionと追加Descriptorを指定できます。
-
-```toml
-[kubernetes.resourceCatalog]
-revision = "mcl-kubernetes-resource-catalog-v1"
-
-[[kubernetes.resourceCatalog.additionalResources]]
-apiGroup = "example.test.walnuts.dev"
-kind = "Widget"
-resourceName = "widgets"
-scope = "Namespaced"
-```
-
-Catalog tableがない場合は組み込みCatalogだけを使います。tableを設定する場合は現在の組み込みCatalog revisionを指定します。`apiGroup`に空文字列を指定するとcore API groupになります。未知のCatalog key、未対応revision、不正なDescriptorは`mcl check`と`mcl render`でエラーになります。Catalogはオフラインで固定され、クラスタからAPI情報を取得しません。Catalog設定は`mcl.lock`に記録しません。
+MCLはKubernetes APIサーバーに接続せず、kubeconfigも読み込みません。組み込みKindとBundle内CRDからscopeを判定します。scopeが不明なResourceも出力できるため、Kindの一覧をプロジェクト設定で管理する必要はありません。未知のResourceでは宣言されたnamespaceを重複判定と`diff`の識別情報に使います。
 
 ### `render`
 
@@ -31,7 +18,7 @@ Kubernetes向け出力ではArtifact直下のListを拒否します。各Resourc
 
 `mcl render <file>`はファイルを解析・評価し、`main` phaseのArtifactをYAMLで標準出力に書き込みます。`--format json`を指定するとArtifactをJSON配列として出力します。JSON内の整数とDecimalは元の数値表現を保ちます。`apiVersion`、`kind`、`metadata.name`から識別できるResourceは、scopeが分かる場合にscopeに応じたnamespace検査と重複検査を行います。scopeが分からないResourceも出力でき、重複検査ではAPI group、Kind、宣言されたnamespace、nameを使います。重複キーにAPI versionは含めません。Bundle内にあるCRDは`spec.group`、`spec.names.kind`、`spec.names.plural`、`spec.scope`からResource descriptorを作ります。CRDの`spec.group`、`spec.names.kind`、`spec.names.plural`は空にできません。`spec.scope`は`Namespaced`または`Cluster`を指定し、その他の値はレンダリングエラーになります。Namespaced Resourceはnamespace省略時に`default`を使い、Cluster-scoped Resourceは`metadata.namespace`を指定するとエラーになります。`apiVersion`、`kind`、`metadata.name`などの識別情報を持たない一般的なYAML値は、Resource重複検査の対象外です。`mcl render --phase <event> <file>`は指定したLifecycle eventのArtifactを出力します。phase内ではpriorityの昇順で出力します。`mcl render --operation <name> --output-dir <directory> <file>`は操作に必要なYAMLファイルと`lifecycle.json`を出力先ディレクトリに書き込み、指定した操作種別をHelm Chartの評価にも適用します。`--format json`を併用すると、各phaseファイルをJSON配列として出力し、拡張子を`.json`にします。`lifecycle.json`の`documents`はJSON配列内の1始まりのArtifact位置を参照します。操作名は`create`、`update`、`delete`、`rollback`、`verify`です。`mcl render --operation`を使う場合、`helm.render`の`operation`指定はCLIの操作種別で上書きされます。出力先ディレクトリが空なら初回生成します。既存の出力先は`.mcl-manifest.json`と生成ファイルの内容を照合し、MCLが管理していないファイルや変更された生成ファイルがある場合は置換しません。`lifecycle.json`の`artifacts`各要素には`documents`配列があり、Artifactが出力されるphaseファイル名と、そのファイル内の1始まりの位置を記録します。複数のLifecycle eventで出力されるArtifactには参照が複数記録されます。参照順は固定ファイル順、各ファイル内のphase順、phase内のpriority順です。`index`はBundle内の0始まりのArtifact位置を示します。ファイルの生成前に入力を評価し、評価またはレンダリングに失敗した場合は出力先を変更しません。
 
-組み込みCatalogは次のKindのscopeを認識します。記載のないKindやAPI groupはscope不明のまま出力できます。`mcl.toml`の追加DescriptorまたはBundle内CRDを指定すると、scopeに応じた検査を有効にできます。
+組み込みScope情報は次のKindを認識します。記載のないKindやAPI groupはscope不明のまま出力できます。Bundle内CRDがあれば、scopeに応じた検査を有効にできます。
 
 | Scope      | API group                      | Kind                                                                                                                                                    |
 | ---------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -72,9 +59,9 @@ scopeを識別できるCluster-scoped Resourceは`metadata.namespace`を指定�
 
 ### `diff`
 
-`--operation <name>`を指定すると、before/afterの両方を同じ操作Contextで評価します。各入力ファイルのResource Catalogを使ってBundleを検証します。
+`--operation <name>`を指定すると、before/afterの両方を同じ操作Contextで評価します。組み込みscope情報と各Bundle内CRDから判定したscopeでBundleを検証します。
 
-`mcl diff <before-file> <after-file>`は二つのMCLファイルを評価し、Bundle内のResource追加・削除、フィールド追加・削除・変更、Lifecycle変更を表示します。ResourceはAPI group、`kind`、namespace、nameで対応付けます。CatalogでNamespacedと識別したResourceでは省略したnamespaceを`default`として扱い、Cluster-scoped Resourceではnamespaceをidentityから除外します。識別情報を持たないArtifactはBundle内の位置で対応付けます。Listの要素は添字で比較し、MapのフィールドはJSON Pointer形式のパスで表示します。
+`mcl diff <before-file> <after-file>`は二つのMCLファイルを評価し、Bundle内のResource追加・削除、フィールド追加・削除・変更、Lifecycle変更を表示します。ResourceはAPI group、`kind`、namespace、nameで対応付けます。MCLがNamespacedと判定したResourceでは省略したnamespaceを`default`として扱い、Cluster-scoped Resourceではnamespaceをidentityから除外します。scopeが不明なResourceでは宣言されたnamespaceを使います。識別情報を持たないArtifactはBundle内の位置で対応付けます。Listの要素は添字で比較し、MapのフィールドはJSON Pointer形式のパスで表示します。
 
 ### `lint`
 

@@ -34,7 +34,7 @@ mcl check main.mcl
 mcl render main.mcl
 ```
 
-`check`と`render`はResourceの識別情報も検証します。例の`Service`は組み込みCatalogで認識されるKindです。
+`check`と`render`はResourceの識別情報も検証します。例の`Service`は組み込みscope情報でNamespaced Resourceとして認識されます。
 
 ## Listと複数の出力
 

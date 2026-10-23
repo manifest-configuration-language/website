@@ -34,6 +34,15 @@
   gap: 0.35rem;
 }
 
+.playground-toolbar .playground-setting {
+  gap: 0.25rem;
+  white-space: nowrap;
+}
+
+.playground-setting input[type="checkbox"] {
+  margin: 0;
+}
+
 .playground-panels {
   height: min(72vh, 58rem);
   min-height: 32rem;
@@ -127,6 +136,38 @@
   padding: 1rem;
   border: 1px solid var(--sl-color-gray-5);
   background: var(--sl-color-gray-6);
+}
+
+.playground-diff {
+  margin: 0 1rem 1rem;
+  border: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-diff-labels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 0.35rem 0.65rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  color: var(--sl-color-gray-2);
+  font-size: 0.85rem;
+}
+
+.playground-diff-labels span + span {
+  padding-inline-start: 0.5rem;
+  border-inline-start: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-diff .cm-mergeView {
+  max-height: 40vh;
+  min-height: 16rem;
+  overflow: auto;
+}
+
+.playground-diff .cm-mergeView .cm-editor {
+  min-width: 0;
+  min-height: 16rem;
+  height: auto;
+  flex: 1;
 }
 
 .playground-result-panel {

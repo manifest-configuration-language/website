@@ -3,7 +3,7 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import { createPlaygroundClient } from "./apiClient";
-import { MclEditor, initialSource } from "./MclEditor";
+import { MclEditor, initialSource, type EditorSettings } from "./MclEditor";
 import { ProjectTabs } from "./ProjectTabs";
 import { decodeSharedProject, encodeSharedProject } from "./projectShare";
 import { PlaygroundResult } from "./PlaygroundResult";
@@ -12,6 +12,8 @@ import type { PlaygroundDefinitionLocation, PlaygroundDiagnostic, PlaygroundRepl
 import { writeProjectArchive } from "./projectZip";
 
 const storageKey = "mcl-playground-project-v1";
+const editorSettingsKey = "mcl-playground-editor-settings-v1";
+const defaultEditorSettings: EditorSettings = { tabSize: 2, lineWrapping: false, lineNumbers: true, vim: false };
 const samples = {
   configMap: initialSource,
   deployment: `let port = node:
@@ -56,6 +58,15 @@ function isStoredProject(value: unknown): value is StoredProject {
   });
 }
 
+function isEditorSettings(value: unknown): value is EditorSettings {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<string, unknown>;
+  return (candidate.tabSize === 2 || candidate.tabSize === 4) &&
+    typeof candidate.lineWrapping === "boolean" &&
+    typeof candidate.lineNumbers === "boolean" &&
+    typeof candidate.vim === "boolean";
+}
+
 function projectSize(files: Record<string, ProjectFile>): number {
   const encoder = new TextEncoder();
   return Object.values(files).reduce((total, file) => total + (file.encoding === "utf8" ? encoder.encode(file.content).byteLength : file.bytes.byteLength), 0);
@@ -68,11 +79,16 @@ export default function Playground() {
   const lintTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const sourceRef = useRef(initialSource);
   const projectFilesRef = useRef<Record<string, ProjectFile>>({});
+  const latestYaml = useRef<string | undefined>(undefined);
   const activePathRef = useRef("main.mcl");
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
   const startupReady = useRef(false);
   const applyingSample = useRef(false);
   const [reply, setReply] = useState<PlaygroundReply>();
+  const [previousYaml, setPreviousYaml] = useState<string>();
+  const [showDiff, setShowDiff] = useState(false);
+  const [editorSettings, setEditorSettings] = useState<EditorSettings>(defaultEditorSettings);
+  const [editorSettingsLoaded, setEditorSettingsLoaded] = useState(false);
   const [diagnostics, setDiagnostics] = useState<PlaygroundDiagnostic[]>([]);
   const [error, setError] = useState("");
   const [editorError, setEditorError] = useState("");
@@ -192,6 +208,25 @@ export default function Playground() {
     return () => clearTimeout(timer);
   }, [contentRevision]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void get(editorSettingsKey).then((saved: unknown) => {
+      if (!cancelled && isEditorSettings(saved)) setEditorSettings(saved);
+    }).catch((cause: unknown) => {
+      if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+    }).finally(() => {
+      if (!cancelled) setEditorSettingsLoaded(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!editorSettingsLoaded) return;
+    void set(editorSettingsKey, editorSettings).catch((cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    });
+  }, [editorSettings, editorSettingsLoaded]);
+
   const onEditorReady = useCallback((view: EditorView | undefined) => {
     editor.current = view;
     if (view && activePathRef.current === "main.mcl") sourceRef.current = view.state.doc.toString();
@@ -234,7 +269,15 @@ export default function Playground() {
       const result = await client.current.run(sourceRef.current, currentRevision, projectFilesRef.current);
       if (currentRevision !== revision.current) return;
       setDiagnostics(result.diagnostics ?? (result.error ? [result.error] : []));
-      if (result.ok) setReply(result);
+      if (result.ok) {
+        const yaml = result.result?.yaml;
+        if (yaml !== undefined) {
+          setPreviousYaml(latestYaml.current);
+          latestYaml.current = yaml;
+          setShowDiff(false);
+        }
+        setReply(result);
+      }
       else if (result.error) setError(`${result.error.code}: ${result.error.message}`);
     } catch (cause) {
       if (currentRevision === revision.current) setError(cause instanceof Error ? cause.message : String(cause));
@@ -428,6 +471,16 @@ export default function Playground() {
           disabled={busy || loadingProject || Boolean(editorError)}
         />
         <a href="/playground/capabilities">対応機能</a>
+        <label className="playground-setting">
+          Tab幅
+          <select value={editorSettings.tabSize} onChange={(event) => setEditorSettings((settings) => ({ ...settings, tabSize: Number(event.currentTarget.value) as 2 | 4 }))}>
+            <option value={2}>2</option>
+            <option value={4}>4</option>
+          </select>
+        </label>
+        <label className="playground-setting"><input type="checkbox" checked={editorSettings.lineWrapping} onChange={(event) => setEditorSettings((settings) => ({ ...settings, lineWrapping: event.currentTarget.checked }))} />折り返し</label>
+        <label className="playground-setting"><input type="checkbox" checked={editorSettings.lineNumbers} onChange={(event) => setEditorSettings((settings) => ({ ...settings, lineNumbers: event.currentTarget.checked }))} />行番号</label>
+        <label className="playground-setting"><input type="checkbox" checked={editorSettings.vim} onChange={(event) => setEditorSettings((settings) => ({ ...settings, vim: event.currentTarget.checked }))} />Vim</label>
         <span role="status">{wasmReady ? "WASM準備完了" : "WASM準備中"}</span>
       </div>
       {loadingProject && <p role="status">読み込み中</p>}
@@ -438,6 +491,7 @@ export default function Playground() {
             key={`${editorAttempt}:${projectGeneration}`}
             path={activePath}
             source={activeSource}
+            settings={editorSettings}
             onReady={onEditorReady}
             onDocumentChange={onDocumentChange}
             onError={onEditorError}
@@ -455,10 +509,11 @@ export default function Playground() {
           <div className="playground-result-panel">
             <div className="playground-result-toolbar">
               <span>YAML</span>
+              <button type="button" onClick={() => setShowDiff((value) => !value)} disabled={previousYaml === undefined || previousYaml === reply?.result?.yaml} aria-pressed={showDiff}>差分</button>
               <button type="button" onClick={() => void copyOutput()} disabled={!reply?.result?.yaml}>コピー</button>
               <button type="button" onClick={downloadOutput} disabled={!reply?.result?.yaml}>ダウンロード</button>
             </div>
-            <PlaygroundResult reply={reply} onDiagnostic={goToDiagnostic} />
+            <PlaygroundResult reply={reply} previousYaml={previousYaml} showDiff={showDiff} onDiagnostic={goToDiagnostic} />
           </div>
         </Panel>
       </Group>

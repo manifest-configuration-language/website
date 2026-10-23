@@ -6,7 +6,7 @@ sidebar:
 
 ## CLI
 
-`mcl help`と`mcl --help`はコマンド一覧と主要なflagを表示します。`mcl help <command>`と`mcl <command> --help`は指定したコマンドの使い方とflagを表示します。
+各コマンドの構文、オプション、サブコマンドの一覧は[生成されたCLIリファレンス](../cli-commands/)を参照してください。このページでは、コマンドの動作とMCL固有の制約を説明します。
 
 ### 組み込みScope情報
 

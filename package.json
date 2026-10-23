@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node scripts/write-csp.mjs .build/dist",
+    "build": "node scripts/fetch-mcl-reference.mjs && astro build && node scripts/write-csp.mjs .build/dist",
     "preview": "astro preview"
   },
   "dependencies": {
@@ -13,11 +13,13 @@
     "@codemirror/commands": "6.11.1",
     "@codemirror/language": "6.13.1",
     "@codemirror/lint": "6.9.7",
+    "@codemirror/merge": "6.12.3",
     "@codemirror/search": "6.6.0",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.15",
-    "@manifest-configuration-language/browser": "0.1.4",
-    "@manifest-configuration-language/language": "0.1.4",
+    "@manifest-configuration-language/browser": "0.1.5",
+    "@manifest-configuration-language/language": "0.1.5",
+    "@replit/codemirror-vim": "6.4.0",
     "@zip.js/zip.js": "2.24.0",
     "idb-keyval": "6.3.0",
     "react": "19.3.1",
@@ -31,6 +33,7 @@
     "@types/react-dom": "19.2.3",
     "astro": "7.2.10",
     "parse5": "8.0.1",
+    "tar": "7.5.22",
     "typescript": "6.0.2"
   },
   "engines": {

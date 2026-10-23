@@ -10,11 +10,19 @@ import {
 import { setDiagnostics, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { searchKeymap } from "@codemirror/search";
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
-import { EditorState, type Extension } from "@codemirror/state";
-import { EditorView, hoverTooltip, keymap, lineNumbers } from "@codemirror/view";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { EditorView, drawSelection, hoverTooltip, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { autocompletion, closeBracketsKeymap, type Completion, type CompletionContext } from "@codemirror/autocomplete";
+import { vim } from "@replit/codemirror-vim";
 import type { PlaygroundCompletionItem, PlaygroundDefinitionLocation, PlaygroundDiagnostic, PlaygroundHover } from "./types";
+
+export type EditorSettings = {
+  tabSize: 2 | 4;
+  lineWrapping: boolean;
+  lineNumbers: boolean;
+  vim: boolean;
+};
 
 export const initialSource = `let appName = "catalog"
 let configMap =
@@ -31,6 +39,7 @@ emit configMap
 type Props = {
   path: string;
   source: string;
+  settings: EditorSettings;
   onReady: (view: EditorView | undefined) => void;
   onDocumentChange: (source: string, path: string) => void;
   onError: (error: Error) => void;
@@ -102,7 +111,7 @@ function waitForCompletionDelay(context: CompletionContext, delayMs: number): Pr
   });
 }
 
-export function MclEditor({ path, source, onReady, onDocumentChange, onError, diagnostics = [], onRun, onFormat, onComplete, onDefinition, onHover, onNavigate }: Props) {
+export function MclEditor({ path, source, settings, onReady, onDocumentChange, onError, diagnostics = [], onRun, onFormat, onComplete, onDefinition, onHover, onNavigate }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const currentPath = useRef(path);
@@ -111,6 +120,12 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
   const documentGeneration = useRef(0);
   const states = useRef(new Map<string, EditorState>());
   const extensions = useRef<Extension[]>([]);
+  const gutter = useRef(new Compartment());
+  const wrapping = useRef(new Compartment());
+  const indentation = useRef(new Compartment());
+  const vimMode = useRef(new Compartment());
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const callbacks = useRef({ onReady, onDocumentChange, onError, onRun, onFormat, onComplete, onDefinition, onHover, onNavigate });
   callbacks.current = { onReady, onDocumentChange, onError, onRun, onFormat, onComplete, onDefinition, onHover, onNavigate };
 
@@ -133,12 +148,31 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
     }
   }
 
+  function settingsEffects(next: EditorSettings) {
+    return [
+      gutter.current.reconfigure(next.lineNumbers ? lineNumbers() : []),
+      wrapping.current.reconfigure(next.lineWrapping ? EditorView.lineWrapping : []),
+      indentation.current.reconfigure([
+        EditorState.tabSize.of(next.tabSize),
+        indentUnit.of(" ".repeat(next.tabSize)),
+      ]),
+      vimMode.current.reconfigure(next.vim ? vim() : []),
+    ];
+  }
+
   useEffect(() => {
     if (!host.current) return;
     let view: EditorView | undefined;
     try {
       extensions.current = [
-        lineNumbers(),
+        vimMode.current.of(settingsRef.current.vim ? vim() : []),
+        gutter.current.of(settingsRef.current.lineNumbers ? lineNumbers() : []),
+        wrapping.current.of(settingsRef.current.lineWrapping ? EditorView.lineWrapping : []),
+        indentation.current.of([
+          EditorState.tabSize.of(settingsRef.current.tabSize),
+          indentUnit.of(" ".repeat(settingsRef.current.tabSize)),
+        ]),
+        drawSelection(),
         EditorView.contentAttributes.of({ "aria-label": "MCLソース" }),
         history(),
         bracketMatching(),
@@ -197,7 +231,6 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
             return null;
           }
         }, { hoverTime: 450, hideOnChange: true }),
-        indentUnit.of("  "),
         EditorView.updateListener.of((update) => {
           if (update.selectionSet) {
             definitionRequest.current += 1;
@@ -256,11 +289,23 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
     hoverRequest.current += 1;
     states.current.set(currentPath.current, view.state);
     currentPath.current = path;
-    const nextState = states.current.get(path) ?? EditorState.create({ doc: source, extensions: extensions.current });
+    const nextState = states.current.get(path) ?? EditorState.create({ doc: source, extensions: extensions.current }).update({ effects: settingsEffects(settingsRef.current) }).state;
     states.current.set(path, nextState);
     view.setState(nextState);
     callbacks.current.onReady(view);
   }, [path, source]);
+
+  useEffect(() => {
+    const effects = settingsEffects(settings);
+    for (const [statePath, state] of states.current) {
+      if (statePath !== currentPath.current) states.current.set(statePath, state.update({ effects }).state);
+    }
+    const view = viewRef.current;
+    if (view) {
+      view.dispatch({ effects });
+      states.current.set(currentPath.current, view.state);
+    }
+  }, [settings]);
 
   useEffect(() => {
     const view = viewRef.current;

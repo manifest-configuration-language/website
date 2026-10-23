@@ -2,3 +2,6 @@ node_modules/
 .build/
 .astro/
 src/playground/runtime/
+src/content/docs/reference/cli-commands/
+src/content/docs/reference/stdlib-functions.md
+src/content/docs/reference/.reference-staging-*/

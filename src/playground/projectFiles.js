@@ -1,5 +1,16 @@
 import { projectLimits } from "./projectValidation.js";
 
+const maxProjectPathLength = 512;
+const maxProjectPathDepth = 64;
+
+export function isValidProjectPath(path) {
+  return path.length <= maxProjectPathLength &&
+    path.split("/").length <= maxProjectPathDepth &&
+    path.length > 0 && !path.startsWith("/") && !path.includes("\\") &&
+    !path.includes("\0") &&
+    path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+}
+
 const textExtensions = new Set([
   "mcl",
   "yaml",
@@ -34,6 +45,7 @@ export async function readProject(files) {
   }));
   const seen = new Set();
   for (const { path } of entries) {
+    if (!isValidProjectPath(path)) throw new Error(`Invalid project path: ${path}`);
     if (seen.has(path)) throw new Error(`Duplicate project path: ${path}`);
     seen.add(path);
   }

@@ -1,4 +1,4 @@
-import { isSafeProjectPath, projectLimits } from "./projectValidation.js";
+import { projectLimits } from "./projectValidation.js";
 
 const textExtensions = new Set([
   "mcl",
@@ -17,10 +17,6 @@ const textExtensions = new Set([
   "conf",
 ]);
 
-function validatePath(path) {
-  if (!isSafeProjectPath(path)) throw new Error(`Invalid project path: ${path}`);
-}
-
 export async function readProject(files) {
   const selected = [...files];
   if (selected.length === 0) throw new Error("Select a project folder.");
@@ -38,29 +34,19 @@ export async function readProject(files) {
   }));
   const seen = new Set();
   for (const { path } of entries) {
-    validatePath(path);
     if (seen.has(path)) throw new Error(`Duplicate project path: ${path}`);
     seen.add(path);
   }
 
   const main = entries.find(({ path }) => path === "main.mcl");
   if (!main) throw new Error("The selected directory must contain main.mcl at its root.");
-  if (main.file.size > projectLimits.sourceBytes)
-    throw new Error(`main.mcl exceeds the ${projectLimits.sourceBytes / 1024} KiB limit.`);
 
-  let bytes = main.file.size;
+  const bytes = entries.reduce((total, { file }) => total + file.size, 0);
+  if (bytes > projectLimits.projectBytes)
+    throw new Error(
+      `The project exceeds the ${projectLimits.projectBytes / 1024 / 1024} MiB total limit.`,
+    );
   const otherFiles = entries.filter(({ file }) => file !== main.file);
-  for (const { file, path } of otherFiles) {
-    if (file.size > projectLimits.fileBytes)
-      throw new Error(
-        `${path} exceeds the ${projectLimits.fileBytes / 1024 / 1024} MiB per-file limit.`,
-      );
-    bytes += file.size;
-    if (bytes > projectLimits.projectBytes)
-      throw new Error(
-        `The project exceeds the ${projectLimits.projectBytes / 1024 / 1024} MiB total limit.`,
-      );
-  }
 
   const project = Object.create(null);
   for (const { file, path } of otherFiles) {
@@ -70,8 +56,6 @@ export async function readProject(files) {
       : { encoding: "binary", bytes: new Uint8Array(await file.arrayBuffer()) };
   }
   const source = await main.file.text();
-  if (new TextEncoder().encode(source).byteLength > projectLimits.sourceBytes)
-    throw new Error(`main.mcl exceeds the ${projectLimits.sourceBytes / 1024} KiB limit.`);
 
   return { source, files: project, bytes, fileCount: entries.length };
 }

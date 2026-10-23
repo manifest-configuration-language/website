@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "node scripts/fetch-mcl-reference.mjs && astro build && node scripts/write-csp.mjs .build/dist",
+    "build": "node scripts/fetch-mcl-reference.mjs && astro build",
     "preview": "astro preview"
   },
   "dependencies": {
@@ -32,7 +32,6 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "astro": "7.2.10",
-    "parse5": "8.0.1",
     "tar": "7.5.22",
     "typescript": "6.0.2"
   },

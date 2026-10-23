@@ -95,3 +95,13 @@ scopeを識別できるCluster-scoped Resourceは`metadata.namespace`を指定�
 ### `lsp`
 
 `mcl lsp`は標準入出力を使ってLanguage Server Protocolを提供します。初期化、完全同期、範囲付き増分同期、ファイルのオープン・変更・クローズ、文書全体のformatting要求に対応し、構文エラー、評価エラー、未使用定義の警告を診断として送信します。未定義参照と一部の型不一致は式の範囲を診断し、import先で起きた評価エラーはimport先のURIへ送信します。`with:`合成で値が型またはSchemaに適合しない場合は、上書き値を主位置にし、上書き前の値とネストしたMapの合成元、patch Mapを関連情報として表示します。開いているローカルMCLモジュールは保存前の内容でimport評価し、文書の変更・クローズ時に他の開いている文書の診断も再計算します。未使用定義の警告は定義名の範囲と`MCLW001`コードを持ちます。補完では同じファイル内の`let`、`type`、`rule`、`fn`定義とimport aliasを候補として表示します。関数パラメーター、ラムダパラメーター、`for`式のループ変数は有効範囲内で補完候補になり、定義ジャンプも宣言位置を示します。同じファイルで定義したSchema型またはimportしたexport Schema型が注釈されたMapでは、カーソル位置のネスト階層に対応するJSON Schemaの`properties`を補完候補にし、入力済みのフィールドを候補から除きます。ローカルChartとロック済みHTTPS・OCI Chartの`values.schema.json`は`helm.render`の`options.values`内で補完に使います。HTTPS・OCI Chartでは`mcl.lock`と`.mcl/cache/sha256/`の既存データだけを使い、補完要求中にChartやSchemaを取得しません。Chart archive内の相対JSON Schema参照は同じarchiveのファイルから解決し、archive外の参照は取得しません。Manifest Map内に文字列リテラルの`apiVersion`と`kind`がある場合は、Kustomize/kyaml組み込みResourceのOpenAPI Schemaからネストしたフィールドを補完します。同じMCLソースにリテラルで記述したCRDがある場合は、そのserved versionの`openAPIV3Schema`から同じBundle内のCustom Resourceを補完します。変数参照や計算式から組み立てたCRD Schemaは補完に使いません。組み込みSchemaも同じソース内のCRD Schemaも使えない場合は、明示的なJSON Schemaによる補完を使います。定義ジャンプでは同じファイル内の`let`、`type`、`rule`、`fn`に加え、importしたexport済みの`let`、`type`、`rule`、`fn`を参照位置から宣言位置へ移動できます。関数パラメーター、ラムダパラメーター、`for`式のループ変数にも移動できます。名前変更では、ローカル束縛と同一ファイル内の`let`、`fn`、`rule`、`type`を参照箇所とともに変更できます。exportされた`let`、`fn`、`rule`、`type`はプロジェクト内の定義とimport経由の参照をまとめて変更します。Schema field Renameは型注釈が省略された別名や関数戻り値から推論できる参照も扱い、import indexで収集した複数文書を一括変更します。
+
+### `completion`
+
+`mcl completion <bash|zsh|fish|powershell>`は指定したshell向けの補完scriptを標準出力に生成します。Bashでは現在のshell sessionで次を実行します。
+
+```sh
+source <(mcl completion bash)
+```
+
+Zshでは補完scriptを`fpath`内の`_mcl`ファイルとして保存します。Fishでは`~/.config/fish/completions/mcl.fish`に保存します。PowerShellでは`mcl completion powershell`の出力を`$PROFILE`に追加します。

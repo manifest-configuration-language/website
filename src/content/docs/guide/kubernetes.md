@@ -35,6 +35,6 @@ emit deployment
 
 複数のResourceを生成する場合は、Listを作って`emit each resources`で出力します。通常の`emit resources`はList全体を一つのYAML Sequenceとして扱うため、Kubernetes向けの`check`と`render`では受け付けません。
 
-MCLは組み込みResource CatalogでAPI groupとKindからscopeを確認します。組み込みCatalogにないResourceは、プロジェクトの`mcl.toml`へDescriptorを追加するか、検証対象と同じBundleにCRDを含めます。Resourceの重複とCluster-scoped Resourceのnamespace指定も検証します。
+MCLは組み込みResource Catalog、`mcl.toml`のDescriptor、Bundle内CRDから分かるscopeを使ってResourceを検査します。scopeが分からないResourceも出力でき、宣言されたnamespaceが一致する重複だけを検出します。scopeが分かるNamespaced Resourceではnamespace省略を`default`として扱い、Cluster-scoped Resourceにnamespaceが指定されている場合はエラーにします。
 
 詳しくは[CLIのCatalog設定](../reference/cli/#kubernetes-resource-catalog)、[構文と値](../reference/syntax/)、[検証](../reference/validation/)を参照してください。

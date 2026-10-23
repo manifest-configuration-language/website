@@ -2,16 +2,21 @@ import { useEffect, useRef } from "react";
 import {
   bracketMatching,
   defaultHighlightStyle,
+  foldGutter,
+  foldKeymap,
   indentUnit,
   syntaxHighlighting,
 } from "@codemirror/language";
+import { setDiagnostics, lintGutter, type Diagnostic } from "@codemirror/lint";
+import { searchKeymap } from "@codemirror/search";
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
-import { EditorState } from "@codemirror/state";
+import { EditorState, type Extension } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { closeBracketsKeymap } from "@codemirror/autocomplete";
+import { autocompletion, closeBracketsKeymap, type Completion, type CompletionContext } from "@codemirror/autocomplete";
+import type { PlaygroundCompletionItem, PlaygroundDiagnostic } from "./types";
 
-const initialSource = `let appName = "catalog"
+export const initialSource = `let appName = "catalog"
 let configMap =
   apiVersion: "v1"
   kind: "ConfigMap"
@@ -24,48 +29,169 @@ emit configMap
 `;
 
 type Props = {
+  path: string;
+  source: string;
   onReady: (view: EditorView | undefined) => void;
-  onDocumentChange: () => void;
+  onDocumentChange: (source: string, path: string) => void;
   onError: (error: Error) => void;
+  diagnostics?: PlaygroundDiagnostic[];
+  onRun: () => void;
+  onFormat: () => void;
+  onComplete: (path: string, position: { line: number; character: number }) => Promise<PlaygroundCompletionItem[]>;
 };
 
-export function MclEditor({ onReady, onDocumentChange, onError }: Props) {
+function toEditorDiagnostics(diagnostics: PlaygroundDiagnostic[], path: string, view: EditorView): Diagnostic[] {
+  const doc = view.state.doc;
+  const position = (lineNumber: number, column: number) => {
+    const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)));
+    return Math.min(line.to, line.from + Math.max(0, column - 1));
+  };
+
+  return diagnostics.filter((diagnostic) => (diagnostic.path ?? "main.mcl") === path).map((diagnostic) => {
+    const from = position(diagnostic.line, diagnostic.column);
+    const to = diagnostic.endLine === undefined || diagnostic.endColumn === undefined
+      ? Math.min(doc.length, from + 1)
+      : Math.max(from, position(diagnostic.endLine, diagnostic.endColumn));
+    const severity: Diagnostic["severity"] = diagnostic.severity.toLowerCase() === "warning"
+      ? "warning"
+      : diagnostic.severity.toLowerCase() === "info"
+        ? "info"
+        : diagnostic.severity.toLowerCase() === "hint"
+          ? "hint"
+          : "error";
+    return {
+      from,
+      to,
+      severity,
+      message: diagnostic.code ? `${diagnostic.code}: ${diagnostic.message}` : diagnostic.message,
+    };
+  });
+}
+
+function completionType(kind: number): Completion["type"] {
+  switch (kind) {
+    case 2: return "method";
+    case 3: return "function";
+    case 5:
+    case 10: return "property";
+    case 6: return "variable";
+    case 7: return "class";
+    case 8: return "type";
+    case 9: return "namespace";
+    case 14: return "keyword";
+    case 21: return "constant";
+    default: return "text";
+  }
+}
+
+function waitForCompletionDelay(context: CompletionContext, delayMs: number): Promise<boolean> {
+  if (context.aborted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = (active: boolean) => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      resolve(active);
+    };
+    const timer = window.setTimeout(() => finish(!context.aborted), delayMs);
+    context.addEventListener("abort", () => finish(false), { onDocChange: true });
+  });
+}
+
+export function MclEditor({ path, source, onReady, onDocumentChange, onError, diagnostics = [], onRun, onFormat, onComplete }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const callbacks = useRef({ onReady, onDocumentChange, onError });
-  callbacks.current = { onReady, onDocumentChange, onError };
+  const viewRef = useRef<EditorView | undefined>(undefined);
+  const currentPath = useRef(path);
+  const states = useRef(new Map<string, EditorState>());
+  const extensions = useRef<Extension[]>([]);
+  const callbacks = useRef({ onReady, onDocumentChange, onError, onRun, onFormat, onComplete });
+  callbacks.current = { onReady, onDocumentChange, onError, onRun, onFormat, onComplete };
 
   useEffect(() => {
     if (!host.current) return;
     let view: EditorView | undefined;
     try {
+      extensions.current = [
+        lineNumbers(),
+        EditorView.contentAttributes.of({ "aria-label": "MCLソース" }),
+        history(),
+        bracketMatching(),
+        foldGutter(),
+        mclLanguageSupport(),
+        lintGutter(),
+        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+        autocompletion({
+          override: [async (context) => {
+            const word = context.matchBefore(/[\w.-]*/);
+            if (!context.explicit && (!word || word.from === word.to)) return null;
+            if (!await waitForCompletionDelay(context, 120)) return null;
+            const line = context.state.doc.lineAt(context.pos);
+            const items = await callbacks.current.onComplete(currentPath.current, {
+              line: line.number - 1,
+              character: context.pos - line.from,
+            });
+            if (context.aborted || items.length === 0) return null;
+            const from = word?.from ?? context.pos;
+            const options: Completion[] = items.map((item) => ({
+              label: item.label,
+              type: completionType(item.kind),
+              ...(item.insertText === undefined ? {} : { apply: item.insertText }),
+            }));
+            return { from, options };
+          }],
+        }),
+        indentUnit.of("  "),
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            states.current.set(currentPath.current, update.state);
+            callbacks.current.onDocumentChange(update.state.doc.toString(), currentPath.current);
+          }
+        }),
+        keymap.of([
+          { key: "Mod-Enter", run: () => { callbacks.current.onRun(); return true; } },
+          { key: "Shift-Alt-f", run: () => { callbacks.current.onFormat(); return true; } },
+          ...closeBracketsKeymap,
+          indentWithTab,
+          ...searchKeymap,
+          ...foldKeymap,
+          ...defaultKeymap,
+          ...historyKeymap,
+        ]),
+      ];
+      const initialState = EditorState.create({ doc: source, extensions: extensions.current });
+      states.current.set(path, initialState);
       view = new EditorView({
         parent: host.current,
-        state: EditorState.create({
-          doc: initialSource,
-          extensions: [
-            lineNumbers(),
-            EditorView.contentAttributes.of({ "aria-label": "MCLソース" }),
-            history(),
-            bracketMatching(),
-            mclLanguageSupport(),
-            syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-            indentUnit.of("  "),
-            EditorView.updateListener.of((update) => {
-              if (update.docChanged) callbacks.current.onDocumentChange();
-            }),
-            keymap.of([...closeBracketsKeymap, indentWithTab, ...defaultKeymap, ...historyKeymap]),
-          ],
-        }),
+        state: initialState,
       });
+      viewRef.current = view;
       callbacks.current.onReady(view);
     } catch (cause) {
       callbacks.current.onError(cause instanceof Error ? cause : new Error(String(cause)));
     }
     return () => {
       callbacks.current.onReady(undefined);
+      viewRef.current = undefined;
       view?.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || currentPath.current === path) return;
+    states.current.set(currentPath.current, view.state);
+    currentPath.current = path;
+    const nextState = states.current.get(path) ?? EditorState.create({ doc: source, extensions: extensions.current });
+    states.current.set(path, nextState);
+    view.setState(nextState);
+    callbacks.current.onReady(view);
+  }, [path, source]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view) view.dispatch(setDiagnostics(view.state, toEditorDiagnostics(diagnostics, path, view)));
+  }, [diagnostics, path]);
 
   return <div className="playground-editor" ref={host} />;
 }

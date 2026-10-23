@@ -11,7 +11,7 @@ export function PlaygroundResult({ reply, onDiagnostic }: Props) {
   }
 
   function canNavigate(diagnostic: PlaygroundDiagnostic) {
-    return diagnostic.path === "main.mcl";
+    return !diagnostic.path || diagnostic.path.endsWith(".mcl");
   }
 
   return (

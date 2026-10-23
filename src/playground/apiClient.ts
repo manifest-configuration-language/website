@@ -12,6 +12,7 @@ function toProjectFiles(source: string, files: Record<string, ProjectFile> = {})
   const project = Object.create(null) as Record<string, string | Uint8Array>;
   project["main.mcl"] = source;
   for (const [filePath, file] of Object.entries(files)) {
+    if (filePath === "main.mcl") throw new TypeError("Project files must not replace main.mcl");
     project[filePath] = file.encoding === "utf8" ? file.content : file.bytes;
   }
   return project;
@@ -42,17 +43,69 @@ function toError(error: unknown): PlaygroundDiagnostic {
 
 export function createPlaygroundClient(): PlaygroundClient {
   const runtime = createMclRuntime({ operationTimeoutMs });
-  let activeController: AbortController | undefined;
+  const activeControllers = new Set<AbortController>();
 
   function beginRequest(): AbortController {
-    activeController?.abort();
-    activeController = new AbortController();
-    return activeController;
+    const controller = new AbortController();
+    activeControllers.add(controller);
+    return controller;
+  }
+
+  function finishRequest(controller: AbortController): void {
+    activeControllers.delete(controller);
   }
 
   return {
     loadProject(files) {
       return readProject(files);
+    },
+    async warmUp() {
+      const controller = beginRequest();
+      try {
+        await runtime.warmUp({ signal: controller.signal, timeoutMs: 30_000 });
+      } finally {
+        finishRequest(controller);
+      }
+    },
+    async lint(source, revision, files) {
+      const controller = beginRequest();
+      try {
+        const project = runtime.openProject(toProjectFiles(source, files));
+        const lint = await project.lint({
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
+        return {
+          requestId: revision,
+          revision,
+          ok: true,
+          diagnostics: lint.diagnostics,
+        };
+      } catch (error) {
+        return {
+          requestId: revision,
+          revision,
+          ok: false,
+          error: toError(error),
+        };
+      } finally {
+        finishRequest(controller);
+      }
+    },
+    async complete(source, entrypoint, position, files) {
+      const controller = beginRequest();
+      try {
+        const project = runtime.openProject(toProjectFiles(source, files));
+        const completion = await project.complete({
+          entrypoint,
+          position,
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
+        return completion.items;
+      } finally {
+        finishRequest(controller);
+      }
     },
     async run(source, revision, files) {
       const controller = beginRequest();
@@ -84,7 +137,7 @@ export function createPlaygroundClient(): PlaygroundClient {
           error: toError(error),
         };
       } finally {
-        if (activeController === controller) activeController = undefined;
+        finishRequest(controller);
       }
     },
     async format(source, revision) {
@@ -103,16 +156,16 @@ export function createPlaygroundClient(): PlaygroundClient {
       } catch (error) {
         return { requestId: revision, revision, ok: false, error: toError(error) };
       } finally {
-        if (activeController === controller) activeController = undefined;
+        finishRequest(controller);
       }
     },
     cancel() {
-      activeController?.abort();
-      activeController = undefined;
+      for (const controller of activeControllers) controller.abort();
+      activeControllers.clear();
     },
     dispose() {
-      activeController?.abort();
-      activeController = undefined;
+      for (const controller of activeControllers) controller.abort();
+      activeControllers.clear();
       runtime.dispose();
     },
   };

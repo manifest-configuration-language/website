@@ -17,6 +17,17 @@ export type PlaygroundDiagnostic = {
   }>;
 };
 
+export type PlaygroundCompletionItem = {
+  label: string;
+  kind: number;
+  insertText?: string;
+};
+
+export type PlaygroundCompletionPosition = {
+  line: number;
+  character: number;
+};
+
 export type ProjectFile =
   | { encoding: "utf8"; content: string }
   | { encoding: "binary"; bytes: Uint8Array };
@@ -45,6 +56,18 @@ export type PlaygroundReply = {
 
 export interface PlaygroundClient {
   loadProject(files: FileList | File[]): Promise<LoadedProject>;
+  warmUp(): Promise<void>;
+  lint(
+    source: string,
+    revision: number,
+    files?: Record<string, ProjectFile>,
+  ): Promise<PlaygroundReply>;
+  complete(
+    source: string,
+    entrypoint: string,
+    position: PlaygroundCompletionPosition,
+    files?: Record<string, ProjectFile>,
+  ): Promise<PlaygroundCompletionItem[]>;
   run(
     source: string,
     revision: number,

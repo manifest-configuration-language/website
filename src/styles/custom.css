@@ -60,3 +60,8 @@
   text-align: start;
   cursor: pointer;
 }
+
+.diagnostic:disabled {
+  cursor: default;
+  opacity: 0.75;
+}

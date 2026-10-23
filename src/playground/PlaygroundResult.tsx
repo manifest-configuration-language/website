@@ -6,12 +6,24 @@ type Props = {
 };
 
 export function PlaygroundResult({ reply, onDiagnostic }: Props) {
+  function location(diagnostic: PlaygroundDiagnostic) {
+    return `${diagnostic.path ? `${diagnostic.path}:` : ""}${diagnostic.line}:${diagnostic.column}`;
+  }
+
+  function canNavigate(diagnostic: PlaygroundDiagnostic) {
+    return diagnostic.path === "main.mcl";
+  }
+
   return (
     <>
       {reply && !reply.ok && reply.error && (
         <p role="alert">
-          <button className="diagnostic" onClick={() => onDiagnostic(reply.error!)}>
-            {reply.error.code}: {reply.error.message} ({reply.error.line}:{reply.error.column})
+          <button
+            className="diagnostic"
+            disabled={!canNavigate(reply.error)}
+            onClick={() => onDiagnostic(reply.error!)}
+          >
+            {reply.error.code}: {reply.error.message} ({location(reply.error)})
           </button>
         </p>
       )}
@@ -19,8 +31,12 @@ export function PlaygroundResult({ reply, onDiagnostic }: Props) {
         <ul className="playground-diagnostics">
           {reply.diagnostics.map((diagnostic, index) => (
             <li key={`${diagnostic.code}-${diagnostic.line}-${index}`}>
-              <button className="diagnostic" onClick={() => onDiagnostic(diagnostic)}>
-                {diagnostic.severity}: {diagnostic.message} ({diagnostic.line}:{diagnostic.column})
+              <button
+                className="diagnostic"
+                disabled={!canNavigate(diagnostic)}
+                onClick={() => onDiagnostic(diagnostic)}
+              >
+                {diagnostic.severity}: {diagnostic.message} ({location(diagnostic)})
               </button>
             </li>
           ))}

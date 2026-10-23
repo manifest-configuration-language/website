@@ -56,12 +56,14 @@ export function createPlaygroundClient(): PlaygroundClient {
     },
     async run(source, revision, files) {
       const controller = beginRequest();
+      let diagnostics: PlaygroundDiagnostic[] | undefined;
       try {
         const project = runtime.openProject(toProjectFiles(source, files));
         const lint = await project.lint({
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
         });
+        diagnostics = lint.diagnostics;
         const rendered = await project.render({
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
@@ -74,7 +76,13 @@ export function createPlaygroundClient(): PlaygroundClient {
           result: { yaml: rendered.yaml, artifacts: rendered.artifacts },
         };
       } catch (error) {
-        return { requestId: revision, revision, ok: false, error: toError(error) };
+        return {
+          requestId: revision,
+          revision,
+          ok: false,
+          ...(diagnostics === undefined ? {} : { diagnostics }),
+          error: toError(error),
+        };
       } finally {
         if (activeController === controller) activeController = undefined;
       }

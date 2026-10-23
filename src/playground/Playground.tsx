@@ -140,7 +140,7 @@ export default function Playground() {
 
   function goToDiagnostic(diagnostic: PlaygroundDiagnostic) {
     const view = editor.current;
-    if (!view) return;
+    if (!view || diagnostic.path !== "main.mcl") return;
     const line = view.state.doc.line(Math.min(Math.max(diagnostic.line, 1), view.state.doc.lines));
     const position = Math.min(line.from + Math.max(diagnostic.column - 1, 0), line.to);
     view.dispatch({ selection: { anchor: position }, scrollIntoView: true });

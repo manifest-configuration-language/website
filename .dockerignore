@@ -6,5 +6,3 @@
 node_modules
 src/playground/runtime
 README.md
-public/mcl.wasm.gz
-public/wasm_exec.js

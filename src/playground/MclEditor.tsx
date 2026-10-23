@@ -107,6 +107,8 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
   const viewRef = useRef<EditorView | undefined>(undefined);
   const currentPath = useRef(path);
   const definitionRequest = useRef(0);
+  const hoverRequest = useRef(0);
+  const documentGeneration = useRef(0);
   const states = useRef(new Map<string, EditorState>());
   const extensions = useRef<Extension[]>([]);
   const callbacks = useRef({ onReady, onDocumentChange, onError, onRun, onFormat, onComplete, onDefinition, onHover, onNavigate });
@@ -114,6 +116,7 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
 
   async function goToDefinition(view: EditorView, position: number) {
     const requestId = ++definitionRequest.current;
+    const requestGeneration = documentGeneration.current;
     const requestPath = currentPath.current;
     const requestDocument = view.state.doc;
     const line = view.state.doc.lineAt(position);
@@ -122,10 +125,10 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
         line: line.number - 1,
         character: position - line.from,
       });
-      if (definitionRequest.current !== requestId || viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return;
+      if (definitionRequest.current !== requestId || documentGeneration.current !== requestGeneration || viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return;
       if (location) callbacks.current.onNavigate(location);
     } catch (cause) {
-      if (definitionRequest.current !== requestId || viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return;
+      if (definitionRequest.current !== requestId || documentGeneration.current !== requestGeneration || viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return;
       callbacks.current.onError(cause instanceof Error ? cause : new Error(String(cause)));
     }
   }
@@ -164,6 +167,8 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
           }],
         }),
         hoverTooltip(async (view, position) => {
+          const requestId = ++hoverRequest.current;
+          const requestGeneration = documentGeneration.current;
           const requestPath = currentPath.current;
           const requestDocument = view.state.doc;
           const line = view.state.doc.lineAt(position);
@@ -172,7 +177,7 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
               line: line.number - 1,
               character: position - line.from,
             });
-            if (viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return null;
+            if (hoverRequest.current !== requestId || documentGeneration.current !== requestGeneration || viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return null;
             if (!hover) return null;
             const fromLine = view.state.doc.line(Math.min(hover.range.start.line + 1, view.state.doc.lines));
             const toLine = view.state.doc.line(Math.min(hover.range.end.line + 1, view.state.doc.lines));
@@ -194,7 +199,10 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
         }, { hoverTime: 450, hideOnChange: true }),
         indentUnit.of("  "),
         EditorView.updateListener.of((update) => {
-          if (update.selectionSet) definitionRequest.current += 1;
+          if (update.selectionSet) {
+            definitionRequest.current += 1;
+            hoverRequest.current += 1;
+          }
           if (update.docChanged) {
             states.current.set(currentPath.current, update.state);
             callbacks.current.onDocumentChange(update.state.doc.toString(), currentPath.current);
@@ -243,6 +251,9 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
   useEffect(() => {
     const view = viewRef.current;
     if (!view || currentPath.current === path) return;
+    documentGeneration.current += 1;
+    definitionRequest.current += 1;
+    hoverRequest.current += 1;
     states.current.set(currentPath.current, view.state);
     currentPath.current = path;
     const nextState = states.current.get(path) ?? EditorState.create({ doc: source, extensions: extensions.current });

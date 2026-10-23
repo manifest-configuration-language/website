@@ -191,11 +191,11 @@ importers:
         specifier: 6.43.15
         version: 6.43.15
       '@manifest-configuration-language/browser':
-        specifier: 0.1.3
-        version: 0.1.3
+        specifier: 0.1.4
+        version: 0.1.4
       '@manifest-configuration-language/language':
-        specifier: 0.1.3
-        version: 0.1.3(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
+        specifier: 0.1.4
+        version: 0.1.4(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
       '@zip.js/zip.js':
         specifier: 2.24.0
         version: 2.24.0
@@ -830,12 +830,12 @@ packages:
   '@lezer/lr@1.4.11':
     resolution: {integrity: sha512-UwgZcl1R66H2hDzBrA7kWyYmX6s8p5TQ+e/t7CuvgCtBEPxbEPaHYHu+pJBvTvDotEJpuQkJjbXuHiw5Cixxgw==}
 
-  '@manifest-configuration-language/browser@0.1.3':
-    resolution: {integrity: sha512-8om3zqcXoABbha72mhaCR2PptJFa7B2z4qifl2VB/Th6DdVz07u/i0QcikQONfw8k1bEVWWZkdQPZwGmCAPzRQ==}
+  '@manifest-configuration-language/browser@0.1.4':
+    resolution: {integrity: sha512-PVFhuC5/lxRr5aP9rOHnhADU57hLtTwk5GdKfIMPSedHdse8g2Yapr+j9Gd+JB48T/9RARfUlFCNS550hVQ4dw==}
     engines: {node: '>=20.19'}
 
-  '@manifest-configuration-language/language@0.1.3':
-    resolution: {integrity: sha512-S/X1OusUE1HPcKk4FDzUIunRldkBtvMuEpMnd/CIcvWxejL1+kF0kGhhI/a6kHU3X9MZDP2DHP+ASliWUK3D4g==}
+  '@manifest-configuration-language/language@0.1.4':
+    resolution: {integrity: sha512-BcbjQdfo0WA5QnaPAJ6BNF5y/CXYbPMHe8CzCHsNHqbmsHZoubCVTa0PH2pF+fYjKk5MWLjktmnNa9IuG9e7uQ==}
     peerDependencies:
       '@codemirror/autocomplete': '>=6 <7'
       '@codemirror/language': '>=6 <7'
@@ -2908,9 +2908,9 @@ snapshots:
     dependencies:
       '@lezer/common': 1.5.3
 
-  '@manifest-configuration-language/browser@0.1.3': {}
+  '@manifest-configuration-language/browser@0.1.4': {}
 
-  '@manifest-configuration-language/language@0.1.3(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
+  '@manifest-configuration-language/language@0.1.4(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
     dependencies:
       '@codemirror/autocomplete': 6.20.4
       '@codemirror/language': 6.13.1

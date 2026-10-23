@@ -8,7 +8,7 @@ import { ProjectTabs } from "./ProjectTabs";
 import { decodeSharedProject, encodeSharedProject } from "./projectShare";
 import { PlaygroundResult } from "./PlaygroundResult";
 import { ProjectFileInput } from "./ProjectFileInput";
-import type { PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
+import type { PlaygroundDefinitionLocation, PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
 import { writeProjectArchive } from "./projectZip";
 
 const storageKey = "mcl-playground-project-v1";
@@ -349,6 +349,29 @@ export default function Playground() {
     goToEditorPosition(diagnostic);
   }
 
+  function navigateToDefinition(location: PlaygroundDefinitionLocation) {
+    if (!mclPaths.includes(location.path)) return;
+    const navigation: PlaygroundDiagnostic = {
+      code: "MCL-NAVIGATION",
+      message: "",
+      severity: "info",
+      path: location.path,
+      line: location.range.start.line + 1,
+      column: location.range.start.character + 1,
+    };
+    if (location.path !== activePathRef.current) {
+      selectFile(location.path, navigation);
+      return;
+    }
+    goToEditorPosition(navigation);
+  }
+
+  function sourceForPath(path: string) {
+    if (path === "main.mcl") return sourceRef.current;
+    const file = projectFilesRef.current[path];
+    return file?.encoding === "utf8" ? file.content : "";
+  }
+
   function goToEditorPosition(diagnostic: PlaygroundDiagnostic) {
     const view = editor.current;
     if (!view) return;
@@ -421,7 +444,10 @@ export default function Playground() {
             diagnostics={diagnostics}
             onRun={() => void run()}
             onFormat={() => void formatSource()}
-            onComplete={(path, position) => client.current?.complete(sourceRef.current, path, position, projectFilesRef.current) ?? Promise.resolve([])}
+            onComplete={(path, position) => client.current?.complete(sourceForPath(path), path, position, projectFilesRef.current) ?? Promise.resolve([])}
+            onDefinition={(path, position) => client.current?.definition(sourceForPath(path), path, position, projectFilesRef.current) ?? Promise.resolve(null)}
+            onHover={(path, position) => client.current?.hover(sourceForPath(path), path, position, projectFilesRef.current) ?? Promise.resolve(null)}
+            onNavigate={navigateToDefinition}
           />
         </Panel>
         <Separator className="playground-resize-handle" aria-label="エディターと結果の幅を変更" />

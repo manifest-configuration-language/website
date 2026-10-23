@@ -11,10 +11,10 @@ import { setDiagnostics, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { searchKeymap } from "@codemirror/search";
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
 import { EditorState, type Extension } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers } from "@codemirror/view";
+import { EditorView, hoverTooltip, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { autocompletion, closeBracketsKeymap, type Completion, type CompletionContext } from "@codemirror/autocomplete";
-import type { PlaygroundCompletionItem, PlaygroundDiagnostic } from "./types";
+import type { PlaygroundCompletionItem, PlaygroundDefinitionLocation, PlaygroundDiagnostic, PlaygroundHover } from "./types";
 
 export const initialSource = `let appName = "catalog"
 let configMap =
@@ -38,6 +38,9 @@ type Props = {
   onRun: () => void;
   onFormat: () => void;
   onComplete: (path: string, position: { line: number; character: number }) => Promise<PlaygroundCompletionItem[]>;
+  onDefinition: (path: string, position: { line: number; character: number }) => Promise<PlaygroundDefinitionLocation | null>;
+  onHover: (path: string, position: { line: number; character: number }) => Promise<PlaygroundHover | null>;
+  onNavigate: (location: PlaygroundDefinitionLocation) => void;
 };
 
 function toEditorDiagnostics(diagnostics: PlaygroundDiagnostic[], path: string, view: EditorView): Diagnostic[] {
@@ -99,14 +102,33 @@ function waitForCompletionDelay(context: CompletionContext, delayMs: number): Pr
   });
 }
 
-export function MclEditor({ path, source, onReady, onDocumentChange, onError, diagnostics = [], onRun, onFormat, onComplete }: Props) {
+export function MclEditor({ path, source, onReady, onDocumentChange, onError, diagnostics = [], onRun, onFormat, onComplete, onDefinition, onHover, onNavigate }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const currentPath = useRef(path);
+  const definitionRequest = useRef(0);
   const states = useRef(new Map<string, EditorState>());
   const extensions = useRef<Extension[]>([]);
-  const callbacks = useRef({ onReady, onDocumentChange, onError, onRun, onFormat, onComplete });
-  callbacks.current = { onReady, onDocumentChange, onError, onRun, onFormat, onComplete };
+  const callbacks = useRef({ onReady, onDocumentChange, onError, onRun, onFormat, onComplete, onDefinition, onHover, onNavigate });
+  callbacks.current = { onReady, onDocumentChange, onError, onRun, onFormat, onComplete, onDefinition, onHover, onNavigate };
+
+  async function goToDefinition(view: EditorView, position: number) {
+    const requestId = ++definitionRequest.current;
+    const requestPath = currentPath.current;
+    const requestDocument = view.state.doc;
+    const line = view.state.doc.lineAt(position);
+    try {
+      const location = await callbacks.current.onDefinition(requestPath, {
+        line: line.number - 1,
+        character: position - line.from,
+      });
+      if (definitionRequest.current !== requestId || viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return;
+      if (location) callbacks.current.onNavigate(location);
+    } catch (cause) {
+      if (definitionRequest.current !== requestId || viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return;
+      callbacks.current.onError(cause instanceof Error ? cause : new Error(String(cause)));
+    }
+  }
 
   useEffect(() => {
     if (!host.current) return;
@@ -141,8 +163,38 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
             return { from, options };
           }],
         }),
+        hoverTooltip(async (view, position) => {
+          const requestPath = currentPath.current;
+          const requestDocument = view.state.doc;
+          const line = view.state.doc.lineAt(position);
+          try {
+            const hover = await callbacks.current.onHover(requestPath, {
+              line: line.number - 1,
+              character: position - line.from,
+            });
+            if (viewRef.current !== view || currentPath.current !== requestPath || view.state.doc !== requestDocument) return null;
+            if (!hover) return null;
+            const fromLine = view.state.doc.line(Math.min(hover.range.start.line + 1, view.state.doc.lines));
+            const toLine = view.state.doc.line(Math.min(hover.range.end.line + 1, view.state.doc.lines));
+            const from = Math.min(fromLine.to, fromLine.from + hover.range.start.character);
+            const to = Math.max(from, Math.min(toLine.to, toLine.from + hover.range.end.character));
+            return {
+              pos: from,
+              end: to,
+              create() {
+                const dom = document.createElement("div");
+                dom.className = "cm-tooltip-hover";
+                dom.textContent = hover.contents;
+                return { dom };
+              },
+            };
+          } catch {
+            return null;
+          }
+        }, { hoverTime: 450, hideOnChange: true }),
         indentUnit.of("  "),
         EditorView.updateListener.of((update) => {
+          if (update.selectionSet) definitionRequest.current += 1;
           if (update.docChanged) {
             states.current.set(currentPath.current, update.state);
             callbacks.current.onDocumentChange(update.state.doc.toString(), currentPath.current);
@@ -151,6 +203,7 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
         keymap.of([
           { key: "Mod-Enter", run: () => { callbacks.current.onRun(); return true; } },
           { key: "Shift-Alt-f", run: () => { callbacks.current.onFormat(); return true; } },
+          { key: "F12", run: (view) => { void goToDefinition(view, view.state.selection.main.head); return true; } },
           ...closeBracketsKeymap,
           indentWithTab,
           ...searchKeymap,
@@ -158,6 +211,16 @@ export function MclEditor({ path, source, onReady, onDocumentChange, onError, di
           ...defaultKeymap,
           ...historyKeymap,
         ]),
+        EditorView.domEventHandlers({
+          mousedown(event, view) {
+            if (event.button !== 0 || !(event.metaKey || event.ctrlKey)) return false;
+            const position = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            if (position === null) return false;
+            event.preventDefault();
+            void goToDefinition(view, position);
+            return true;
+          },
+        }),
       ];
       const initialState = EditorState.create({ doc: source, extensions: extensions.current });
       states.current.set(path, initialState);

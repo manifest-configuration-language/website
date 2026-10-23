@@ -8,11 +8,11 @@ import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;
 
-function toProjectFiles(source: string, files: Record<string, ProjectFile> = {}): ProjectFiles {
+function toProjectFiles(source: string, files: Record<string, ProjectFile> = {}, entrypoint = "main.mcl"): ProjectFiles {
   const project = Object.create(null) as Record<string, string | Uint8Array>;
-  project["main.mcl"] = source;
+  project[entrypoint] = source;
   for (const [filePath, file] of Object.entries(files)) {
-    if (filePath === "main.mcl") throw new TypeError("Project files must not replace main.mcl");
+    if (filePath === entrypoint) continue;
     project[filePath] = file.encoding === "utf8" ? file.content : file.bytes;
   }
   return project;
@@ -95,7 +95,7 @@ export function createPlaygroundClient(): PlaygroundClient {
     async complete(source, entrypoint, position, files) {
       const controller = beginRequest();
       try {
-        const project = runtime.openProject(toProjectFiles(source, files));
+        const project = runtime.openProject(toProjectFiles(source, files, entrypoint));
         const completion = await project.complete({
           entrypoint,
           position,
@@ -103,6 +103,36 @@ export function createPlaygroundClient(): PlaygroundClient {
           timeoutMs: operationTimeoutMs,
         });
         return completion.items;
+      } finally {
+        finishRequest(controller);
+      }
+    },
+    async definition(source, entrypoint, position, files) {
+      const controller = beginRequest();
+      try {
+        const project = runtime.openProject(toProjectFiles(source, files, entrypoint));
+        const result = await project.definition({
+          entrypoint,
+          position,
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
+        return result.location;
+      } finally {
+        finishRequest(controller);
+      }
+    },
+    async hover(source, entrypoint, position, files) {
+      const controller = beginRequest();
+      try {
+        const project = runtime.openProject(toProjectFiles(source, files, entrypoint));
+        const result = await project.hover({
+          entrypoint,
+          position,
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
+        return result.hover;
       } finally {
         finishRequest(controller);
       }

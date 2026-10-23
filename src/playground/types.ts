@@ -1,3 +1,10 @@
+import type {
+  CompletionItem as BrowserCompletionItem,
+  CompletionPosition as BrowserCompletionPosition,
+  DefinitionLocation as BrowserDefinitionLocation,
+  HoverInfo as BrowserHoverInfo,
+} from "@manifest-configuration-language/browser";
+
 export type PlaygroundDiagnostic = {
   code: string;
   message: string;
@@ -17,16 +24,11 @@ export type PlaygroundDiagnostic = {
   }>;
 };
 
-export type PlaygroundCompletionItem = {
-  label: string;
-  kind: number;
-  insertText?: string;
-};
+export type PlaygroundCompletionItem = BrowserCompletionItem;
+export type PlaygroundCompletionPosition = BrowserCompletionPosition;
 
-export type PlaygroundCompletionPosition = {
-  line: number;
-  character: number;
-};
+export type PlaygroundDefinitionLocation = BrowserDefinitionLocation;
+export type PlaygroundHover = BrowserHoverInfo;
 
 export type ProjectFile =
   | { encoding: "utf8"; content: string }
@@ -68,6 +70,18 @@ export interface PlaygroundClient {
     position: PlaygroundCompletionPosition,
     files?: Record<string, ProjectFile>,
   ): Promise<PlaygroundCompletionItem[]>;
+  definition(
+    source: string,
+    entrypoint: string,
+    position: PlaygroundCompletionPosition,
+    files?: Record<string, ProjectFile>,
+  ): Promise<PlaygroundDefinitionLocation | null>;
+  hover(
+    source: string,
+    entrypoint: string,
+    position: PlaygroundCompletionPosition,
+    files?: Record<string, ProjectFile>,
+  ): Promise<PlaygroundHover | null>;
   run(
     source: string,
     revision: number,

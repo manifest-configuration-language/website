@@ -9,6 +9,7 @@ import { decodeSharedProject, encodeSharedProject } from "./projectShare";
 import { PlaygroundResult } from "./PlaygroundResult";
 import { ProjectFileInput } from "./ProjectFileInput";
 import type { PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
+import { writeProjectArchive } from "./projectZip";
 
 const storageKey = "mcl-playground-project-v1";
 const samples = {
@@ -94,6 +95,7 @@ export default function Playground() {
       .map(([path]) => path)
       .sort(),
   ];
+  const projectPaths = ["main.mcl", ...Object.keys(projectFiles).sort()];
   const activeSource = activePath === "main.mcl"
     ? sourceRef.current
     : projectFiles[activePath]?.encoding === "utf8" ? projectFiles[activePath].content : "";
@@ -284,11 +286,21 @@ export default function Playground() {
 
   async function loadProject(files: File[]) {
     if (!client.current) throw new Error("Playground is not ready");
-    setLoadingProject(true);
+    return await client.current.loadProject(files);
+  }
+
+  async function exportProject() {
     try {
-      return await client.current.loadProject(files);
-    } finally {
-      setLoadingProject(false);
+      const archive = await writeProjectArchive({ source: sourceRef.current, files: projectFilesRef.current });
+      const url = URL.createObjectURL(archive);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "mcl-project.zip";
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setError("ZIPを書き出しました");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
     }
   }
 
@@ -369,7 +381,7 @@ export default function Playground() {
         )}
         <label>
           サンプル
-          <select value={sample} onChange={(event) => {
+          <select value={sample} disabled={busy || loadingProject} onChange={(event) => {
             const selected = event.currentTarget.value as keyof typeof samples;
             applyingSample.current = true;
             setSample(selected);
@@ -381,13 +393,15 @@ export default function Playground() {
             <option value="deployment">Deployment</option>
           </select>
         </label>
-        <button type="button" onClick={shareProject}>共有</button>
+        <button type="button" onClick={shareProject} disabled={busy || loadingProject}>共有</button>
         <ProjectFileInput
           fileCount={Object.keys(projectFiles).length + 1}
           projectSize={projectSizeBytes}
           onLoad={loadProject}
           onLoaded={applyProject}
           onError={setError}
+          onLoading={setLoadingProject}
+          onExport={exportProject}
           disabled={busy || loadingProject || Boolean(editorError)}
         />
         <a href="/playground/capabilities">対応機能</a>
@@ -396,7 +410,7 @@ export default function Playground() {
       {loadingProject && <p role="status">読み込み中</p>}
       <Group className="playground-panels" orientation={orientation}>
         <Panel defaultSize={55} minSize={25}>
-          <ProjectTabs paths={mclPaths} activePath={activePath} onSelect={selectFile} disabled={busy || loadingProject} />
+          <ProjectTabs paths={projectPaths} files={projectFiles} activePath={activePath} onSelect={selectFile} disabled={busy || loadingProject} />
           <MclEditor
             key={`${editorAttempt}:${projectGeneration}`}
             path={activePath}

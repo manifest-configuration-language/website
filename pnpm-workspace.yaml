@@ -3,8 +3,8 @@ allowBuilds:
 overrides:
   "@codemirror/view": 6.43.15
 minimumReleaseAgeExclude:
-  - "@manifest-configuration-language/browser@0.3.1"
-  - "@manifest-configuration-language/language@0.3.1"
+  - "@manifest-configuration-language/browser@0.3.2"
+  - "@manifest-configuration-language/language@0.3.2"
   - "@codemirror/autocomplete@6.20.4"
   - "@codemirror/view@6.43.15"
   - fast-uri@3.1.9

@@ -10,6 +10,7 @@ import {
 } from "./MclEditor";
 import { ProjectTabs } from "./ProjectTabs";
 import { decodeSharedProject, encodeSharedProject } from "./projectShare";
+import { isValidProjectFileSet, isValidProjectPath, projectLimits } from "./projectValidation.js";
 import { PlaygroundResult } from "./PlaygroundResult";
 import { ProjectFileInput } from "./ProjectFileInput";
 import type {
@@ -24,8 +25,20 @@ import { writeProjectArchive } from "./projectZip";
 import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
 import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
-import { isStoredProject, usePlaygroundPersistence } from "./usePlaygroundPersistence";
-import type { StoredProject } from "./usePlaygroundPersistence";
+import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
+import {
+  clearSharedDraftRecovery,
+  isStoredProject,
+  loadSharedDraftRecovery,
+  resetSharedDraftRecovery,
+  saveSharedDraftRecovery,
+  usePlaygroundPersistence,
+} from "./usePlaygroundPersistence";
+import type {
+  SharedDraftRecovery,
+  SharedDraftRecoveryPatch,
+  StoredProject,
+} from "./usePlaygroundPersistence";
 
 const samples = {
   configMap: initialSource,
@@ -82,6 +95,75 @@ async function loadExampleFiles(example: ExampleSpec): Promise<Record<string, st
 function clearSharedFragment() {
   if (!window.location.hash.startsWith("#project=")) return;
   history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+}
+
+function textForPath(project: StoredProject, path: string): string | undefined {
+  if (path === "main.mcl") return project.source;
+  const file = project.files[path];
+  return file?.encoding === "utf8" ? file.content : undefined;
+}
+
+function diffProjectText(base: string, current: string): Omit<SharedDraftRecoveryPatch, "path"> {
+  let prefix = 0;
+  while (prefix < base.length && prefix < current.length && base[prefix] === current[prefix])
+    prefix += 1;
+  let suffix = 0;
+  while (
+    suffix < base.length - prefix &&
+    suffix < current.length - prefix &&
+    base[base.length - suffix - 1] === current[current.length - suffix - 1]
+  )
+    suffix += 1;
+  return {
+    start: prefix,
+    end: base.length - suffix,
+    insert: current.slice(prefix, current.length - suffix),
+  };
+}
+
+function applySharedDraftRecovery(
+  base: StoredProject,
+  activePath: string,
+  patches: SharedDraftRecoveryPatch[],
+): StoredProject | undefined {
+  const recovered: StoredProject = {
+    source: base.source,
+    files: { ...base.files },
+    activePath,
+  };
+  for (const patch of patches) {
+    if (
+      !isValidProjectPath(patch.path) ||
+      (patch.path !== "main.mcl" && base.files[patch.path]?.encoding === "binary")
+    )
+      return undefined;
+    const source = textForPath(base, patch.path) ?? "";
+    if (patch.start < 0 || patch.end < patch.start || patch.end > source.length) return undefined;
+    const content = source.slice(0, patch.start) + patch.insert + source.slice(patch.end);
+    if (patch.path === "main.mcl") recovered.source = content;
+    else recovered.files[patch.path] = { encoding: "utf8", content };
+  }
+  if (activePath !== "main.mcl" && recovered.files[activePath]?.encoding !== "utf8")
+    recovered.activePath = "main.mcl";
+  const paths = ["main.mcl", ...Object.keys(recovered.files)];
+  const encoder = new TextEncoder();
+  const totalBytes =
+    encoder.encode(recovered.source).byteLength +
+    Object.values(recovered.files).reduce(
+      (total, file) =>
+        total +
+        (file.encoding === "utf8"
+          ? encoder.encode(file.content).byteLength
+          : file.bytes.byteLength),
+      0,
+    );
+  if (
+    paths.length > projectLimits.projectFiles ||
+    !isValidProjectFileSet(paths) ||
+    totalBytes > projectLimits.projectBytes
+  )
+    return undefined;
+  return recovered;
 }
 
 function sharedProjectError(cause: unknown, creating: boolean): string {
@@ -156,6 +238,9 @@ export default function Playground() {
   const revision = useRef(0);
   const runAction = useRef<() => void>(() => {});
   const latestYaml = useRef<string | undefined>(undefined);
+  const sharedRecovery = useRef<{ metadata: SharedDraftRecovery; base: StoredProject } | undefined>(
+    undefined,
+  );
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
   const quickOpenDialog = useRef<HTMLDialogElement>(null);
   const examplesDialog = useRef<HTMLDialogElement>(null);
@@ -189,12 +274,8 @@ export default function Playground() {
   const [sample, setSample] = useState("configMap");
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
-  const [quickQuery, setQuickQuery] = useState("");
   const [recentPaths, setRecentPaths] = useState(["main.mcl"]);
-  const [quickSelection, setQuickSelection] = useState(0);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [commandQuery, setCommandQuery] = useState("");
-  const [commandSelection, setCommandSelection] = useState(0);
   const [mobileView, setMobileView] = useState<"editor" | "output" | "problems">("editor");
   const [fileAction, setFileAction] = useState<FileAction>();
   const [filePathInput, setFilePathInput] = useState("");
@@ -282,8 +363,7 @@ export default function Playground() {
           (leftRecent < 0 ? Infinity : leftRecent) - (rightRecent < 0 ? Infinity : rightRecent)
         );
       return left.localeCompare(right);
-    })
-    .filter((path) => path.toLowerCase().includes(quickQuery.trim().toLowerCase()));
+    });
   const commands = [
     { name: "実行", action: () => void run() },
     { name: "整形", action: () => void formatSource() },
@@ -313,8 +393,6 @@ export default function Playground() {
     {
       name: "ファイルを開く",
       action: () => {
-        setQuickQuery("");
-        setQuickSelection(0);
         setQuickOpen(true);
       },
     },
@@ -336,7 +414,7 @@ export default function Playground() {
         setShowDiff(false);
       },
     },
-  ].filter((command) => command.name.toLowerCase().includes(commandQuery.trim().toLowerCase()));
+  ];
   const commandShortcuts: Record<string, string> = {
     実行: "Ctrl/⌘ Enter",
     整形: "Shift+Alt+F",
@@ -345,6 +423,39 @@ export default function Playground() {
     シンボル名を変更: "F2",
     ファイルを開く: "Ctrl/⌘ P",
   };
+  const commandKeywords: Record<string, string[]> = {
+    実行: ["run", "render"],
+    整形: ["format", "document"],
+    サンプルを開く: ["examples"],
+    定義へ移動: ["definition", "f12"],
+    YAMLの対応箇所へ移動: ["source map", "yaml"],
+    参照箇所を検索: ["references", "shift f12"],
+    シンボル名を変更: ["rename", "f2"],
+    共有: ["share"],
+    ファイルを開く: ["quick open", "open file", "ctrl p"],
+    ファイルを作成: ["new file", "create file"],
+    新しいプロジェクト: ["new project"],
+    出力を表示: ["output"],
+    問題を表示: ["problems", "diagnostics"],
+  };
+  const commandItems: QuickAccessItem[] = commands.map((command) => ({
+    value: command.name,
+    label: command.name,
+    shortcut: commandShortcuts[command.name],
+    keywords: commandKeywords[command.name],
+    onSelect: () => {
+      setCommandPaletteOpen(false);
+      command.action();
+    },
+  }));
+  const quickOpenItems: QuickAccessItem[] = quickPaths.map((path) => ({
+    value: path,
+    label: path,
+    onSelect: () => {
+      setQuickOpen(false);
+      selectFile(path);
+    },
+  }));
   const activeSource =
     activePath === "main.mcl"
       ? project.source
@@ -352,8 +463,7 @@ export default function Playground() {
         ? projectFiles[activePath].content
         : "";
 
-  function finishProjectMutation() {
-    clearSharedFragment();
+  async function finishProjectMutation() {
     const currentRevision = ++revision.current;
     setDiagnostics([]);
     setStaleYaml(latestYaml.current);
@@ -363,6 +473,39 @@ export default function Playground() {
     );
     setBusy(false);
     if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
+
+    const recovery = sharedRecovery.current;
+    if (!recovery) {
+      clearSharedFragment();
+      return;
+    }
+    try {
+      const snapshot = projectRef.current;
+      const fragment = await encodeSharedProject({
+        source: snapshot.source,
+        files: snapshot.files,
+        activePath: snapshot.activePath,
+      });
+      if (snapshot !== projectRef.current) return;
+      const metadata = {
+        draftId: recovery.metadata.draftId,
+        fragment,
+        activePath: snapshot.activePath,
+      };
+      resetSharedDraftRecovery(metadata);
+      sharedRecovery.current = { metadata, base: snapshot };
+      if (window.location.hash.startsWith("#project=")) {
+        history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${window.location.search}${fragment}`,
+        );
+      }
+      await saveDraftSnapshot(metadata.draftId, snapshot);
+      clearSharedFragment();
+    } catch (cause) {
+      setError(sharedProjectError(cause, true));
+    }
   }
 
   function languageServiceFiles(): Record<string, ProjectFile> {
@@ -378,6 +521,8 @@ export default function Playground() {
     (project: StoredProject, options: { newDraft?: boolean; name?: string } = {}) => {
       if (options.newDraft !== false) {
         clearSharedFragment();
+        clearSharedDraftRecovery(activeDraftIdRef.current);
+        sharedRecovery.current = undefined;
         void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
           (cause: unknown) => {
             setError(cause instanceof Error ? cause.message : String(cause));
@@ -457,12 +602,45 @@ export default function Playground() {
         activateDraft(activeId, "プロジェクト");
       }
 
+      let recoveredSharedDraft = false;
       try {
         const shared = await decodeSharedProject(window.location.hash);
         if (shared) {
+          clearSharedDraftRecovery();
           restored = shared;
           activeId = crypto.randomUUID();
           activateDraft(activeId, "共有プロジェクト");
+          sharedRecovery.current = {
+            metadata: {
+              draftId: activeId,
+              fragment: window.location.hash,
+              activePath: shared.activePath ?? "main.mcl",
+            },
+            base: shared,
+          };
+        } else if (!window.location.hash.startsWith("#project=")) {
+          const savedRecovery = loadSharedDraftRecovery();
+          if (savedRecovery) {
+            const base = await decodeSharedProject(savedRecovery.metadata.fragment);
+            const recovered = base
+              ? applySharedDraftRecovery(
+                  base,
+                  savedRecovery.metadata.activePath,
+                  savedRecovery.patches,
+                )
+              : undefined;
+            if (base && recovered) {
+              restored = recovered;
+              activeId = savedRecovery.metadata.draftId;
+              await setActiveDraft(activeId);
+              if (!draftsRef.current.some((draft) => draft.id === activeId))
+                updateDraftMetadata(activeId, "共有プロジェクト");
+              sharedRecovery.current = { metadata: savedRecovery.metadata, base };
+              recoveredSharedDraft = true;
+            } else {
+              clearSharedDraftRecovery();
+            }
+          }
         }
       } catch (cause) {
         if (!cancelled) setError(sharedProjectError(cause, false));
@@ -488,6 +666,11 @@ export default function Playground() {
             activeId = crypto.randomUUID();
             activateDraft(activeId, example.title);
             restoredSample = example.slug;
+            if (sharedRecovery.current) {
+              clearSharedDraftRecovery(sharedRecovery.current.metadata.draftId);
+              sharedRecovery.current = undefined;
+              recoveredSharedDraft = false;
+            }
             url.searchParams.delete("example");
             history.replaceState(null, "", url);
           } catch (cause) {
@@ -500,6 +683,7 @@ export default function Playground() {
         activateDraft(activeId, "プロジェクト");
       if (restored) {
         applyProject(restored, { newDraft: false });
+        if (recoveredSharedDraft) await saveDraftSnapshot(activeId, projectRef.current);
         if (restoredSample) setSample(restoredSample);
       }
       startupReady.current = true;
@@ -550,25 +734,17 @@ export default function Playground() {
         return;
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "p") {
         event.preventDefault();
-        setCommandQuery("");
-        setCommandSelection(0);
         setCommandPaletteOpen(true);
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
         event.preventDefault();
-        setQuickQuery("");
-        setQuickSelection(0);
         setQuickOpen(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  useEffect(() => {
-    setCommandSelection(0);
-  }, [commandQuery]);
 
   useEffect(() => {
     const dialog = commandPaletteDialog.current;
@@ -583,10 +759,6 @@ export default function Playground() {
     if (examplesOpen && !dialog.open) dialog.showModal();
     else if (!examplesOpen && dialog.open) dialog.close();
   }, [examplesOpen]);
-
-  useEffect(() => {
-    setQuickSelection(0);
-  }, [quickQuery]);
 
   useEffect(() => {
     const dialog = quickOpenDialog.current;
@@ -651,12 +823,39 @@ export default function Playground() {
 
   const onDocumentChange = useCallback(
     (source: string, path: string) => {
+      const previousProject = projectRef.current;
+      let recoveryError: string | undefined;
+      if (!sharedRecovery.current && window.location.hash.startsWith("#project=")) {
+        sharedRecovery.current = {
+          metadata: {
+            draftId: activeDraftIdRef.current,
+            fragment: window.location.hash,
+            activePath: previousProject.activePath,
+          },
+          base: {
+            source: previousProject.source,
+            files: previousProject.files,
+            activePath: previousProject.activePath,
+          },
+        };
+      }
       const result = setFileContent(path, source);
       if (!result.ok) {
         setError(result.error);
         return false;
       }
-      clearSharedFragment();
+      const recovery = sharedRecovery.current;
+      if (recovery) {
+        const metadata = { ...recovery.metadata, activePath: path };
+        const patch = diffProjectText(textForPath(recovery.base, path) ?? "", source);
+        try {
+          saveSharedDraftRecovery(metadata, { path, ...patch });
+          recovery.metadata = metadata;
+          clearSharedFragment();
+        } catch (cause) {
+          recoveryError = `共有プロジェクトの編集をタブ内に保存できません: ${cause instanceof Error ? cause.message : String(cause)}`;
+        }
+      }
       setRecentPaths((previous) => [path, ...previous.filter((entry) => entry !== path)]);
       if (!applyingSample.current) setSample("custom");
       const currentRevision = ++revision.current;
@@ -668,12 +867,12 @@ export default function Playground() {
           ? { ...previous, ok: false, result: undefined, error: undefined, diagnostics: [] }
           : previous,
       );
-      setError("");
+      setError(recoveryError ?? "");
       setBusy(false);
       if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
       return true;
     },
-    [projectRef, scheduleLint, setFileContent],
+    [activeDraftIdRef, projectRef, scheduleLint, setFileContent],
   );
 
   async function run(focusOutput = true) {
@@ -832,6 +1031,10 @@ export default function Playground() {
       await saveDraftSnapshot(activeDraftIdRef.current, projectRef.current);
       const saved: unknown = await loadDraft(id);
       if (!isStoredProject(saved)) throw new Error("プロジェクトを読み込めません");
+      if (sharedRecovery.current?.metadata.draftId === activeDraftIdRef.current) {
+        clearSharedDraftRecovery(activeDraftIdRef.current);
+        sharedRecovery.current = undefined;
+      }
       await setActiveDraft(id);
       clearSharedFragment();
       applyProject(saved, { newDraft: false });
@@ -878,6 +1081,16 @@ export default function Playground() {
       const shareURL = new URL(window.location.href);
       shareURL.hash = fragment.slice(1);
       await setDraftShare(draftId, fragment);
+      const metadata = { draftId, fragment, activePath: snapshot.activePath };
+      resetSharedDraftRecovery(metadata);
+      sharedRecovery.current = {
+        metadata,
+        base: {
+          source: snapshot.source,
+          files: snapshot.files,
+          activePath: snapshot.activePath,
+        },
+      };
       await navigator.clipboard.writeText(shareURL.href);
       history.replaceState(null, "", fragment);
       setNotice("共有URLをコピーしました");
@@ -1072,7 +1285,7 @@ export default function Playground() {
         else nextFiles[editedPath] = { encoding: "utf8", content };
       }
       replaceProjectState(nextSource, nextFiles, currentProject.activePath);
-      finishProjectMutation();
+      await finishProjectMutation();
       setSymbolRenameOpen(false);
       setNotice("シンボル名を変更しました");
     } catch (cause) {
@@ -1137,7 +1350,7 @@ export default function Playground() {
       setFileActionError(result.error);
       return;
     }
-    finishProjectMutation();
+    void finishProjectMutation();
     setRecentPaths((previous) =>
       fileAction.kind === "create"
         ? [path, ...previous.filter((entry) => entry !== path)]
@@ -1156,7 +1369,7 @@ export default function Playground() {
       setFileActionError(result.error);
       return;
     }
-    finishProjectMutation();
+    void finishProjectMutation();
     setRecentPaths((previous) => previous.filter((entry) => entry !== path));
     setError("");
     setFileActionError("");
@@ -1221,11 +1434,7 @@ export default function Playground() {
             <button
               className="playground-command-button"
               type="button"
-              onClick={() => {
-                setCommandQuery("");
-                setCommandSelection(0);
-                setCommandPaletteOpen(true);
-              }}
+              onClick={() => setCommandPaletteOpen(true)}
               aria-keyshortcuts="Control+Shift+P Meta+Shift+P"
             >
               コマンド検索
@@ -1437,53 +1646,13 @@ export default function Playground() {
           className="playground-quick-open"
           aria-label="ファイルを開く"
           onCancel={() => setQuickOpen(false)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setQuickOpen(false);
-            }
-            if (event.key === "ArrowDown" && quickPaths.length > 0) {
-              event.preventDefault();
-              setQuickSelection((index) => (index + 1) % quickPaths.length);
-            }
-            if (event.key === "ArrowUp" && quickPaths.length > 0) {
-              event.preventDefault();
-              setQuickSelection((index) => (index - 1 + quickPaths.length) % quickPaths.length);
-            }
-            if (event.key === "Enter" && quickPaths[quickSelection]) {
-              event.preventDefault();
-              selectFile(quickPaths[quickSelection]);
-              setQuickOpen(false);
-            }
-          }}
         >
-          <label>
-            <span>ファイルへ移動</span>
-            <input
-              autoFocus
-              value={quickQuery}
-              onChange={(event) => setQuickQuery(event.currentTarget.value)}
-              placeholder="ファイル名を入力"
-            />
-          </label>
-          <ul>
-            {quickPaths.map((path, index) => (
-              <li key={path}>
-                <button
-                  type="button"
-                  aria-current={index === quickSelection ? "true" : undefined}
-                  onMouseEnter={() => setQuickSelection(index)}
-                  onClick={() => {
-                    selectFile(path);
-                    setQuickOpen(false);
-                  }}
-                >
-                  {path}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {quickPaths.length === 0 && <p>一致するファイルはありません</p>}
+          <QuickAccessList
+            label="ファイルへ移動"
+            placeholder="ファイル名を入力"
+            emptyMessage="一致するファイルはありません"
+            items={quickOpenItems}
+          />
         </dialog>
       )}
       {commandPaletteOpen && (
@@ -1492,55 +1661,13 @@ export default function Playground() {
           className="playground-quick-open"
           aria-label="コマンド"
           onCancel={() => setCommandPaletteOpen(false)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              setCommandPaletteOpen(false);
-            }
-            if (event.key === "ArrowDown" && commands.length > 0) {
-              event.preventDefault();
-              setCommandSelection((index) => (index + 1) % commands.length);
-            }
-            if (event.key === "ArrowUp" && commands.length > 0) {
-              event.preventDefault();
-              setCommandSelection((index) => (index - 1 + commands.length) % commands.length);
-            }
-            if (event.key === "Enter" && commands[commandSelection]) {
-              event.preventDefault();
-              const command = commands[commandSelection];
-              setCommandPaletteOpen(false);
-              command.action();
-            }
-          }}
         >
-          <label>
-            <span>コマンド</span>
-            <input
-              autoFocus
-              value={commandQuery}
-              onChange={(event) => setCommandQuery(event.currentTarget.value)}
-              placeholder="コマンドを検索"
-            />
-          </label>
-          <ul>
-            {commands.map((command, index) => (
-              <li key={command.name}>
-                <button
-                  type="button"
-                  aria-current={index === commandSelection ? "true" : undefined}
-                  onMouseEnter={() => setCommandSelection(index)}
-                  onClick={() => {
-                    setCommandPaletteOpen(false);
-                    command.action();
-                  }}
-                >
-                  {command.name}
-                  {commandShortcuts[command.name] && <kbd>{commandShortcuts[command.name]}</kbd>}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {commands.length === 0 && <p>一致するコマンドはありません</p>}
+          <QuickAccessList
+            label="コマンド"
+            placeholder="コマンドを検索"
+            emptyMessage="一致するコマンドはありません"
+            items={commandItems}
+          />
         </dialog>
       )}
       <nav className="playground-mobile-views" aria-label="表示">

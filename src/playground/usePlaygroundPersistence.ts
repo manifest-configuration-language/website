@@ -9,6 +9,9 @@ const draftIndexKey = "mcl-playground-drafts-v1";
 const draftKeyPrefix = "mcl-playground-draft-v1:";
 const draftShareKeyPrefix = "mcl-playground-draft-share-v1:";
 const editorSettingsKey = "mcl-playground-editor-settings-v1";
+const sharedRecoveryKey = "mcl-playground-shared-recovery-v1";
+const sharedRecoveryBasePrefix = "mcl-playground-shared-recovery-base-v1:";
+const sharedRecoveryPatchPrefix = "mcl-playground-shared-recovery-patch-v1:";
 
 export const defaultEditorSettings: EditorSettings = {
   theme: "system",
@@ -25,6 +28,130 @@ export type StoredProject = {
   activePath?: string;
 };
 export type DraftMetadata = { id: string; name: string; updatedAt: number };
+export type SharedDraftRecovery = {
+  draftId: string;
+  fragment: string;
+  activePath: string;
+};
+export type SharedDraftRecoveryPatch = {
+  path: string;
+  start: number;
+  end: number;
+  insert: string;
+};
+
+function sharedRecoveryPatchKey(draftId: string, path: string) {
+  return `${sharedRecoveryPatchPrefix}${draftId}:${encodeURIComponent(path)}`;
+}
+
+function sharedRecoveryBaseKey(draftId: string) {
+  return `${sharedRecoveryBasePrefix}${draftId}`;
+}
+
+export function loadSharedDraftRecovery():
+  | {
+      metadata: SharedDraftRecovery;
+      patches: SharedDraftRecoveryPatch[];
+    }
+  | undefined {
+  try {
+    const rawMetadata = sessionStorage.getItem(sharedRecoveryKey);
+    if (!rawMetadata) return undefined;
+    const value: unknown = JSON.parse(rawMetadata);
+    if (!value || typeof value !== "object") return undefined;
+    const stored = value as Record<string, unknown>;
+    if (
+      typeof stored.draftId !== "string" ||
+      !/^[0-9a-f-]{36}$/i.test(stored.draftId) ||
+      typeof stored.activePath !== "string"
+    )
+      return undefined;
+
+    const fragment = sessionStorage.getItem(sharedRecoveryBaseKey(stored.draftId));
+    if (!fragment?.startsWith("#project=")) return undefined;
+    const metadata = {
+      draftId: stored.draftId,
+      fragment,
+      activePath: stored.activePath,
+    };
+    const prefix = `${sharedRecoveryPatchPrefix}${stored.draftId}:`;
+    const patches: SharedDraftRecoveryPatch[] = [];
+    for (let index = 0; index < sessionStorage.length; index += 1) {
+      const key = sessionStorage.key(index);
+      if (!key?.startsWith(prefix)) continue;
+      const patch: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
+      if (
+        !patch ||
+        typeof patch !== "object" ||
+        typeof (patch as SharedDraftRecoveryPatch).path !== "string" ||
+        !Number.isSafeInteger((patch as SharedDraftRecoveryPatch).start) ||
+        !Number.isSafeInteger((patch as SharedDraftRecoveryPatch).end) ||
+        typeof (patch as SharedDraftRecoveryPatch).insert !== "string"
+      )
+        return undefined;
+      patches.push(patch as SharedDraftRecoveryPatch);
+    }
+    return { metadata: metadata as unknown as SharedDraftRecovery, patches };
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveSharedDraftRecovery(
+  metadata: SharedDraftRecovery,
+  patch?: SharedDraftRecoveryPatch,
+) {
+  let previousMetadata: unknown;
+  try {
+    previousMetadata = JSON.parse(sessionStorage.getItem(sharedRecoveryKey) ?? "null");
+  } catch {
+    previousMetadata = undefined;
+  }
+  if (
+    !previousMetadata ||
+    typeof previousMetadata !== "object" ||
+    (previousMetadata as Record<string, unknown>).draftId !== metadata.draftId ||
+    sessionStorage.getItem(sharedRecoveryBaseKey(metadata.draftId)) !== metadata.fragment
+  )
+    sessionStorage.setItem(sharedRecoveryBaseKey(metadata.draftId), metadata.fragment);
+  if (patch)
+    sessionStorage.setItem(
+      sharedRecoveryPatchKey(metadata.draftId, patch.path),
+      JSON.stringify(patch),
+    );
+  sessionStorage.setItem(
+    sharedRecoveryKey,
+    JSON.stringify({ draftId: metadata.draftId, activePath: metadata.activePath }),
+  );
+}
+
+export function resetSharedDraftRecovery(metadata: SharedDraftRecovery) {
+  const prefix = `${sharedRecoveryPatchPrefix}${metadata.draftId}:`;
+  for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+    const key = sessionStorage.key(index);
+    if (key?.startsWith(prefix)) sessionStorage.removeItem(key);
+  }
+  sessionStorage.setItem(sharedRecoveryBaseKey(metadata.draftId), metadata.fragment);
+  sessionStorage.setItem(
+    sharedRecoveryKey,
+    JSON.stringify({ draftId: metadata.draftId, activePath: metadata.activePath }),
+  );
+}
+
+export function clearSharedDraftRecovery(draftId?: string) {
+  const saved = loadSharedDraftRecovery();
+  if (draftId && saved && saved.metadata.draftId !== draftId) return;
+  const targetDraftId = saved?.metadata.draftId ?? draftId;
+  if (targetDraftId) {
+    const prefix = `${sharedRecoveryPatchPrefix}${targetDraftId}:`;
+    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(prefix)) sessionStorage.removeItem(key);
+    }
+    sessionStorage.removeItem(sharedRecoveryBaseKey(targetDraftId));
+  }
+  sessionStorage.removeItem(sharedRecoveryKey);
+}
 
 function draftDataKey(id: string) {
   return `${draftKeyPrefix}${id}`;

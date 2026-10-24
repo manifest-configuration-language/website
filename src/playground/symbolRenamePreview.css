@@ -1,0 +1,55 @@
+.playground-symbol-rename-preview {
+  display: grid;
+  gap: 0.75rem;
+  max-height: min(50vh, 28rem);
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.playground-symbol-rename-preview li {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  padding-block-end: 0.65rem;
+  border-block-end: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-symbol-rename-location {
+  color: var(--sl-color-gray-2);
+  font:
+    0.8rem ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+.playground-symbol-rename-change {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  font:
+    0.9rem ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+.playground-symbol-rename-change del,
+.playground-symbol-rename-change ins {
+  min-width: 0;
+  padding: 0.2rem 0.4rem;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.playground-symbol-rename-change del {
+  background: color-mix(in srgb, var(--sl-color-red) 16%, transparent);
+  color: var(--sl-color-red);
+}
+
+.playground-symbol-rename-change ins {
+  background: color-mix(in srgb, var(--sl-color-green-high) 16%, transparent);
+  color: var(--sl-color-green-high);
+}

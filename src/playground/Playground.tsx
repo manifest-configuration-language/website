@@ -25,6 +25,7 @@ import type {
   PlaygroundDefinitionLocation,
   PlaygroundDiagnostic,
   PlaygroundReference,
+  PlaygroundRenameEdit,
   PlaygroundReply,
   PlaygroundSourceMap,
   ProjectFile,
@@ -34,6 +35,7 @@ import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
 import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
 import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
+import "./symbolRenamePreview.css";
 import {
   clearSharedDraftRecovery,
   isStoredProject,
@@ -80,6 +82,17 @@ emit deployment
 
 type ExampleSpec = { category: string; title: string; slug: string; asset: string };
 type FileAction = { kind: "create" } | { kind: "rename" | "delete"; path: string };
+type PendingSymbolRename = {
+  edits: PlaygroundRenameEdit[];
+  sources: Record<string, string>;
+  revision: number;
+};
+type RenamePreviewEntry = {
+  path: string;
+  line: number;
+  before: string;
+  after: string;
+};
 type RenderState = {
   reply?: PlaygroundReply;
   latestSuccess?: PlaygroundReply;
@@ -274,6 +287,42 @@ function positionInRange(
   return afterStart && beforeEnd;
 }
 
+function sourceOffsetAt(source: string, position: { line: number; character: number }) {
+  let offset = 0;
+  for (let line = 0; line < position.line; line += 1) {
+    const newline = source.indexOf("\n", offset);
+    if (newline < 0) return undefined;
+    offset = newline + 1;
+  }
+  const lineEnd = source.indexOf("\n", offset);
+  const contentEnd = lineEnd < 0 ? source.length : lineEnd;
+  if (position.character < 0 || offset + position.character > contentEnd) return undefined;
+  return offset + position.character;
+}
+
+function renamePreviewEntries(
+  edits: PlaygroundRenameEdit[],
+  sources: Record<string, string>,
+): RenamePreviewEntry[] | undefined {
+  const entries = edits.map((edit) => {
+    const source = sources[edit.path];
+    if (source === undefined) return undefined;
+    const from = sourceOffsetAt(source, edit.range.start);
+    const to = sourceOffsetAt(source, edit.range.end);
+    if (from === undefined || to === undefined || from > to) return undefined;
+    return {
+      path: edit.path,
+      line: edit.range.start.line + 1,
+      before: source.slice(from, to),
+      after: edit.newText,
+    };
+  });
+  if (entries.some((entry) => entry === undefined)) return undefined;
+  return (entries as RenamePreviewEntry[]).sort(
+    (left, right) => left.path.localeCompare(right.path) || left.line - right.line,
+  );
+}
+
 export default function Playground() {
   const examples = exampleCatalog as unknown as ExampleSpec[];
   const {
@@ -337,6 +386,7 @@ export default function Playground() {
   const [symbolRenameOpen, setSymbolRenameOpen] = useState(false);
   const [symbolRenameInput, setSymbolRenameInput] = useState("");
   const [symbolRenameError, setSymbolRenameError] = useState("");
+  const [pendingSymbolRename, setPendingSymbolRename] = useState<PendingSymbolRename>();
   const [symbolReferences, setSymbolReferences] = useState<PlaygroundReference[]>([]);
   const [symbolReferencesError, setSymbolReferencesError] = useState("");
   const [symbolReferencesOpen, setSymbolReferencesOpen] = useState(false);
@@ -1292,34 +1342,55 @@ export default function Playground() {
         sources[edit.path] =
           edit.path === path ? view.state.doc.toString() : sourceForPath(edit.path);
       }
-      const applied = applyEdits(edits, sources);
-      if (!applied.ok) {
-        setSymbolRenameError(applied.error);
+      const preview = renamePreviewEntries(edits, sources);
+      if (!preview) {
+        setSymbolRenameError("変更位置を確認できません。");
         return;
       }
-
-      const currentProject = projectRef.current;
-      let nextSource = currentProject.source;
-      const nextFiles = Object.assign(Object.create(null), currentProject.files) as Record<
-        string,
-        ProjectFile
-      >;
-      for (const [editedPath, content] of Object.entries(applied.documents)) {
-        if (editedPath === "main.mcl") nextSource = content;
-        else nextFiles[editedPath] = { encoding: "utf8", content };
-      }
-      replaceProjectState(nextSource, nextFiles, currentProject.activePath);
-      await finishProjectMutation();
-      setSymbolRenameOpen(false);
-      setNotice("シンボル名を変更しました");
+      setPendingSymbolRename({ edits, sources, revision: currentRevision });
     } catch (cause) {
       setSymbolRenameError(cause instanceof Error ? cause.message : String(cause));
     }
   }
 
+  async function applySymbolRename() {
+    const pending = pendingSymbolRename;
+    const applyEdits = workspaceEditApplier.current;
+    if (!pending || !applyEdits) return;
+    if (pending.revision !== revision.current) {
+      setSymbolRenameError("ソースが変更されています。もう一度プレビューしてください。");
+      setPendingSymbolRename(undefined);
+      return;
+    }
+
+    const applied = applyEdits(pending.edits, pending.sources);
+    if (!applied.ok) {
+      setSymbolRenameError(applied.error);
+      setPendingSymbolRename(undefined);
+      return;
+    }
+
+    const currentProject = projectRef.current;
+    let nextSource = currentProject.source;
+    const nextFiles = Object.assign(Object.create(null), currentProject.files) as Record<
+      string,
+      ProjectFile
+    >;
+    for (const [editedPath, content] of Object.entries(applied.documents)) {
+      if (editedPath === "main.mcl") nextSource = content;
+      else nextFiles[editedPath] = { encoding: "utf8", content };
+    }
+    replaceProjectState(nextSource, nextFiles, currentProject.activePath);
+    await finishProjectMutation();
+    setSymbolRenameOpen(false);
+    setPendingSymbolRename(undefined);
+    setNotice("シンボル名を変更しました");
+  }
+
   function openSymbolRename() {
     setSymbolRenameError("");
     setSymbolRenameInput("");
+    setPendingSymbolRename(undefined);
     setSymbolRenameOpen(true);
   }
 
@@ -2015,30 +2086,79 @@ export default function Playground() {
         ref={symbolRenameDialog}
         className="playground-file-action"
         aria-labelledby="playground-symbol-rename-title"
-        onCancel={() => setSymbolRenameOpen(false)}
+        onCancel={() => {
+          setSymbolRenameOpen(false);
+          setPendingSymbolRename(undefined);
+        }}
       >
-        <form onSubmit={(event) => void renameSymbol(event)}>
-          <h2 id="playground-symbol-rename-title">シンボル名の変更</h2>
-          <label>
-            <span>新しい名前</span>
-            <input
-              autoFocus
-              value={symbolRenameInput}
-              onChange={(event) => setSymbolRenameInput(event.currentTarget.value)}
-              required
-              maxLength={256}
-            />
-          </label>
-          {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
-          <div className="playground-file-action-buttons">
-            <button type="button" onClick={() => setSymbolRenameOpen(false)}>
-              キャンセル
-            </button>
-            <button type="submit" disabled={busy || loadingProject}>
-              変更
-            </button>
-          </div>
-        </form>
+        {pendingSymbolRename ? (
+          <section>
+            <h2 id="playground-symbol-rename-title">変更箇所</h2>
+            <ul className="playground-symbol-rename-preview">
+              {renamePreviewEntries(pendingSymbolRename.edits, pendingSymbolRename.sources)?.map(
+                (entry, index) => (
+                  <li key={`${entry.path}:${entry.line}:${index}`}>
+                    <span className="playground-symbol-rename-location">
+                      {entry.path}:{entry.line}
+                    </span>
+                    <div className="playground-symbol-rename-change">
+                      <del aria-label="変更前">{entry.before}</del>
+                      <ins aria-label="変更後">{entry.after}</ins>
+                    </div>
+                  </li>
+                ),
+              )}
+            </ul>
+            {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
+            <div className="playground-file-action-buttons">
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingSymbolRename(undefined);
+                  setSymbolRenameError("");
+                }}
+              >
+                名前を再入力
+              </button>
+              <button
+                type="button"
+                disabled={busy || loadingProject}
+                onClick={() => void applySymbolRename()}
+              >
+                名前を変更
+              </button>
+            </div>
+          </section>
+        ) : (
+          <form onSubmit={(event) => void renameSymbol(event)}>
+            <h2 id="playground-symbol-rename-title">シンボル名の変更</h2>
+            <label>
+              <span>新しい名前</span>
+              <input
+                autoFocus
+                value={symbolRenameInput}
+                onChange={(event) => setSymbolRenameInput(event.currentTarget.value)}
+                required
+                maxLength={256}
+              />
+            </label>
+            {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
+            <div className="playground-file-action-buttons">
+              <button
+                type="button"
+                onClick={() => {
+                  setSymbolRenameOpen(false);
+                  setPendingSymbolRename(undefined);
+                }}
+              >
+                キャンセル
+              </button>
+              <button type="submit" disabled={busy || loadingProject}>
+                変更箇所を確認
+              </button>
+            </div>
+          </form>
+        )}
       </dialog>
       <dialog
         ref={symbolReferencesDialog}

@@ -240,13 +240,14 @@ export default function Playground() {
     [updateDraftMetadata],
   );
 
-  const mclPaths = [
+  const editablePaths = [
     "main.mcl",
     ...Object.entries(projectFiles)
-      .filter(([path, file]) => path.endsWith(".mcl") && file.encoding === "utf8")
+      .filter(([, file]) => file.encoding === "utf8")
       .map(([path]) => path)
       .sort(),
   ];
+  const mclPaths = editablePaths.filter((path) => path.endsWith(".mcl"));
   const projectPaths = ["main.mcl", ...Object.keys(projectFiles).sort()];
   const quickPaths = projectPaths
     .filter((path) => projectFiles[path]?.encoding === "utf8" || path === "main.mcl")
@@ -817,7 +818,7 @@ export default function Playground() {
 
   function goToDiagnostic(diagnostic: PlaygroundDiagnostic) {
     const targetPath = diagnostic.path ?? "main.mcl";
-    if (!mclPaths.includes(targetPath)) return;
+    if (!editablePaths.includes(targetPath)) return;
     if (targetPath !== projectRef.current.activePath) {
       selectFile(targetPath, diagnostic);
       return;
@@ -1295,6 +1296,7 @@ export default function Playground() {
             </div>
             <PlaygroundResult
               reply={reply}
+              navigablePaths={editablePaths}
               staleYaml={staleYaml}
               previousYaml={previousYaml}
               fontSize={editorSettings.fontSize}

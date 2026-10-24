@@ -10,6 +10,7 @@ import type { PlaygroundDiagnostic, PlaygroundReply } from "./types";
 
 type Props = {
   reply?: PlaygroundReply;
+  navigablePaths: string[];
   staleYaml?: string;
   previousYaml?: string;
   fontSize: number;
@@ -20,6 +21,7 @@ type Props = {
 
 export function PlaygroundResult({
   reply,
+  navigablePaths,
   staleYaml,
   previousYaml,
   fontSize,
@@ -110,7 +112,7 @@ export function PlaygroundResult({
   }
 
   function canNavigate(diagnostic: PlaygroundDiagnostic) {
-    return !diagnostic.path || diagnostic.path.endsWith(".mcl");
+    return !diagnostic.path || navigablePaths.includes(diagnostic.path);
   }
 
   return (

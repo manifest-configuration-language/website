@@ -78,6 +78,14 @@
   line-height: 1.5;
 }
 
+.playground-editor-position {
+  color: var(--sl-color-gray-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .playground-result-status {
   color: var(--sl-color-green-high);
 }

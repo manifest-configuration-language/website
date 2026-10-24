@@ -470,6 +470,20 @@ export default function Playground() {
         );
       return left.localeCompare(right);
     });
+  const symbolReferenceItems: QuickAccessItem[] = symbolReferences.map((reference, index) => {
+    const { line, character } = reference.range.start;
+    const sourceLine = sourceForPath(reference.path).split(/\r?\n/)[line]?.trim() ?? "";
+    const location = `${reference.path}:${line + 1}:${character + 1}`;
+    return {
+      value: `${location} ${sourceLine} ${index}`,
+      label: `${location}  ${sourceLine}`,
+      keywords: [reference.path, sourceLine],
+      onSelect: () => {
+        navigateToDefinition(reference);
+        setSymbolReferencesOpen(false);
+      },
+    };
+  });
   const commands = [
     { name: "実行", action: () => void run() },
     { name: "整形", action: () => void formatSource() },
@@ -2171,31 +2185,13 @@ export default function Playground() {
         </label>
         {symbolReferencesError ? (
           <p role="alert">{symbolReferencesError}</p>
-        ) : symbolReferences.length > 0 ? (
-          <ul className="playground-reference-list">
-            {symbolReferences.map((reference, index) => {
-              const { line, character } = reference.range.start;
-              const sourceLine = sourceForPath(reference.path).split(/\r?\n/)[line] ?? "";
-              return (
-                <li key={`${reference.path}:${line}:${character}:${index}`}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigateToDefinition(reference);
-                      setSymbolReferencesOpen(false);
-                    }}
-                  >
-                    <span>
-                      {reference.path}:{line + 1}:{character + 1}
-                    </span>
-                    {sourceLine && <code>{sourceLine.trim()}</code>}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
         ) : (
-          <p>参照が見つかりません</p>
+          <QuickAccessList
+            label="参照を検索"
+            placeholder="ファイル名またはコードを検索"
+            emptyMessage="参照が見つかりません"
+            items={symbolReferenceItems}
+          />
         )}
         <div className="playground-file-action-buttons">
           <button type="button" onClick={() => setSymbolReferencesOpen(false)}>

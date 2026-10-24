@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   bracketMatching,
   defaultHighlightStyle,
@@ -171,6 +171,7 @@ export function MclEditor({
   onFindReferences,
   onRenameSymbol,
 }: Props) {
+  const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const currentPath = useRef(path);
@@ -271,6 +272,13 @@ export function MclEditor({
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ...languageServices.extensions,
         EditorView.updateListener.of((update) => {
+          if (update.selectionSet || update.docChanged) {
+            const line = update.state.doc.lineAt(update.state.selection.main.head);
+            setCursorPosition({
+              line: line.number,
+              column: update.state.selection.main.head - line.from + 1,
+            });
+          }
           if (update.selectionSet) {
             definitionRequest.current += 1;
             hoverRequest.current += 1;
@@ -355,6 +363,11 @@ export function MclEditor({
       ];
       const initialState = EditorState.create({ doc: source, extensions: extensions.current });
       states.current.set(path, initialState);
+      const initialLine = initialState.doc.lineAt(initialState.selection.main.head);
+      setCursorPosition({
+        line: initialLine.number,
+        column: initialState.selection.main.head - initialLine.from + 1,
+      });
       view = new EditorView({
         parent: host.current,
         state: initialState,
@@ -464,6 +477,8 @@ export function MclEditor({
       }).state;
     states.current.set(path, nextState);
     view.setState(nextState);
+    const line = nextState.doc.lineAt(nextState.selection.main.head);
+    setCursorPosition({ line: line.number, column: nextState.selection.main.head - line.from + 1 });
     view.dispatch({ effects: languageMode.current.reconfigure(languageForPath(path)) });
     callbacks.current.onReady(view);
   }, [path, source]);
@@ -510,6 +525,12 @@ export function MclEditor({
           {path}
         </span>
         <span className="playground-code-language">{languageLabel}</span>
+        <span
+          className="playground-editor-position"
+          aria-label={`行 ${cursorPosition.line}、列 ${cursorPosition.column}`}
+        >
+          Ln {cursorPosition.line}, Col {cursorPosition.column}
+        </span>
       </header>
       <div className="playground-editor" ref={host} />
     </section>

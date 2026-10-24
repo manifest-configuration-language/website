@@ -10,6 +10,7 @@ import {
 } from "react";
 import type { EditorView } from "@codemirror/view";
 import { selectNextOccurrence, selectSelectionMatches } from "@codemirror/search";
+import { toggleComment } from "@codemirror/commands";
 import { createPlaygroundClient } from "./apiClient";
 import {
   MclEditor,
@@ -489,6 +490,15 @@ export default function Playground() {
     { name: "実行", action: () => void run() },
     { name: "整形", action: () => void formatSource() },
     {
+      name: "コメントを切り替え",
+      action: () => {
+        const view = editor.current;
+        if (!view) return;
+        view.focus();
+        toggleComment(view);
+      },
+    },
+    {
       name: "次の一致を選択",
       action: () => {
         const view = editor.current;
@@ -557,6 +567,7 @@ export default function Playground() {
   const commandShortcuts: Record<string, string> = {
     実行: "Ctrl/⌘ Enter",
     整形: "Shift+Alt+F",
+    コメントを切り替え: "Ctrl/⌘ /",
     次の一致を選択: "Ctrl/⌘ D",
     すべての一致を選択: "Ctrl/⌘ ⇧ L",
     定義へ移動: "F12",
@@ -567,6 +578,7 @@ export default function Playground() {
   const commandKeywords: Record<string, string[]> = {
     実行: ["run", "render"],
     整形: ["format", "document"],
+    コメントを切り替え: ["toggle comment", "line comment", "ctrl slash"],
     次の一致を選択: ["select next occurrence", "multi cursor", "ctrl d"],
     すべての一致を選択: ["select all occurrences", "multi cursor", "ctrl shift l"],
     サンプルを開く: ["examples"],

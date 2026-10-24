@@ -16,7 +16,7 @@ import {
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
 import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
-import { history } from "@codemirror/commands";
+import { history, indentWithTab, toggleComment } from "@codemirror/commands";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { vim } from "@replit/codemirror-vim";
@@ -315,6 +315,8 @@ export function MclEditor({
           }
         }),
         keymap.of([
+          indentWithTab,
+          { key: "Mod-/", run: toggleComment },
           {
             key: "Mod-Enter",
             run: () => {

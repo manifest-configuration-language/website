@@ -82,8 +82,6 @@ const docs = [
   'description: "MCLのサンプルプロジェクトをPlaygroundで開きます。"',
   "---",
   "",
-  "各サンプルを選ぶと、必要なファイルをPlaygroundへ読み込みます。サンプルを編集しても、元のファイルは変更されません。",
-  "",
 ];
 for (const category of new Set(examples.map((example) => example.category))) {
   docs.push(`## ${category}`, "");

@@ -10,7 +10,7 @@ import {
 import { setDiagnostics, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { searchKeymap } from "@codemirror/search";
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
-import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { closeBracketsKeymap } from "@codemirror/autocomplete";
@@ -22,8 +22,33 @@ import type {
   PlaygroundDefinitionLocation,
   PlaygroundDiagnostic,
   PlaygroundHover,
+  PlaygroundRenameEdit,
 } from "./types";
 import { createEditorLanguageServices } from "./editorLanguage";
+
+const workspaceEditAnnotation = Annotation.define<boolean>();
+
+export type ApplyWorkspaceEdits = (
+  edits: PlaygroundRenameEdit[],
+  sources: Record<string, string>,
+) => { ok: true; documents: Record<string, string> } | { ok: false; error: string };
+
+function positionOffset(
+  doc: EditorState["doc"],
+  position: PlaygroundRenameEdit["range"]["start"],
+): number | undefined {
+  if (
+    !Number.isInteger(position.line) ||
+    !Number.isInteger(position.character) ||
+    position.line < 0 ||
+    position.character < 0 ||
+    position.line >= doc.lines
+  )
+    return undefined;
+  const line = doc.line(position.line + 1);
+  if (position.character > line.length) return undefined;
+  return line.from + position.character;
+}
 
 function languageForPath(path: string): Extension {
   if (path.endsWith(".mcl")) return mclLanguageSupport();
@@ -58,6 +83,7 @@ type Props = {
   source: string;
   settings: EditorSettings;
   onReady: (view: EditorView | undefined) => void;
+  onWorkspaceEditApplierReady: (applier: ApplyWorkspaceEdits | undefined) => void;
   onDocumentChange: (source: string, path: string) => void;
   onError: (error: Error) => void;
   diagnostics?: PlaygroundDiagnostic[];
@@ -121,6 +147,7 @@ export function MclEditor({
   source,
   settings,
   onReady,
+  onWorkspaceEditApplierReady,
   onDocumentChange,
   onError,
   diagnostics = [],
@@ -150,6 +177,7 @@ export function MclEditor({
   settingsRef.current = settings;
   const callbacks = useRef({
     onReady,
+    onWorkspaceEditApplierReady,
     onDocumentChange,
     onError,
     onRun,
@@ -162,6 +190,7 @@ export function MclEditor({
   });
   callbacks.current = {
     onReady,
+    onWorkspaceEditApplierReady,
     onDocumentChange,
     onError,
     onRun,
@@ -229,7 +258,13 @@ export function MclEditor({
           }
           if (update.docChanged) {
             states.current.set(currentPath.current, update.state);
-            callbacks.current.onDocumentChange(update.state.doc.toString(), currentPath.current);
+            if (
+              !update.transactions.some((transaction) =>
+                transaction.annotation(workspaceEditAnnotation),
+              )
+            ) {
+              callbacks.current.onDocumentChange(update.state.doc.toString(), currentPath.current);
+            }
           }
         }),
         keymap.of([
@@ -273,15 +308,93 @@ export function MclEditor({
       });
       viewRef.current = view;
       callbacks.current.onReady(view);
+      callbacks.current.onWorkspaceEditApplierReady(applyWorkspaceEdits);
     } catch (cause) {
       callbacks.current.onError(cause instanceof Error ? cause : new Error(String(cause)));
     }
     return () => {
       callbacks.current.onReady(undefined);
+      callbacks.current.onWorkspaceEditApplierReady(undefined);
       viewRef.current = undefined;
       view?.destroy();
     };
   }, []);
+
+  function applyWorkspaceEdits(
+    edits: PlaygroundRenameEdit[],
+    sources: Record<string, string>,
+  ): ReturnType<ApplyWorkspaceEdits> {
+    const view = viewRef.current;
+    const grouped = new Map<string, PlaygroundRenameEdit[]>();
+    for (const edit of edits) {
+      const group = grouped.get(edit.path) ?? [];
+      group.push(edit);
+      grouped.set(edit.path, group);
+    }
+
+    const staged: Array<{
+      path: string;
+      transaction: ReturnType<EditorState["update"]>;
+      cached: boolean;
+    }> = [];
+    const documents: Record<string, string> = Object.create(null);
+    for (const [editPath, pathEdits] of grouped) {
+      const source = sources[editPath];
+      if (source === undefined)
+        return { ok: false, error: `変更対象のファイルが見つかりません: ${editPath}` };
+
+      const active = editPath === currentPath.current ? view?.state : undefined;
+      const cachedState = active ?? states.current.get(editPath);
+      if (cachedState && cachedState.doc.toString() !== source)
+        return {
+          ok: false,
+          error: `エディターの内容が最新ではありません。変更を適用しませんでした: ${editPath}`,
+        };
+      const state = cachedState ?? EditorState.create({ doc: source });
+      const changes = pathEdits
+        .map((edit) => {
+          const from = positionOffset(state.doc, edit.range.start);
+          const to = positionOffset(state.doc, edit.range.end);
+          return from === undefined || to === undefined || from > to
+            ? undefined
+            : { from, to, insert: edit.newText };
+        })
+        .sort((left, right) => (left?.from ?? Infinity) - (right?.from ?? Infinity));
+      if (changes.some((change) => change === undefined))
+        return {
+          ok: false,
+          error: `変更位置が現在のファイルと一致しません。変更を適用しませんでした: ${editPath}`,
+        };
+      const validChanges = changes as Array<{ from: number; to: number; insert: string }>;
+      if (
+        validChanges.some(
+          (change, index) =>
+            index > 0 &&
+            (validChanges[index - 1].to > change.from ||
+              (validChanges[index - 1].from === change.from &&
+                validChanges[index - 1].to === change.to)),
+        )
+      )
+        return {
+          ok: false,
+          error: `変更位置が重複しています。変更を適用しませんでした: ${editPath}`,
+        };
+
+      const transaction = state.update({
+        changes: validChanges,
+        annotations: workspaceEditAnnotation.of(true),
+      });
+      staged.push({ path: editPath, transaction, cached: cachedState !== undefined });
+      documents[editPath] = transaction.state.doc.toString();
+    }
+
+    for (const update of staged) {
+      if (!update.cached) continue;
+      if (update.path === currentPath.current && view) view.dispatch(update.transaction);
+      else states.current.set(update.path, update.transaction.state);
+    }
+    return { ok: true, documents };
+  }
 
   useEffect(() => {
     const view = viewRef.current;

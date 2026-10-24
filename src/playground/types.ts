@@ -3,6 +3,7 @@ import type {
   CompletionPosition as BrowserCompletionPosition,
   DefinitionLocation as BrowserDefinitionLocation,
   HoverInfo as BrowserHoverInfo,
+  ReferenceLocation as BrowserReferenceLocation,
   RenameEdit as BrowserRenameEdit,
   SourceMap as BrowserSourceMap,
 } from "@manifest-configuration-language/browser";
@@ -34,6 +35,7 @@ export type PlaygroundHover = BrowserHoverInfo;
 
 export type PlaygroundSourceMap = BrowserSourceMap;
 export type PlaygroundRenameEdit = BrowserRenameEdit;
+export type PlaygroundReference = BrowserReferenceLocation;
 
 export type ProjectFile =
   | { encoding: "utf8"; content: string }
@@ -95,6 +97,12 @@ export interface PlaygroundClient {
     newName: string,
     files?: Record<string, ProjectFile>,
   ): Promise<PlaygroundRenameEdit[]>;
+  references(
+    source: string,
+    entrypoint: string,
+    position: PlaygroundCompletionPosition,
+    files?: Record<string, ProjectFile>,
+  ): Promise<PlaygroundReference[]>;
   run(
     source: string,
     revision: number,

@@ -2,7 +2,12 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
 import type { EditorView } from "@codemirror/view";
 import { createPlaygroundClient } from "./apiClient";
-import { MclEditor, initialSource, type EditorSettings } from "./MclEditor";
+import {
+  MclEditor,
+  initialSource,
+  type ApplyWorkspaceEdits,
+  type EditorSettings,
+} from "./MclEditor";
 import { ProjectTabs } from "./ProjectTabs";
 import { decodeSharedProject, encodeSharedProject } from "./projectShare";
 import { PlaygroundResult } from "./PlaygroundResult";
@@ -10,6 +15,7 @@ import { ProjectFileInput } from "./ProjectFileInput";
 import type {
   PlaygroundDefinitionLocation,
   PlaygroundDiagnostic,
+  PlaygroundReference,
   PlaygroundReply,
   PlaygroundSourceMap,
   ProjectFile,
@@ -93,19 +99,6 @@ function sharedProjectError(cause: unknown, creating: boolean): string {
   return message;
 }
 
-function sourcePositionOffset(
-  view: EditorView,
-  line: number,
-  character: number,
-): number | undefined {
-  if (!Number.isInteger(line) || !Number.isInteger(character) || line < 0 || character < 0)
-    return undefined;
-  if (line >= view.state.doc.lines) return undefined;
-  const docLine = view.state.doc.line(line + 1);
-  if (character > docLine.length) return undefined;
-  return docLine.from + character;
-}
-
 function outputPositionForSource(
   sourceMap: PlaygroundSourceMap,
   source: EditorView,
@@ -159,6 +152,7 @@ export default function Playground() {
     deleteFile: deleteProjectFile,
   } = usePlaygroundProject(initialSource);
   const editor = useRef<EditorView | undefined>(undefined);
+  const workspaceEditApplier = useRef<ApplyWorkspaceEdits | undefined>(undefined);
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
   const revision = useRef(0);
   const latestYaml = useRef<string | undefined>(undefined);
@@ -167,6 +161,7 @@ export default function Playground() {
   const commandPaletteDialog = useRef<HTMLDialogElement>(null);
   const fileActionDialog = useRef<HTMLDialogElement>(null);
   const symbolRenameDialog = useRef<HTMLDialogElement>(null);
+  const symbolReferencesDialog = useRef<HTMLDialogElement>(null);
   const startupReady = useRef(false);
   const applyingSample = useRef(false);
   const [reply, setReply] = useState<PlaygroundReply>();
@@ -205,6 +200,9 @@ export default function Playground() {
   const [symbolRenameOpen, setSymbolRenameOpen] = useState(false);
   const [symbolRenameInput, setSymbolRenameInput] = useState("");
   const [symbolRenameError, setSymbolRenameError] = useState("");
+  const [symbolReferences, setSymbolReferences] = useState<PlaygroundReference[]>([]);
+  const [symbolReferencesError, setSymbolReferencesError] = useState("");
+  const [symbolReferencesOpen, setSymbolReferencesOpen] = useState(false);
 
   const reportPersistenceError = useCallback(
     (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)),
@@ -297,6 +295,10 @@ export default function Playground() {
       : []),
     ...(activePath.endsWith(".mcl")
       ? [
+          {
+            name: "参照箇所を検索",
+            action: () => void findSymbolReferences(),
+          },
           {
             name: "シンボル名を変更",
             action: () => {
@@ -599,6 +601,13 @@ export default function Playground() {
     else if (!symbolRenameOpen && dialog.open) dialog.close();
   }, [symbolRenameOpen]);
 
+  useEffect(() => {
+    const dialog = symbolReferencesDialog.current;
+    if (!dialog) return;
+    if (symbolReferencesOpen && !dialog.open) dialog.showModal();
+    else if (!symbolReferencesOpen && dialog.open) dialog.close();
+  }, [symbolReferencesOpen]);
+
   const onEditorReady = useCallback(
     (view: EditorView | undefined) => {
       editor.current = view;
@@ -880,6 +889,7 @@ export default function Playground() {
 
   function navigateToDefinition(location: PlaygroundDefinitionLocation) {
     if (!mclPaths.includes(location.path)) return;
+    setMobileView("editor");
     const navigation: PlaygroundDiagnostic = {
       code: "MCL-NAVIGATION",
       message: "",
@@ -893,6 +903,33 @@ export default function Playground() {
       return;
     }
     goToEditorPosition(navigation);
+  }
+
+  async function findSymbolReferences() {
+    const view = editor.current;
+    const playground = client.current;
+    const path = projectRef.current.activePath;
+    if (!view || !playground || !path.endsWith(".mcl")) return;
+
+    const cursor = view.state.selection.main.head;
+    const sourceLine = view.state.doc.lineAt(cursor);
+    const position = { line: sourceLine.number - 1, character: cursor - sourceLine.from };
+    const source = view.state.doc.toString();
+    const currentRevision = revision.current;
+    setSymbolReferencesError("");
+    setSymbolReferences([]);
+    try {
+      const references = await trackWasmRequest(
+        playground.references(source, path, position, languageServiceFiles()),
+      );
+      if (currentRevision !== revision.current || editor.current !== view) return;
+      setSymbolReferences(references.filter((reference) => mclPaths.includes(reference.path)));
+      setSymbolReferencesOpen(true);
+    } catch (cause) {
+      if (currentRevision !== revision.current || editor.current !== view) return;
+      setSymbolReferencesError(cause instanceof Error ? cause.message : String(cause));
+      setSymbolReferencesOpen(true);
+    }
   }
 
   function navigateToSourceMapLocation(path: string, line: number, character: number) {
@@ -944,42 +981,41 @@ export default function Playground() {
       );
       if (currentRevision !== revision.current || editor.current !== view) return;
       if (edits.length === 0) {
-        setSymbolRenameError(
-          "この位置では変更できません。現在は同じファイル内の非export宣言だけに対応しています。",
-        );
+        setSymbolRenameError("この位置に変更可能なシンボルがありません。");
         return;
       }
-      if (edits.some((edit) => edit.path !== path)) {
-        setSymbolRenameError(
-          "複数ファイルにまたがる変更には対応していません。ファイルは変更していません。",
-        );
+      if (edits.some((edit) => !mclPaths.includes(edit.path))) {
+        setSymbolRenameError("変更対象にプロジェクト内のMCLファイル以外が含まれています。");
         return;
       }
-      const changes = edits
-        .map((edit) => {
-          const from = sourcePositionOffset(
-            view,
-            edit.range.start.line,
-            edit.range.start.character,
-          );
-          const to = sourcePositionOffset(view, edit.range.end.line, edit.range.end.character);
-          return from === undefined || to === undefined || from > to
-            ? undefined
-            : { from, to, insert: edit.newText };
-        })
-        .sort((left, right) => (left?.from ?? Infinity) - (right?.from ?? Infinity));
-      if (changes.some((change) => change === undefined)) {
-        setSymbolRenameError("変更位置が現在のファイルと一致しないため、適用しませんでした。");
+      const applyEdits = workspaceEditApplier.current;
+      if (!applyEdits) {
+        setSymbolRenameError("エディターの準備が完了していません。");
         return;
       }
-      const validChanges = changes as Array<{ from: number; to: number; insert: string }>;
-      if (
-        validChanges.some((change, index) => index > 0 && validChanges[index - 1].to > change.from)
-      ) {
-        setSymbolRenameError("変更位置が重複しているため、適用しませんでした。");
+      const sources: Record<string, string> = Object.create(null);
+      for (const edit of edits) {
+        sources[edit.path] =
+          edit.path === path ? view.state.doc.toString() : sourceForPath(edit.path);
+      }
+      const applied = applyEdits(edits, sources);
+      if (!applied.ok) {
+        setSymbolRenameError(applied.error);
         return;
       }
-      view.dispatch({ changes: validChanges });
+
+      const currentProject = projectRef.current;
+      let nextSource = currentProject.source;
+      const nextFiles = Object.assign(Object.create(null), currentProject.files) as Record<
+        string,
+        ProjectFile
+      >;
+      for (const [editedPath, content] of Object.entries(applied.documents)) {
+        if (editedPath === "main.mcl") nextSource = content;
+        else nextFiles[editedPath] = { encoding: "utf8", content };
+      }
+      replaceProjectState(nextSource, nextFiles, currentProject.activePath);
+      finishProjectMutation();
       setSymbolRenameOpen(false);
       setNotice("シンボル名を変更しました");
     } catch (cause) {
@@ -1421,6 +1457,9 @@ export default function Playground() {
             source={activeSource}
             settings={editorSettings}
             onReady={onEditorReady}
+            onWorkspaceEditApplierReady={(applier) => {
+              workspaceEditApplier.current = applier;
+            }}
             onDocumentChange={onDocumentChange}
             onError={onEditorError}
             diagnostics={diagnostics}
@@ -1628,6 +1667,47 @@ export default function Playground() {
             </button>
           </div>
         </form>
+      </dialog>
+      <dialog
+        ref={symbolReferencesDialog}
+        className="playground-quick-open"
+        aria-labelledby="playground-symbol-references-title"
+        onCancel={() => setSymbolReferencesOpen(false)}
+      >
+        <label id="playground-symbol-references-title">
+          <span>参照箇所</span>
+        </label>
+        {symbolReferencesError ? (
+          <p role="alert">{symbolReferencesError}</p>
+        ) : symbolReferences.length > 0 ? (
+          <ul className="playground-reference-list">
+            {symbolReferences.map((reference, index) => {
+              const { line, character } = reference.range.start;
+              const sourceLine = sourceForPath(reference.path).split(/\r?\n/)[line] ?? "";
+              return (
+                <li key={`${reference.path}:${line}:${character}:${index}`}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigateToDefinition(reference);
+                      setSymbolReferencesOpen(false);
+                    }}
+                  >
+                    <span>
+                      {reference.path}:{line + 1}:{character + 1}
+                    </span>
+                    {sourceLine && <code>{sourceLine.trim()}</code>}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+        <div className="playground-file-action-buttons">
+          <button type="button" onClick={() => setSymbolReferencesOpen(false)}>
+            閉じる
+          </button>
+        </div>
       </dialog>
       {editorError && (
         <p role="alert">

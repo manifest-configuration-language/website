@@ -172,6 +172,21 @@ export function createPlaygroundClient(): PlaygroundClient {
         finishRequest(controller);
       }
     },
+    async references(source, entrypoint, position, files) {
+      const controller = beginRequest();
+      try {
+        const project = updateProject(source, files, entrypoint);
+        const result = await project.references({
+          entrypoint,
+          position,
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
+        return result.references;
+      } finally {
+        finishRequest(controller);
+      }
+    },
     async run(source, revision, files) {
       const controller = beginRequest();
       let diagnostics: PlaygroundDiagnostic[] | undefined;

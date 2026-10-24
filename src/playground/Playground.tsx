@@ -17,6 +17,7 @@ import type {
 import { writeProjectArchive } from "./projectZip";
 import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
+import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
 
 const storageKey = "mcl-playground-project-v1";
 const activeDraftKey = "mcl-playground-active-draft-v1";
@@ -171,12 +172,7 @@ export default function Playground() {
   } = usePlaygroundProject(initialSource);
   const editor = useRef<EditorView | undefined>(undefined);
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
-  const renderInFlight = useRef(false);
-  const wasmRequestCount = useRef(0);
-  const pendingLint = useRef<{ source: string; revision: number } | undefined>(undefined);
-  const flushPendingLintRef = useRef<() => void>(() => {});
   const revision = useRef(0);
-  const lintTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latestYaml = useRef<string | undefined>(undefined);
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
   const quickOpenDialog = useRef<HTMLDialogElement>(null);
@@ -196,7 +192,6 @@ export default function Playground() {
   const [editorError, setEditorError] = useState("");
   const [editorAttempt, setEditorAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [renderPending, setRenderPending] = useState(false);
   const [loadingProject, setLoadingProject] = useState(false);
   const projectFiles = project.files;
   const projectSizeBytes =
@@ -215,6 +210,37 @@ export default function Playground() {
   const [recentPaths, setRecentPaths] = useState(["main.mcl"]);
   const [quickSelection, setQuickSelection] = useState(0);
   const draftsRef = useRef<DraftMetadata[]>([]);
+
+  const handleLintResult = useCallback((result: PlaygroundReply, currentRevision: number) => {
+    const currentDiagnostics = result.ok
+      ? (result.diagnostics ?? [])
+      : result.error
+        ? [result.error]
+        : [];
+    setDiagnostics(currentDiagnostics);
+    setReply((previous) => ({
+      ...(previous ?? { requestId: currentRevision, revision: currentRevision, ok: false }),
+      ok: false,
+      result: undefined,
+      error: undefined,
+      diagnostics: currentDiagnostics,
+    }));
+  }, []);
+  const handleWasmReady = useCallback(() => setWasmReady(true), []);
+  const runtime = usePlaygroundRuntime({
+    client,
+    project: projectRef,
+    revision,
+    onLint: handleLintResult,
+    onWasmReady: handleWasmReady,
+  });
+  const {
+    isRendering,
+    renderPending,
+    run: runWasm,
+    scheduleLint,
+    trackRequest: trackWasmRequest,
+  } = runtime;
 
   const updateDraftMetadata = useCallback((id: string, name?: string) => {
     const previous = draftsRef.current.find((draft) => draft.id === id);
@@ -307,61 +333,6 @@ export default function Playground() {
     files["main.mcl"] = { encoding: "utf8", content: projectRef.current.source };
     return files;
   }
-
-  const trackWasmRequest = useCallback(async <T,>(request: Promise<T>) => {
-    wasmRequestCount.current += 1;
-    try {
-      return await request;
-    } finally {
-      wasmRequestCount.current -= 1;
-      flushPendingLintRef.current();
-    }
-  }, []);
-
-  const scheduleLint = useCallback(
-    (source: string, currentRevision: number) => {
-      if (lintTimer.current) clearTimeout(lintTimer.current);
-      if (renderInFlight.current || wasmRequestCount.current > 0) {
-        pendingLint.current = { source, revision: currentRevision };
-        return;
-      }
-      lintTimer.current = setTimeout(async () => {
-        if (currentRevision !== revision.current) return;
-        if (renderInFlight.current || wasmRequestCount.current > 0) {
-          pendingLint.current = { source, revision: currentRevision };
-          return;
-        }
-        const request = client.current?.lint(source, currentRevision, projectRef.current.files);
-        const result = request ? await trackWasmRequest(request) : undefined;
-        if (result && currentRevision === revision.current) {
-          setWasmReady(true);
-          const currentDiagnostics = result.ok
-            ? (result.diagnostics ?? [])
-            : result.error
-              ? [result.error]
-              : [];
-          setDiagnostics(currentDiagnostics);
-          setReply((previous) => ({
-            ...(previous ?? { requestId: currentRevision, revision: currentRevision, ok: false }),
-            ok: false,
-            result: undefined,
-            error: undefined,
-            diagnostics: currentDiagnostics,
-          }));
-        }
-      }, 400);
-    },
-    [projectRef, trackWasmRequest],
-  );
-
-  const flushPendingLint = useCallback(() => {
-    if (renderInFlight.current || wasmRequestCount.current > 0) return;
-    const pending = pendingLint.current;
-    pendingLint.current = undefined;
-    if (pending && pending.revision === revision.current)
-      scheduleLint(pending.source, pending.revision);
-  }, [scheduleLint]);
-  flushPendingLintRef.current = flushPendingLint;
 
   const applyProject = useCallback(
     (project: StoredProject, options: { newDraft?: boolean; name?: string } = {}) => {
@@ -516,7 +487,6 @@ export default function Playground() {
 
     return () => {
       cancelled = true;
-      if (lintTimer.current) clearTimeout(lintTimer.current);
       createdClient.dispose();
       client.current = undefined;
     };
@@ -654,19 +624,17 @@ export default function Playground() {
   );
 
   async function run() {
-    if (!editor.current || !client.current || loadingProject || renderInFlight.current) return;
-    renderInFlight.current = true;
-    setRenderPending(true);
+    if (!editor.current || !client.current || loadingProject || isRendering()) return;
     const currentRevision = ++revision.current;
+    const request = runWasm(projectRef.current.source, currentRevision);
+    if (!request) return;
     setBusy(true);
     setError("");
     setStaleYaml(latestYaml.current);
     setReply(undefined);
     setShowDiff(false);
     try {
-      const result = await trackWasmRequest(
-        client.current.run(projectRef.current.source, currentRevision, projectRef.current.files),
-      );
+      const result = await request;
       if (currentRevision !== revision.current) return;
       setDiagnostics(result.diagnostics ?? (result.error ? [result.error] : []));
       if (result.ok) {
@@ -686,10 +654,7 @@ export default function Playground() {
       if (currentRevision === revision.current)
         setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      renderInFlight.current = false;
-      setRenderPending(false);
       if (currentRevision === revision.current) setBusy(false);
-      flushPendingLint();
     }
   }
 

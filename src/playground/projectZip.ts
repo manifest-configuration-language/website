@@ -1,6 +1,10 @@
 import { BlobReader, BlobWriter, ZipReader, ZipWriter } from "@zip.js/zip.js";
-import { projectLimits } from "./projectValidation.js";
-import { isValidProjectPath } from "./projectFiles.js";
+import {
+  isValidProjectFileSet,
+  isValidProjectPath,
+  normalizeImportedProjectPaths,
+  projectLimits,
+} from "./projectValidation.js";
 import type { ProjectFile } from "./types";
 
 const maxArchiveEntries = projectLimits.projectFiles * 2;
@@ -32,16 +36,48 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
       );
     }
 
-    const paths = new Set<string>();
     let declaredBytes = 0;
     for (const entry of allEntries) {
       const path = entry.directory ? entry.filename.replace(/\/$/, "") : entry.filename;
       if (!isValidProjectPath(path)) throw new Error("ZIPファイルに無効なパスがあります。");
     }
+    const rawFilePaths: string[] = entries.map((entry) => entry.filename as string);
+    const normalizedFilePaths: string[] = normalizeImportedProjectPaths(rawFilePaths, true);
+    const filePaths = new Set(normalizedFilePaths);
+    if (new Set(rawFilePaths).size !== rawFilePaths.length)
+      throw new Error("ZIPファイルに重複したパスがあります。");
+    if (!isValidProjectFileSet(normalizedFilePaths))
+      throw new Error("ZIPファイルに重複または衝突するパスがあります。");
+
+    const roots = new Set(rawFilePaths.map((path) => path.split("/")[0]));
+    const stripRoot =
+      roots.size === 1 && normalizedFilePaths.some((path, index) => path !== rawFilePaths[index]);
+    const commonRoot = stripRoot ? `${rawFilePaths[0].split("/")[0]}/` : undefined;
+    const directories = new Set<string>();
+    for (const entry of allEntries) {
+      if (!entry.directory) continue;
+      const path = entry.filename.replace(/\/$/, "");
+      const normalizedPath =
+        commonRoot && path === commonRoot.slice(0, -1)
+          ? ""
+          : commonRoot && path.startsWith(commonRoot)
+            ? path.slice(commonRoot.length)
+            : path;
+      if (normalizedPath === "") continue;
+      if (!isValidProjectPath(normalizedPath) || directories.has(normalizedPath))
+        throw new Error("ZIPファイルに無効または重複したディレクトリがあります。");
+      let separator = normalizedPath.indexOf("/");
+      let overlapsFile = filePaths.has(normalizedPath);
+      while (!overlapsFile && separator !== -1) {
+        overlapsFile = filePaths.has(normalizedPath.slice(0, separator));
+        separator = normalizedPath.indexOf("/", separator + 1);
+      }
+      if (overlapsFile) {
+        throw new Error("ZIPファイルのファイルとディレクトリが衝突しています。");
+      }
+      directories.add(normalizedPath);
+    }
     for (const entry of entries) {
-      if (paths.has(entry.filename))
-        throw new Error(`ZIPファイルに重複したパスがあります: ${entry.filename}`);
-      paths.add(entry.filename);
       if (!Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0) {
         throw new Error("ZIPファイルのサイズ情報が無効です。");
       }
@@ -53,7 +89,7 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
       }
     }
 
-    if (![...paths].some((path) => path === "main.mcl" || path.endsWith("/main.mcl"))) {
+    if (!normalizedFilePaths.includes("main.mcl")) {
       throw new Error("ZIPファイルのルートにmain.mclが必要です。");
     }
 
@@ -112,6 +148,8 @@ export async function writeProjectArchive(project: Project): Promise<Blob> {
       throw new Error(`プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`);
     }
   }
+  if (!isValidProjectFileSet(["main.mcl", ...files.map(([path]) => path)]))
+    throw new Error("プロジェクトに重複または衝突するパスがあります。");
 
   const output = new BlobWriter("application/zip");
   const writer = new ZipWriter(output, { level: 6 });

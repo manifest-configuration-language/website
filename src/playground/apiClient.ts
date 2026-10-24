@@ -1,6 +1,7 @@
 import {
   createMclRuntime,
   MclRuntimeError,
+  type MclProject,
   type ProjectFiles,
 } from "@manifest-configuration-language/browser";
 import type { PlaygroundClient, PlaygroundDiagnostic, ProjectFile } from "./types";
@@ -48,6 +49,19 @@ function toError(error: unknown): PlaygroundDiagnostic {
 export function createPlaygroundClient(): PlaygroundClient {
   const runtime = createMclRuntime({ operationTimeoutMs });
   const activeControllers = new Set<AbortController>();
+  let projectSession: MclProject | undefined;
+
+  function updateProject(
+    source: string,
+    files: Record<string, ProjectFile> = {},
+    entrypoint = "main.mcl",
+  ): MclProject {
+    const snapshot = toProjectFiles(source, files, entrypoint);
+    projectSession = projectSession
+      ? projectSession.update(snapshot)
+      : runtime.openProject(snapshot);
+    return projectSession;
+  }
 
   function beginRequest(): AbortController {
     const controller = new AbortController();
@@ -74,7 +88,7 @@ export function createPlaygroundClient(): PlaygroundClient {
     async lint(source, revision, files) {
       const controller = beginRequest();
       try {
-        const project = runtime.openProject(toProjectFiles(source, files));
+        const project = updateProject(source, files);
         const lint = await project.lint({
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
@@ -99,7 +113,7 @@ export function createPlaygroundClient(): PlaygroundClient {
     async complete(source, entrypoint, position, files) {
       const controller = beginRequest();
       try {
-        const project = runtime.openProject(toProjectFiles(source, files, entrypoint));
+        const project = updateProject(source, files, entrypoint);
         const completion = await project.complete({
           entrypoint,
           position,
@@ -114,7 +128,7 @@ export function createPlaygroundClient(): PlaygroundClient {
     async definition(source, entrypoint, position, files) {
       const controller = beginRequest();
       try {
-        const project = runtime.openProject(toProjectFiles(source, files, entrypoint));
+        const project = updateProject(source, files, entrypoint);
         const result = await project.definition({
           entrypoint,
           position,
@@ -129,7 +143,7 @@ export function createPlaygroundClient(): PlaygroundClient {
     async hover(source, entrypoint, position, files) {
       const controller = beginRequest();
       try {
-        const project = runtime.openProject(toProjectFiles(source, files, entrypoint));
+        const project = updateProject(source, files, entrypoint);
         const result = await project.hover({
           entrypoint,
           position,
@@ -145,7 +159,7 @@ export function createPlaygroundClient(): PlaygroundClient {
       const controller = beginRequest();
       let diagnostics: PlaygroundDiagnostic[] | undefined;
       try {
-        const project = runtime.openProject(toProjectFiles(source, files));
+        const project = updateProject(source, files);
         const lint = await project.lint({
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,

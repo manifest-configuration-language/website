@@ -1,4 +1,9 @@
-import { isValidProjectPath, projectLimits } from "./projectValidation.js";
+import {
+  isValidProjectFileSet,
+  isValidProjectPath,
+  normalizeImportedProjectPaths,
+  projectLimits,
+} from "./projectValidation.js";
 
 export { isValidProjectPath };
 
@@ -28,18 +33,18 @@ export async function readProject(files) {
     );
 
   const paths = selected.map((file) => file.webkitRelativePath || file.name);
-  const roots = new Set(paths.map((path) => path.split("/")[0]));
-  const stripRoot = roots.size === 1 && selected.some((file) => file.webkitRelativePath !== "");
-  const entries = selected.map((file, index) => ({
-    file,
-    path: stripRoot ? paths[index].slice(paths[index].indexOf("/") + 1) : paths[index],
-  }));
-  const seen = new Set();
+  const normalizedPaths = normalizeImportedProjectPaths(
+    paths,
+    selected.some((file) => file.webkitRelativePath !== ""),
+  );
+  const entries = selected.map((file, index) => ({ file, path: normalizedPaths[index] }));
   for (const { path } of entries) {
     if (!isValidProjectPath(path)) throw new Error(`Invalid project path: ${path}`);
-    if (seen.has(path)) throw new Error(`Duplicate project path: ${path}`);
-    seen.add(path);
   }
+  if (new Set(normalizedPaths).size !== normalizedPaths.length)
+    throw new Error("The project contains duplicate file paths.");
+  if (!isValidProjectFileSet(normalizedPaths))
+    throw new Error("Project file paths cannot overlap files and directories.");
 
   const main = entries.find(({ path }) => path === "main.mcl");
   if (!main) throw new Error("The selected directory must contain main.mcl at its root.");

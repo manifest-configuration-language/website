@@ -5,6 +5,17 @@ import type { PlaygroundProject } from "./usePlaygroundProject";
 
 type PendingLint = { source: string; revision: number };
 
+function isAbortError(cause: unknown): boolean {
+  return cause instanceof Error && cause.name === "AbortError";
+}
+
+function isAbortReply(result: PlaygroundReply): boolean {
+  return (
+    result.error?.code === "MCL-WASM-RUNTIME" &&
+    result.error.message === "The operation was aborted"
+  );
+}
+
 type Options = {
   client: RefObject<PlaygroundClient | undefined>;
   project: RefObject<PlaygroundProject>;
@@ -39,16 +50,36 @@ export function usePlaygroundRuntime({ client, project, revision, onLint, onWasm
         return;
       }
       lintTimer.current = setTimeout(async () => {
+        lintTimer.current = undefined;
         if (requestRevision !== revision.current) return;
         if (renderInFlight.current || requestCount.current > 0) {
           pendingLint.current = { source, revision: requestRevision };
           return;
         }
-        const request = client.current?.lint(source, requestRevision, project.current.files);
-        const result = request ? await trackRequest(request) : undefined;
-        if (result && requestRevision === revision.current) {
-          onWasmReady();
-          onLint(result, requestRevision);
+        try {
+          const request = client.current?.lint(source, requestRevision, project.current.files);
+          const result = request ? await trackRequest(request) : undefined;
+          if (result && requestRevision === revision.current && !isAbortReply(result)) {
+            onWasmReady();
+            onLint(result, requestRevision);
+          }
+        } catch (cause) {
+          if (requestRevision !== revision.current || isAbortError(cause)) return;
+          onLint(
+            {
+              requestId: requestRevision,
+              revision: requestRevision,
+              ok: false,
+              error: {
+                code: "MCL-WASM-RUNTIME",
+                message: cause instanceof Error ? cause.message : String(cause),
+                severity: "error",
+                line: 1,
+                column: 1,
+              },
+            },
+            requestRevision,
+          );
         }
       }, 400);
     },

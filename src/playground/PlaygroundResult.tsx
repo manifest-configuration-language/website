@@ -6,6 +6,7 @@ import { yaml } from "@codemirror/lang-yaml";
 import { foldGutter, foldKeymap } from "@codemirror/language";
 import { openSearchPanel, searchKeymap } from "@codemirror/search";
 import { keymap } from "@codemirror/view";
+import { parseAllDocuments } from "yaml";
 import type { PlaygroundDiagnostic, PlaygroundReply } from "./types";
 
 type Props = {
@@ -63,17 +64,9 @@ export function PlaygroundResult({
     };
   }, [fontSize, staleYaml, currentYaml, showProblems, showDiff]);
 
-  function goToDocument(index: number) {
+  function goToDocument(line: number) {
     const view = outputEditor.current;
     if (!view) return;
-    const lines = (staleYaml ?? currentYaml ?? "").split("\n");
-    const starts = [
-      0,
-      ...lines.flatMap((line, lineIndex) =>
-        line.trim() === "---" && lineIndex > 0 ? [lineIndex] : [],
-      ),
-    ];
-    const line = starts[index] ?? 0;
     view.dispatch({
       selection: { anchor: view.state.doc.line(Math.min(line + 1, view.state.doc.lines)).from },
       scrollIntoView: true,
@@ -187,20 +180,43 @@ export function PlaygroundResult({
   );
 }
 
-function YamlNavigation({ text, onSelect }: { text: string; onSelect: (index: number) => void }) {
-  const documents = text.split(/^---\s*$/m).filter((document) => document.trim().length > 0);
-  if (documents.length < 2) return null;
+function YamlNavigation({ text, onSelect }: { text: string; onSelect: (line: number) => void }) {
+  let documents;
+  try {
+    documents = parseAllDocuments(text, {
+      schema: "core",
+      stringKeys: true,
+      uniqueKeys: true,
+    });
+  } catch {
+    return null;
+  }
+
+  const resources = documents.flatMap((document, index) => {
+    if (document.errors.length > 0 || document.contents === null) return [];
+
+    const kind = document.get("kind");
+    const name = document.getIn(["metadata", "name"]);
+    const label =
+      typeof kind === "string" && kind.length > 0
+        ? typeof name === "string" && name.length > 0
+          ? `${kind}/${name}`
+          : kind
+        : `文書${index + 1}`;
+    const start = document.range?.[0] ?? 0;
+    const line = text.slice(0, start).split("\n").length - 1;
+
+    return [{ label, line }];
+  });
+
+  if (resources.length < 2) return null;
   return (
     <nav className="yaml-document-nav" aria-label="YAML文書">
-      {documents.map((document, index) => {
-        const kind = document.match(/^kind:\s*["']?([^\n"']+)/m)?.[1]?.trim() ?? `文書${index + 1}`;
-        const name = document.match(/^\s+name:\s*["']?([^\n"']+)/m)?.[1]?.trim();
-        return (
-          <button type="button" key={index} onClick={() => onSelect(index)}>
-            {name ? `${kind}/${name}` : kind}
-          </button>
-        );
-      })}
+      {resources.map(({ label, line }, index) => (
+        <button type="button" key={`${line}-${index}`} onClick={() => onSelect(line)}>
+          {label}
+        </button>
+      ))}
     </nav>
   );
 }

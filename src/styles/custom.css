@@ -220,6 +220,10 @@ body:has(.playground) .right-sidebar-container {
   overflow: hidden;
 }
 
+.playground-mobile-views {
+  display: none;
+}
+
 .playground-panels > [data-panel] {
   min-width: 0;
   min-height: 0;
@@ -489,6 +493,79 @@ body:has(.playground) .right-sidebar-container {
   padding-inline-start: 1.2rem;
 }
 
+.playground-no-problems {
+  margin: auto;
+  padding: 1rem;
+  color: var(--sl-color-gray-2);
+  text-align: center;
+}
+
+.playground-file-action {
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 1rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.6rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  box-shadow: 0 1rem 3rem #0006;
+}
+
+.playground-file-action::backdrop {
+  background: #0008;
+}
+
+.playground-file-action h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+}
+
+.playground-file-action p[role="alert"] {
+  color: var(--sl-color-red);
+}
+
+.playground-file-action form,
+.playground-file-action form label {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.playground-file-action form label {
+  color: var(--sl-color-gray-2);
+  font-size: 0.85rem;
+}
+
+.playground-file-action input {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.3rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font: inherit;
+}
+
+.playground-file-action-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-block-start: 1rem;
+}
+
+.playground-file-action-buttons button {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.3rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  cursor: pointer;
+}
+
+.playground-file-action-buttons .playground-file-action-danger {
+  border-color: var(--sl-color-red);
+  background: var(--sl-color-red);
+  color: var(--sl-color-white);
+}
+
 .diagnostic {
   padding: 0;
   border: 0;
@@ -505,27 +582,82 @@ body:has(.playground) .right-sidebar-container {
 
 @media (max-width: 48rem) {
   .playground-panels {
-    height: 78dvh;
-    min-height: 38rem;
+    height: 68dvh;
+    min-height: 24rem;
+    max-height: 56rem;
   }
 
-  .playground-panels > [data-panel] {
-    min-height: 12rem;
+  .playground-panels[data-mobile-view] > [data-panel] {
+    display: none;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .playground-panels[data-mobile-view="editor"] > .playground-editor-panel,
+  .playground-panels[data-mobile-view="output"] > .playground-output-panel,
+  .playground-panels[data-mobile-view="problems"] > .playground-output-panel {
+    display: flex;
+    flex: 1 1 100% !important;
+    min-height: 0;
+    max-height: 100%;
   }
 
   .playground-resize-handle {
-    width: 100%;
-    height: 0.5rem;
+    display: none;
   }
 
   .playground-editor,
   .playground-editor .cm-editor {
-    min-height: 12rem;
+    min-height: 0;
   }
 
   .playground-output {
-    min-height: 12rem;
-    max-height: 34dvh;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .playground-result-panel {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .playground-result-panel > .playground-output,
+  .playground-result-panel > .playground-diff,
+  .playground-result-panel > .playground-diagnostics {
+    flex: 1;
+  }
+
+  .playground-mobile-views {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 4;
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.4rem;
+    background: var(--sl-color-bg);
+  }
+
+  .playground-mobile-views button {
+    flex: 1;
+    min-height: 2.5rem;
+    padding: 0.35rem;
+    border: 1px solid transparent;
+    border-radius: 0.3rem;
+    background: transparent;
+    color: var(--sl-color-text);
+    font: inherit;
+  }
+
+  .playground-mobile-views button[aria-pressed="true"] {
+    border-color: var(--sl-color-accent);
+    background: var(--sl-color-gray-6);
+    color: var(--sl-color-text-accent);
+  }
+
+  .project-file-actions {
+    opacity: 1;
   }
 
   .playground-more-menu {

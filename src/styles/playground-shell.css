@@ -315,13 +315,92 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
 
 .playground-app .playground-editor-workspace {
   display: grid;
-  grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   width: 100%;
   height: 100%;
   flex: 1 1 auto;
   overflow: hidden;
+}
+
+.playground-app .playground-editor-workspace.has-explorer {
+  grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr);
+}
+
+.playground-app .playground-editor-filebar {
+  display: flex;
+  min-height: 2.65rem;
+  align-items: stretch;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-bg);
+}
+
+.playground-app .playground-explorer-toggle,
+.playground-app .playground-new-file {
+  flex: 0 0 2.65rem;
+  border: 0;
+  background: transparent;
+  color: var(--sl-color-gray-2);
+  cursor: pointer;
+}
+
+.playground-app .playground-explorer-toggle[aria-pressed="true"] {
+  color: var(--sl-color-accent);
+  background: var(--sl-color-gray-6);
+}
+
+.playground-app .playground-file-tabs {
+  min-width: 0;
+  flex: 1 1 auto;
+  border: 0;
+}
+
+.playground-app .playground-file-tab {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border-inline-end: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-app .playground-file-tab > button:first-child {
+  max-width: 13rem;
+  overflow: hidden;
+  padding: 0.4rem 0.6rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--sl-color-gray-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.playground-app .playground-file-tab > button[aria-pressed="true"] {
+  border-bottom-color: var(--sl-color-accent);
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+}
+
+.playground-app .playground-file-tab .playground-file-tab-close {
+  width: 1.7rem;
+  padding: 0.2rem;
+  border: 0;
+  background: transparent;
+  color: var(--sl-color-gray-2);
+  cursor: pointer;
+}
+
+.playground-app .playground-file-tab-close:hover,
+.playground-app .playground-explorer-toggle:hover,
+.playground-app .playground-new-file:hover {
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-text);
+}
+
+.playground-app .playground-new-file:disabled {
+  cursor: wait;
+  opacity: 0.5;
 }
 
 .playground-app .playground-editor-workspace > .playground-code-surface {
@@ -515,7 +594,12 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
 
   .playground-app .playground-editor-workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .playground-app .playground-editor-workspace.has-explorer {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(7rem, 25vh) minmax(0, 1fr);
   }
 
   .playground-app .project-explorer {

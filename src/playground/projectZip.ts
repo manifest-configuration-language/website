@@ -3,6 +3,7 @@ import {
   isValidProjectFileSet,
   isValidProjectPath,
   normalizeImportedProjectPaths,
+  projectSnapshotError,
   projectLimits,
 } from "./projectValidation.js";
 import type { ProjectFile } from "./types";
@@ -128,28 +129,17 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
 }
 
 export async function writeProjectArchive(project: Project): Promise<Blob> {
-  const files = Object.entries(project.files).sort(([left], [right]) => left.localeCompare(right));
-  if (files.length + 1 > projectLimits.projectFiles) {
-    throw new Error(
-      `プロジェクトの上限は${projectLimits.projectFiles.toLocaleString()}ファイルです。`,
-    );
-  }
-  const encoder = new TextEncoder();
-  let totalBytes = encoder.encode(project.source).byteLength;
-  if (totalBytes > projectLimits.projectBytes) {
-    throw new Error(`プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`);
-  }
-  for (const [path, file] of files) {
-    if (!isValidProjectPath(path) || path === "main.mcl")
-      throw new Error("プロジェクトに無効なパスがあります。");
-    totalBytes +=
-      file.encoding === "utf8" ? encoder.encode(file.content).byteLength : file.bytes.byteLength;
-    if (totalBytes > projectLimits.projectBytes) {
+  const snapshotError = projectSnapshotError(project);
+  if (snapshotError) {
+    if (snapshotError === "Project has too many files")
+      throw new Error(
+        `プロジェクトの上限は${projectLimits.projectFiles.toLocaleString()}ファイルです。`,
+      );
+    if (snapshotError.includes("size limit"))
       throw new Error(`プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`);
-    }
+    throw new Error("プロジェクトのファイル構成が無効です。");
   }
-  if (!isValidProjectFileSet(["main.mcl", ...files.map(([path]) => path)]))
-    throw new Error("プロジェクトに重複または衝突するパスがあります。");
+  const files = Object.entries(project.files).sort(([left], [right]) => left.localeCompare(right));
 
   const output = new BlobWriter("application/zip");
   const writer = new ZipWriter(output, { level: 6 });

@@ -6,7 +6,7 @@ import {
   indentUnit,
   syntaxHighlighting,
 } from "@codemirror/language";
-import { setDiagnostics, lintGutter, type Diagnostic } from "@codemirror/lint";
+import { setDiagnostics, lintGutter, previousDiagnostic, type Diagnostic } from "@codemirror/lint";
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
 import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
@@ -336,6 +336,7 @@ export function MclEditor({
               return true;
             },
           },
+          { key: "Shift-F8", run: previousDiagnostic },
           languageServices.definitionKeyBinding,
           ...vscodeKeymap,
         ]),

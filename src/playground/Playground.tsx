@@ -1,5 +1,13 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+  type SyntheticEvent,
+} from "react";
 import type { EditorView } from "@codemirror/view";
 import { createPlaygroundClient } from "./apiClient";
 import {
@@ -72,6 +80,52 @@ emit deployment
 
 type ExampleSpec = { category: string; title: string; slug: string; asset: string };
 type FileAction = { kind: "create" } | { kind: "rename" | "delete"; path: string };
+type RenderState = {
+  reply?: PlaygroundReply;
+  latestSuccess?: PlaygroundReply;
+  previousYaml?: string;
+  stale: boolean;
+};
+type RenderAction =
+  | { type: "source-changed" }
+  | { type: "project-replaced" }
+  | { type: "started" }
+  | { type: "succeeded"; reply: PlaygroundReply }
+  | { type: "failed"; reply: PlaygroundReply };
+
+const initialRenderState: RenderState = { stale: false };
+
+function renderStateReducer(state: RenderState, action: RenderAction): RenderState {
+  switch (action.type) {
+    case "source-changed":
+      return {
+        ...state,
+        reply: state.reply?.ok === false ? state.latestSuccess : state.reply,
+        stale: state.latestSuccess?.result?.yaml !== undefined,
+      };
+    case "project-replaced":
+      return initialRenderState;
+    case "started":
+      return {
+        ...state,
+        reply: undefined,
+        stale: state.latestSuccess?.result?.yaml !== undefined,
+      };
+    case "succeeded":
+      return {
+        reply: action.reply,
+        latestSuccess: action.reply,
+        previousYaml: state.latestSuccess?.result?.yaml,
+        stale: false,
+      };
+    case "failed":
+      return {
+        ...state,
+        reply: action.reply,
+        stale: state.latestSuccess?.result?.yaml !== undefined,
+      };
+  }
+}
 
 async function loadExampleFiles(example: ExampleSpec): Promise<Record<string, string>> {
   const response = await fetch(example.asset, { cache: "force-cache" });
@@ -237,7 +291,6 @@ export default function Playground() {
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
   const revision = useRef(0);
   const runAction = useRef<() => void>(() => {});
-  const latestYaml = useRef<string | undefined>(undefined);
   const sharedRecovery = useRef<{ metadata: SharedDraftRecovery; base: StoredProject } | undefined>(
     undefined,
   );
@@ -249,10 +302,10 @@ export default function Playground() {
   const symbolRenameDialog = useRef<HTMLDialogElement>(null);
   const symbolReferencesDialog = useRef<HTMLDialogElement>(null);
   const startupReady = useRef(false);
-  const applyingSample = useRef(false);
-  const [reply, setReply] = useState<PlaygroundReply>();
-  const [staleYaml, setStaleYaml] = useState<string>();
-  const [previousYaml, setPreviousYaml] = useState<string>();
+  const [renderState, dispatchRender] = useReducer(renderStateReducer, initialRenderState);
+  const reply = renderState.reply;
+  const staleYaml = renderState.stale ? renderState.latestSuccess?.result?.yaml : undefined;
+  const previousYaml = renderState.previousYaml;
   const [showDiff, setShowDiff] = useState(false);
   const [showProblems, setShowProblems] = useState(false);
   const [targetOutputPosition, setTargetOutputPosition] = useState<
@@ -271,8 +324,9 @@ export default function Playground() {
   const [projectGeneration, setProjectGeneration] = useState(0);
   const [wasmReady, setWasmReady] = useState(false);
   const [orientation, setOrientation] = useState<"horizontal" | "vertical">("vertical");
-  const [sample, setSample] = useState("configMap");
   const [examplesOpen, setExamplesOpen] = useState(false);
+  const [explorerOpen, setExplorerOpen] = useState(false);
+  const [openPaths, setOpenPaths] = useState(["main.mcl"]);
   const [quickOpen, setQuickOpen] = useState(false);
   const [recentPaths, setRecentPaths] = useState(["main.mcl"]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -311,20 +365,13 @@ export default function Playground() {
     markDraftsLoaded,
   } = usePlaygroundPersistence(project, reportPersistenceError);
 
-  const handleLintResult = useCallback((result: PlaygroundReply, currentRevision: number) => {
+  const handleLintResult = useCallback((result: PlaygroundReply) => {
     const currentDiagnostics = result.ok
       ? (result.diagnostics ?? [])
       : result.error
         ? [result.error]
         : [];
     setDiagnostics(currentDiagnostics);
-    setReply((previous) => ({
-      ...(previous ?? { requestId: currentRevision, revision: currentRevision, ok: false }),
-      ok: false,
-      result: undefined,
-      error: undefined,
-      diagnostics: currentDiagnostics,
-    }));
   }, []);
   const handleWasmReady = useCallback(() => setWasmReady(true), []);
   const runtime = usePlaygroundRuntime({
@@ -342,17 +389,26 @@ export default function Playground() {
     trackRequest: trackWasmRequest,
   } = runtime;
 
-  const editablePaths = [
-    "main.mcl",
-    ...Object.entries(projectFiles)
-      .filter(([, file]) => file.encoding === "utf8")
-      .map(([path]) => path)
-      .sort(),
-  ];
-  const mclPaths = editablePaths.filter((path) => path.endsWith(".mcl"));
+  const editablePaths = useMemo(
+    () => [
+      "main.mcl",
+      ...Object.entries(projectFiles)
+        .filter(([, file]) => file.encoding === "utf8")
+        .map(([path]) => path)
+        .sort(),
+    ],
+    [projectFiles],
+  );
+  const mclPaths = useMemo(
+    () => editablePaths.filter((path) => path.endsWith(".mcl")),
+    [editablePaths],
+  );
   const currentSourceMap =
     reply?.ok && reply.revision === revision.current ? reply.result?.sourceMap : undefined;
-  const projectPaths = ["main.mcl", ...Object.keys(projectFiles).sort()];
+  const projectPaths = useMemo(
+    () => ["main.mcl", ...Object.keys(projectFiles).sort()],
+    [projectFiles],
+  );
   const quickPaths = projectPaths
     .filter((path) => projectFiles[path]?.encoding === "utf8" || path === "main.mcl")
     .sort((left, right) => {
@@ -466,11 +522,8 @@ export default function Playground() {
   async function finishProjectMutation() {
     const currentRevision = ++revision.current;
     setDiagnostics([]);
-    setStaleYaml(latestYaml.current);
+    dispatchRender({ type: "source-changed" });
     setShowDiff(false);
-    setReply((previous) =>
-      previous ? { ...previous, ok: false, result: undefined, diagnostics: [] } : previous,
-    );
     setBusy(false);
     if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
 
@@ -530,10 +583,7 @@ export default function Playground() {
         );
         activateDraft(crypto.randomUUID(), options.name ?? "インポート");
       }
-      if (!applyingSample.current) setSample("custom");
-      latestYaml.current = undefined;
-      setStaleYaml(undefined);
-      setPreviousYaml(undefined);
+      dispatchRender({ type: "project-replaced" });
       setShowDiff(false);
       const requestedPath = project.activePath;
       const nextPath =
@@ -542,6 +592,7 @@ export default function Playground() {
           ? requestedPath
           : "main.mcl";
       replaceProjectState(project.source, project.files, nextPath);
+      setOpenPaths([nextPath]);
       void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
         (cause: unknown) => {
           setError(cause instanceof Error ? cause.message : String(cause));
@@ -552,7 +603,6 @@ export default function Playground() {
       setError("");
       const currentRevision = ++revision.current;
       setDiagnostics([]);
-      setReply(undefined);
       if (startupReady.current) scheduleLint(project.source, currentRevision);
     },
     [activateDraft, projectRef, replaceProjectState, saveDraftSnapshot, scheduleLint],
@@ -566,7 +616,6 @@ export default function Playground() {
     void (async () => {
       let restored: StoredProject | undefined;
       let activeId = "";
-      let restoredSample: string | undefined;
       try {
         await loadDraftIndex();
 
@@ -665,7 +714,6 @@ export default function Playground() {
             };
             activeId = crypto.randomUUID();
             activateDraft(activeId, example.title);
-            restoredSample = example.slug;
             if (sharedRecovery.current) {
               clearSharedDraftRecovery(sharedRecovery.current.metadata.draftId);
               sharedRecovery.current = undefined;
@@ -684,7 +732,6 @@ export default function Playground() {
       if (restored) {
         applyProject(restored, { newDraft: false });
         if (recoveredSharedDraft) await saveDraftSnapshot(activeId, projectRef.current);
-        if (restoredSample) setSample(restoredSample);
       }
       startupReady.current = true;
       markDraftsLoaded();
@@ -857,16 +904,10 @@ export default function Playground() {
         }
       }
       setRecentPaths((previous) => [path, ...previous.filter((entry) => entry !== path)]);
-      if (!applyingSample.current) setSample("custom");
       const currentRevision = ++revision.current;
       setDiagnostics([]);
-      setStaleYaml(latestYaml.current);
+      dispatchRender({ type: "source-changed" });
       setShowDiff(false);
-      setReply((previous) =>
-        previous
-          ? { ...previous, ok: false, result: undefined, error: undefined, diagnostics: [] }
-          : previous,
-      );
       setError(recoveryError ?? "");
       setBusy(false);
       if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
@@ -882,8 +923,7 @@ export default function Playground() {
     if (!request) return;
     setBusy(true);
     setError("");
-    setStaleYaml(latestYaml.current);
-    setReply(undefined);
+    dispatchRender({ type: "started" });
     setShowDiff(false);
     try {
       const result = await request;
@@ -892,18 +932,12 @@ export default function Playground() {
       if (result.ok) {
         setShowProblems(false);
         if (focusOutput) setMobileView("output");
-        setStaleYaml(undefined);
-        const yaml = result.result?.yaml;
-        if (yaml !== undefined) {
-          setPreviousYaml(latestYaml.current);
-          latestYaml.current = yaml;
-          setShowDiff(false);
-        }
-        setReply(result);
+        setShowDiff(false);
+        dispatchRender({ type: "succeeded", reply: { ...result, diagnostics: undefined } });
       } else {
         setMobileView("problems");
         setShowProblems(true);
-        setReply(result);
+        dispatchRender({ type: "failed", reply: { ...result, diagnostics: undefined } });
         if (result.error) setError(`${result.error.code}: ${result.error.message}`);
       }
     } catch (cause) {
@@ -984,13 +1018,10 @@ export default function Playground() {
   async function selectSample(selected: string) {
     const builtin = samples[selected as keyof typeof samples];
     if (builtin !== undefined) {
-      applyingSample.current = true;
-      setSample(selected);
       applyProject(
         { source: builtin, files: {} },
         { name: selected === "configMap" ? "ConfigMap" : "Deployment" },
       );
-      applyingSample.current = false;
       setExamplesOpen(false);
       return;
     }
@@ -998,11 +1029,9 @@ export default function Playground() {
     if (!example) return;
 
     setLoadingProject(true);
-    applyingSample.current = true;
     try {
       const files = await loadExampleFiles(example);
       const { ["main.mcl"]: source, ...otherFiles } = files;
-      setSample(selected);
       applyProject(
         {
           source,
@@ -1016,10 +1045,8 @@ export default function Playground() {
         { name: example.title },
       );
     } catch (cause) {
-      setSample("custom");
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      applyingSample.current = false;
       setLoadingProject(false);
       setExamplesOpen(false);
     }
@@ -1044,10 +1071,7 @@ export default function Playground() {
   }
 
   function createDraft() {
-    applyingSample.current = true;
-    setSample("configMap");
     applyProject({ source: initialSource, files: {} }, { name: "プロジェクト" });
-    applyingSample.current = false;
   }
 
   async function exportProject() {
@@ -1315,6 +1339,7 @@ export default function Playground() {
   }
 
   function selectFile(path: string, diagnostic?: PlaygroundDiagnostic) {
+    setOpenPaths((previous) => (previous.includes(path) ? previous : [...previous, path]));
     if (path === projectRef.current.activePath) return;
     pendingNavigation.current = diagnostic;
     selectProjectFile(path);
@@ -1351,6 +1376,13 @@ export default function Playground() {
       return;
     }
     void finishProjectMutation();
+    setOpenPaths((previous) => {
+      const next =
+        fileAction.kind === "create"
+          ? previous
+          : previous.map((entry) => (entry === fileAction.path ? path : entry));
+      return next.includes(path) ? next : [...next, path];
+    });
     setRecentPaths((previous) =>
       fileAction.kind === "create"
         ? [path, ...previous.filter((entry) => entry !== path)]
@@ -1369,6 +1401,10 @@ export default function Playground() {
       setFileActionError(result.error);
       return;
     }
+    setOpenPaths((previous) => {
+      const remaining = previous.filter((entry) => entry !== path);
+      return remaining.length ? remaining : ["main.mcl"];
+    });
     void finishProjectMutation();
     setRecentPaths((previous) => previous.filter((entry) => entry !== path));
     setError("");
@@ -1603,41 +1639,34 @@ export default function Playground() {
             ×
           </button>
         </header>
-        <div className="playground-examples-list">
-          <section className="playground-example-category">
-            <h3>基本</h3>
-            <div className="playground-example-grid">
-              <button type="button" onClick={() => void selectSample("configMap")}>
-                <span>ConfigMap</span>
-                <small>値を定義してManifestを生成</small>
-              </button>
-              <button type="button" onClick={() => void selectSample("deployment")}>
-                <span>Deployment</span>
-                <small>アプリケーションの構成を記述</small>
-              </button>
-            </div>
-          </section>
-          {[...new Set(examples.map((entry) => entry.category))].map((category) => (
-            <section className="playground-example-category" key={category}>
-              <h3>{category}</h3>
-              <div className="playground-example-grid">
-                {examples
-                  .filter((entry) => entry.category === category)
-                  .map((entry) => (
-                    <button
-                      type="button"
-                      key={entry.slug}
-                      aria-pressed={sample === entry.slug}
-                      onClick={() => void selectSample(entry.slug)}
-                    >
-                      <span>{entry.title}</span>
-                      <small>{entry.slug}</small>
-                    </button>
-                  ))}
-              </div>
-            </section>
-          ))}
-        </div>
+        <QuickAccessList
+          label="サンプルを検索"
+          placeholder="名前やカテゴリで検索"
+          emptyMessage="一致するサンプルはありません"
+          items={[
+            {
+              value: "configMap",
+              label: "ConfigMap",
+              group: "基本",
+              keywords: ["基本", "変数", "manifest"],
+              onSelect: () => void selectSample("configMap"),
+            },
+            {
+              value: "deployment",
+              label: "Deployment",
+              group: "基本",
+              keywords: ["基本", "kubernetes", "manifest"],
+              onSelect: () => void selectSample("deployment"),
+            },
+            ...examples.map((entry) => ({
+              value: entry.slug,
+              label: entry.title,
+              group: entry.category,
+              keywords: [entry.category, entry.slug],
+              onSelect: () => void selectSample(entry.slug),
+            })),
+          ]}
+        />
       </dialog>
       {loadingProject && <p role="status">読み込み中</p>}
       {quickOpen && (
@@ -1702,17 +1731,74 @@ export default function Playground() {
       </nav>
       <Group className="playground-panels" orientation={orientation} data-mobile-view={mobileView}>
         <Panel className="playground-editor-panel" defaultSize="55" minSize="25">
-          <div className="playground-editor-workspace">
-            <ProjectTabs
-              paths={projectPaths}
-              files={projectFiles}
-              activePath={activePath}
-              onSelect={selectFile}
-              onCreate={requestCreateFile}
-              onRename={requestRenameFile}
-              onDelete={requestDeleteFile}
+          <div className="playground-editor-filebar">
+            <button
+              type="button"
+              className="playground-explorer-toggle"
+              aria-label={explorerOpen ? "ファイル一覧を閉じる" : "ファイル一覧を開く"}
+              aria-pressed={explorerOpen}
+              onClick={() => setExplorerOpen((value) => !value)}
+              title={explorerOpen ? "ファイル一覧を閉じる" : "ファイル一覧を開く"}
+            >
+              ▤
+            </button>
+            <div className="playground-file-tabs" role="group" aria-label="開いているファイル">
+              {openPaths.map((path) => (
+                <div className="playground-file-tab" key={path}>
+                  <button
+                    type="button"
+                    aria-pressed={path === activePath}
+                    title={path}
+                    onClick={() => selectFile(path)}
+                  >
+                    {path.split("/").at(-1)}
+                  </button>
+                  {path !== "main.mcl" && (
+                    <button
+                      type="button"
+                      className="playground-file-tab-close"
+                      aria-label={`${path}を閉じる`}
+                      title="閉じる"
+                      onClick={() => {
+                        const index = openPaths.indexOf(path);
+                        const remaining = openPaths.filter((entry) => entry !== path);
+                        if (path === activePath)
+                          selectProjectFile(
+                            remaining[Math.min(index, remaining.length - 1)] ?? "main.mcl",
+                          );
+                        setOpenPaths(remaining.length ? remaining : ["main.mcl"]);
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="playground-new-file"
+              onClick={requestCreateFile}
               disabled={!draftsLoaded || busy || loadingProject}
-            />
+              title="ファイルを作成"
+              aria-label="ファイルを作成"
+            >
+              +
+            </button>
+          </div>
+          <div className={`playground-editor-workspace${explorerOpen ? " has-explorer" : ""}`}>
+            {explorerOpen && (
+              <ProjectTabs
+                paths={projectPaths}
+                files={projectFiles}
+                activePath={activePath}
+                onSelect={selectFile}
+                onCreate={requestCreateFile}
+                onRename={requestRenameFile}
+                onDelete={requestDeleteFile}
+                disabled={!draftsLoaded || busy || loadingProject}
+              />
+            )}
             <MclEditor
               key={`${editorAttempt}:${projectGeneration}`}
               path={activePath}
@@ -1804,7 +1890,10 @@ export default function Playground() {
                     setShowDiff(true);
                   }}
                   disabled={
-                    !reply?.ok || previousYaml === undefined || previousYaml === reply.result?.yaml
+                    staleYaml !== undefined ||
+                    !reply?.ok ||
+                    previousYaml === undefined ||
+                    previousYaml === reply.result?.yaml
                   }
                 >
                   差分
@@ -1846,6 +1935,7 @@ export default function Playground() {
             </div>
             <PlaygroundResult
               reply={reply}
+              diagnostics={diagnostics}
               navigablePaths={editablePaths}
               staleYaml={staleYaml}
               previousYaml={previousYaml}
@@ -1856,7 +1946,7 @@ export default function Playground() {
               onDiagnostic={goToDiagnostic}
               onSourceLocation={navigateToSourceMapLocation}
             />
-            {showProblems && reply && diagnostics.length === 0 && (
+            {showProblems && draftsLoaded && diagnostics.length === 0 && (
               <p className="playground-no-problems">問題はありません</p>
             )}
           </div>

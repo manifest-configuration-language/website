@@ -76,11 +76,61 @@ body:has(.playground) .right-sidebar-container {
   box-shadow: 0 1rem 3rem #0006;
 }
 
+.playground-examples-dialog {
+  position: fixed;
+  z-index: 20;
+  inset: 8vh 0 auto;
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: 84vh;
+  margin-inline: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.6rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  box-shadow: 0 1rem 3rem #0006;
+}
+
+.playground-examples-dialog::backdrop {
+  background: #0008;
+}
+
+.playground-dialog-header {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-dialog-header h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.playground-dialog-header button {
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--sl-color-text);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.playground-examples-dialog [cmdk-root] {
+  min-width: 0;
+}
+
 .playground-quick-open::backdrop {
   background: #0008;
 }
 
-.playground-quick-open [cmdk-input] {
+.playground-quick-open [cmdk-input],
+.playground-examples-dialog [cmdk-input] {
   display: block;
   width: 100%;
   padding: 0.8rem;
@@ -95,14 +145,16 @@ body:has(.playground) .right-sidebar-container {
   outline: none;
 }
 
-.playground-quick-open [cmdk-list] {
+.playground-quick-open [cmdk-list],
+.playground-examples-dialog [cmdk-list] {
   max-height: 55vh;
   overflow-x: hidden;
   overflow-y: auto;
   padding: 0.35rem;
 }
 
-.playground-quick-open [cmdk-item] {
+.playground-quick-open [cmdk-item],
+.playground-examples-dialog [cmdk-item] {
   display: flex;
   box-sizing: border-box;
   width: 100%;
@@ -118,7 +170,8 @@ body:has(.playground) .right-sidebar-container {
   cursor: pointer;
 }
 
-.playground-quick-open [cmdk-item] kbd {
+.playground-quick-open [cmdk-item] kbd,
+.playground-examples-dialog [cmdk-item] kbd {
   flex: 0 0 auto;
   padding: 0.08rem 0.35rem;
   border: 1px solid var(--sl-color-gray-5);
@@ -128,13 +181,22 @@ body:has(.playground) .right-sidebar-container {
   font-size: 0.72rem;
 }
 
-.playground-quick-open [cmdk-item][aria-selected="true"] {
+.playground-quick-open [cmdk-item][aria-selected="true"],
+.playground-examples-dialog [cmdk-item][aria-selected="true"] {
   background: var(--sl-color-gray-6);
 }
 
-.playground-quick-open [cmdk-empty] {
+.playground-quick-open [cmdk-empty],
+.playground-examples-dialog [cmdk-empty] {
   padding-inline: 0.8rem;
   color: var(--sl-color-gray-2);
+}
+
+.playground-examples-dialog [cmdk-group-heading] {
+  padding: 0.75rem 0.6rem 0.3rem;
+  color: var(--sl-color-gray-2);
+  font-size: 0.72rem;
+  font-weight: 650;
 }
 
 .playground-toolbar {
@@ -344,6 +406,22 @@ body:has(.playground) .right-sidebar-container {
 .playground-file-tabs button:disabled {
   cursor: wait;
   opacity: 0.6;
+}
+
+.playground-app .playground-output .cm-source-map-link {
+  cursor: pointer;
+  text-decoration: underline dotted color-mix(in srgb, var(--sl-color-accent) 75%, transparent);
+  text-underline-offset: 0.15em;
+}
+
+.playground-app .cm-source-map-tooltip {
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.3rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
 }
 
 .playground-editor .cm-editor {

@@ -5,6 +5,7 @@ export type QuickAccessItem = {
   label: string;
   shortcut?: string;
   keywords?: string[];
+  group?: string;
   onSelect: () => void;
 };
 
@@ -16,6 +17,11 @@ type Props = {
 };
 
 export function QuickAccessList({ label, placeholder, emptyMessage, items }: Props) {
+  const groups = new Map<string, QuickAccessItem[]>();
+  for (const item of items) {
+    const group = item.group ?? "";
+    groups.set(group, [...(groups.get(group) ?? []), item]);
+  }
   return (
     <Command
       label={label}
@@ -31,16 +37,20 @@ export function QuickAccessList({ label, placeholder, emptyMessage, items }: Pro
       <Command.Input autoFocus aria-label={label} placeholder={placeholder} />
       <Command.List>
         <Command.Empty>{emptyMessage}</Command.Empty>
-        {items.map((item) => (
-          <Command.Item
-            key={item.value}
-            value={item.value}
-            keywords={item.keywords}
-            onSelect={item.onSelect}
-          >
-            <span>{item.label}</span>
-            {item.shortcut && <kbd>{item.shortcut}</kbd>}
-          </Command.Item>
+        {[...groups.entries()].map(([group, groupedItems]) => (
+          <Command.Group key={group || "default"} heading={group || undefined}>
+            {groupedItems.map((item) => (
+              <Command.Item
+                key={item.value}
+                value={item.value}
+                keywords={item.keywords}
+                onSelect={item.onSelect}
+              >
+                <span>{item.label}</span>
+                {item.shortcut && <kbd>{item.shortcut}</kbd>}
+              </Command.Item>
+            ))}
+          </Command.Group>
         ))}
       </Command.List>
     </Command>

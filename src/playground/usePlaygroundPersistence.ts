@@ -1,6 +1,7 @@
 import { get, set, setMany } from "idb-keyval";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorSettings } from "./MclEditor";
+import { isValidProjectSnapshot } from "./projectValidation.js";
 import type { ProjectFile } from "./types";
 
 const storageKey = "mcl-playground-project-v1";
@@ -176,24 +177,7 @@ function isDraftMetadataList(value: unknown): value is DraftMetadata[] {
 }
 
 export function isStoredProject(value: unknown): value is StoredProject {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  if (
-    typeof candidate.source !== "string" ||
-    !candidate.files ||
-    typeof candidate.files !== "object" ||
-    Array.isArray(candidate.files) ||
-    (candidate.activePath !== undefined && typeof candidate.activePath !== "string")
-  )
-    return false;
-  return Object.values(candidate.files).every((file) => {
-    if (!file || typeof file !== "object") return false;
-    const candidateFile = file as Record<string, unknown>;
-    return (
-      (candidateFile.encoding === "utf8" && typeof candidateFile.content === "string") ||
-      (candidateFile.encoding === "binary" && candidateFile.bytes instanceof Uint8Array)
-    );
-  });
+  return isValidProjectSnapshot(value);
 }
 
 function isEditorSettings(value: unknown): value is Omit<EditorSettings, "fontSize" | "theme"> & {

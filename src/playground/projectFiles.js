@@ -2,6 +2,7 @@ import {
   isValidProjectFileSet,
   isValidProjectPath,
   normalizeImportedProjectPaths,
+  projectSnapshotError,
   projectLimits,
 } from "./projectValidation.js";
 
@@ -64,6 +65,9 @@ export async function readProject(files) {
       : { encoding: "binary", bytes: new Uint8Array(await file.arrayBuffer()) };
   }
   const source = await main.file.text();
+
+  const snapshotError = projectSnapshotError({ source, files: project });
+  if (snapshotError) throw new Error(snapshotError);
 
   return { source, files: project, bytes, fileCount: entries.length };
 }

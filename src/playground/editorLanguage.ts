@@ -1,4 +1,4 @@
-import { autocompletion, type Completion } from "@codemirror/autocomplete";
+import { autocompletion, snippetCompletion, type Completion } from "@codemirror/autocomplete";
 import { hoverTooltip } from "@codemirror/view";
 import { EditorView, type KeyBinding } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
@@ -9,6 +9,10 @@ import type {
 } from "./types";
 
 type Position = { line: number; character: number };
+type CompletionItemMetadata = PlaygroundCompletionItem & {
+  detail?: unknown;
+  documentation?: unknown;
+};
 
 type LanguageServiceCallbacks = {
   onComplete: (path: string, position: Position) => Promise<PlaygroundCompletionItem[]>;
@@ -28,6 +32,36 @@ type LanguageServiceContext = {
   definitionRequest: Ref<number>;
   hoverRequest: Ref<number>;
 };
+
+const starterCompletions = [
+  {
+    trigger: "let",
+    completion: snippetCompletion("let ${1:name} = ${0:null}", {
+      label: "let declaration",
+      detail: "MCL snippet",
+      type: "keyword",
+    }),
+  },
+  {
+    trigger: "emit",
+    completion: snippetCompletion("emit ${0:resource}", {
+      label: "emit statement",
+      detail: "MCL snippet",
+      type: "keyword",
+    }),
+  },
+  {
+    trigger: "node",
+    completion: snippetCompletion(
+      'node:\n  apiVersion: "${1:v1}"\n  kind: "${2:ConfigMap}"\n  metadata:\n    name: "${3:resource-name}"\n  data:\n    ${4:key}: "${5:value}"\n$0',
+      {
+        label: "node: ConfigMap resource",
+        detail: "MCL snippet",
+        type: "keyword",
+      },
+    ),
+  },
+];
 
 export function createEditorLanguageServices(context: LanguageServiceContext): {
   extensions: Extension[];
@@ -59,15 +93,28 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
                 context.view.current !== view ||
                 context.currentPath.current !== requestPath ||
                 context.documentGeneration.current !== requestGeneration ||
-                view.state.doc !== requestDocument ||
-                items.length === 0
+                view.state.doc !== requestDocument
               )
                 return null;
-              const options: Completion[] = items.map((item) => ({
-                label: item.label,
-                type: completionType(item.kind),
-                ...(item.insertText === undefined ? {} : { apply: item.insertText }),
-              }));
+              const options: Completion[] = items.map((item) => {
+                const metadata = item as CompletionItemMetadata;
+                return {
+                  label: item.label,
+                  type: completionType(item.kind),
+                  ...(typeof metadata.detail === "string" ? { detail: metadata.detail } : {}),
+                  ...(typeof metadata.documentation === "string"
+                    ? { info: metadata.documentation }
+                    : {}),
+                  ...(item.insertText === undefined ? {} : { apply: item.insertText }),
+                };
+              });
+              const labels = new Set(options.map((option) => option.label));
+              for (const starter of starterCompletions) {
+                if (word?.text !== starter.trigger || labels.has(starter.completion.label))
+                  continue;
+                options.push(starter.completion);
+              }
+              if (options.length === 0) return null;
               return { from: word?.from ?? completionContext.pos, options };
             } catch (cause) {
               if (

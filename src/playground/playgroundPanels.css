@@ -146,6 +146,140 @@
   color: var(--sl-color-text-accent);
 }
 
+.playground-result-content .playground-yaml-toolbar .playground-resource-toggle {
+  margin-inline-start: 0;
+}
+
+.playground-result-content .playground-yaml-toolbar .playground-resource-clear {
+  margin-inline-start: 0;
+}
+
+.playground-resource-toggle[aria-pressed="true"] {
+  border-color: var(--sl-color-accent);
+  background: var(--sl-color-gray-5);
+  color: var(--sl-color-text-accent);
+}
+
+.playground-resource-browser {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border-top: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-bg);
+}
+
+.playground-resource-browser[hidden],
+.playground-output[hidden],
+.playground-diff-editor[hidden] {
+  display: none;
+}
+
+.playground-resource-browser [cmdk-root] {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.playground-resource-browser [cmdk-input] {
+  width: 100%;
+  flex: 0 0 auto;
+  padding: 0.55rem 0.8rem;
+  border: 0;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font: inherit;
+}
+
+.playground-resource-browser [cmdk-list] {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 0.35rem;
+}
+
+.playground-resource-browser [cmdk-item] {
+  display: flex;
+  min-height: 2.8rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.35rem;
+  color: var(--sl-color-text);
+  cursor: pointer;
+}
+
+.playground-resource-browser [cmdk-item][aria-selected="true"] {
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-text-accent);
+}
+
+.playground-resource-name {
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playground-resource-details {
+  flex: 0 0 auto;
+  color: var(--sl-color-gray-2);
+  font-size: 0.75rem;
+}
+
+.playground-diff-labels {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.playground-diff-labels > :last-child {
+  text-align: end;
+}
+
+.playground-diff-resource-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.playground-diff-resource-toggle {
+  max-width: min(50vw, 24rem);
+  overflow: hidden;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font: inherit;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playground-diff-resource-toggle:hover {
+  border-color: var(--sl-color-accent);
+}
+
+.playground-diff-resource-reset {
+  padding: 0.25rem 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--sl-color-text-accent);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.playground-resource-browser [cmdk-empty] {
+  padding: 1rem;
+  color: var(--sl-color-gray-2);
+  text-align: center;
+}
+
 .playground-result-content .playground-output {
   min-height: 0;
   max-height: none;

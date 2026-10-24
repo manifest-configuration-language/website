@@ -96,10 +96,10 @@ export async function encodeSharedProject(project: SharedProject): Promise<strin
 export async function decodeSharedProject(fragment: string): Promise<SharedProject | undefined> {
   try {
     if (typeof DecompressionStream === "undefined") throw new Error("Compression is unavailable");
-    const fragmentLength = fragment.length + (fragment.startsWith("#") ? 0 : 1);
-    if (fragmentLength > maxFragmentLength) throw new Error("Project URL fragment exceeds 2 MiB");
     const value = fragment.startsWith("#") ? fragment.slice(1) : fragment;
     if (!value.startsWith(projectFragmentPrefix)) return undefined;
+    const fragmentLength = fragment.length + (fragment.startsWith("#") ? 0 : 1);
+    if (fragmentLength > maxFragmentLength) throw new Error("Project URL fragment exceeds 2 MiB");
     const encoded = value.slice(projectFragmentPrefix.length);
     const compressed = decodeBase64Url(encoded);
     const stream = new DecompressionStream("gzip");

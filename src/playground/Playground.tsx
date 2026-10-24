@@ -11,6 +11,7 @@ import type {
   PlaygroundDefinitionLocation,
   PlaygroundDiagnostic,
   PlaygroundReply,
+  PlaygroundSourceMap,
   ProjectFile,
 } from "./types";
 import { writeProjectArchive } from "./projectZip";
@@ -105,6 +106,46 @@ function sourcePositionOffset(
   return docLine.from + character;
 }
 
+function outputPositionForSource(
+  sourceMap: PlaygroundSourceMap,
+  source: EditorView,
+  path: string,
+): { line: number; character: number } | undefined {
+  if (!sourceMap.complete) return undefined;
+  const cursor = source.state.selection.main.head;
+  const sourceLine = source.state.doc.lineAt(cursor);
+  const position = { line: sourceLine.number - 1, character: cursor - sourceLine.from };
+  const candidates = sourceMap.entries.flatMap((entry) => {
+    const origins = entry.sources.filter(
+      (origin) =>
+        origin.kind === "mcl" && origin.path === path && positionInRange(position, origin.range),
+    );
+    if (origins.length === 0) return [];
+    if (
+      entry.sources.length !== 1 ||
+      origins[0].multiplicity !== "unique" ||
+      origins[0].occurrences !== 1
+    )
+      return [undefined];
+    return [entry.output.start];
+  });
+  if (candidates.length !== 1 || candidates[0] === undefined) return undefined;
+  return candidates[0];
+}
+
+function positionInRange(
+  position: { line: number; character: number },
+  range: PlaygroundSourceMap["entries"][number]["output"],
+): boolean {
+  const afterStart =
+    position.line > range.start.line ||
+    (position.line === range.start.line && position.character >= range.start.character);
+  const beforeEnd =
+    position.line < range.end.line ||
+    (position.line === range.end.line && position.character < range.end.character);
+  return afterStart && beforeEnd;
+}
+
 export default function Playground() {
   const examples = exampleCatalog as unknown as ExampleSpec[];
   const {
@@ -133,6 +174,9 @@ export default function Playground() {
   const [previousYaml, setPreviousYaml] = useState<string>();
   const [showDiff, setShowDiff] = useState(false);
   const [showProblems, setShowProblems] = useState(false);
+  const [targetOutputPosition, setTargetOutputPosition] = useState<
+    { line: number; character: number; requestId: number } | undefined
+  >();
   const [diagnostics, setDiagnostics] = useState<PlaygroundDiagnostic[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -228,6 +272,10 @@ export default function Playground() {
       .sort(),
   ];
   const mclPaths = editablePaths.filter((path) => path.endsWith(".mcl"));
+  const currentSourceMap =
+    reply?.ok && reply.revision === revision.current && reply.result?.sourceMap?.complete
+      ? reply.result.sourceMap
+      : undefined;
   const projectPaths = ["main.mcl", ...Object.keys(projectFiles).sort()];
   const quickPaths = projectPaths
     .filter((path) => projectFiles[path]?.encoding === "utf8" || path === "main.mcl")
@@ -244,6 +292,9 @@ export default function Playground() {
   const commands = [
     { name: "実行", action: () => void run() },
     { name: "整形", action: () => void formatSource() },
+    ...(currentSourceMap && activePath.endsWith(".mcl")
+      ? [{ name: "YAMLの対応箇所へ移動", action: navigateToYaml }]
+      : []),
     ...(activePath.endsWith(".mcl")
       ? [
           {
@@ -862,6 +913,17 @@ export default function Playground() {
     goToEditorPosition(navigation);
   }
 
+  function navigateToYaml() {
+    const view = editor.current;
+    if (!view || !currentSourceMap || !activePath.endsWith(".mcl")) return;
+    const position = outputPositionForSource(currentSourceMap, view, activePath);
+    if (!position) return;
+    setTargetOutputPosition({ ...position, requestId: reply!.requestId });
+    setShowProblems(false);
+    setShowDiff(false);
+    setMobileView("output");
+  }
+
   async function renameSymbol(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     const view = editor.current;
@@ -1401,6 +1463,7 @@ export default function Playground() {
                 : Promise.resolve(null)
             }
             onNavigate={navigateToDefinition}
+            onNavigateToYaml={navigateToYaml}
           />
         </Panel>
         <Separator className="playground-resize-handle" aria-label="エディターと結果の幅を変更" />
@@ -1473,6 +1536,7 @@ export default function Playground() {
               fontSize={editorSettings.fontSize}
               showDiff={showDiff}
               showProblems={showProblems}
+              targetOutputPosition={targetOutputPosition}
               onDiagnostic={goToDiagnostic}
               onSourceLocation={navigateToSourceMapLocation}
             />

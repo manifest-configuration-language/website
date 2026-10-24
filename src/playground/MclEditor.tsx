@@ -76,6 +76,7 @@ type Props = {
     position: { line: number; character: number },
   ) => Promise<PlaygroundHover | null>;
   onNavigate: (location: PlaygroundDefinitionLocation) => void;
+  onNavigateToYaml: () => void;
 };
 
 function toEditorDiagnostics(
@@ -129,6 +130,7 @@ export function MclEditor({
   onDefinition,
   onHover,
   onNavigate,
+  onNavigateToYaml,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
@@ -156,6 +158,7 @@ export function MclEditor({
     onDefinition,
     onHover,
     onNavigate,
+    onNavigateToYaml,
   });
   callbacks.current = {
     onReady,
@@ -167,6 +170,7 @@ export function MclEditor({
     onDefinition,
     onHover,
     onNavigate,
+    onNavigateToYaml,
   };
 
   function settingsEffects(next: EditorSettings) {
@@ -241,6 +245,13 @@ export function MclEditor({
             run: () => {
               if (!currentPath.current.endsWith(".mcl")) return false;
               callbacks.current.onFormat();
+              return true;
+            },
+          },
+          {
+            key: "Mod-Shift-y",
+            run: () => {
+              callbacks.current.onNavigateToYaml();
               return true;
             },
           },

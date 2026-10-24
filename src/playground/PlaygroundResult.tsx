@@ -17,6 +17,7 @@ type Props = {
   fontSize: number;
   showDiff: boolean;
   showProblems: boolean;
+  targetOutputPosition?: { line: number; character: number; requestId: number };
   onDiagnostic: (diagnostic: PlaygroundDiagnostic) => void;
   onSourceLocation: (path: string, line: number, character: number) => void;
 };
@@ -29,6 +30,7 @@ export function PlaygroundResult({
   fontSize,
   showDiff,
   showProblems,
+  targetOutputPosition,
   onDiagnostic,
   onSourceLocation,
 }: Props) {
@@ -82,6 +84,22 @@ export function PlaygroundResult({
       view.destroy();
     };
   }, [fontSize, staleYaml, currentYaml, sourceMap, showProblems, showDiff]);
+
+  useEffect(() => {
+    const view = outputEditor.current;
+    if (
+      !view ||
+      !targetOutputPosition ||
+      staleYaml !== undefined ||
+      !reply?.ok ||
+      targetOutputPosition.requestId !== reply.requestId
+    )
+      return;
+    const offset = positionOffset(view, targetOutputPosition.line, targetOutputPosition.character);
+    if (offset === undefined) return;
+    view.dispatch({ selection: { anchor: offset }, scrollIntoView: true });
+    view.focus();
+  }, [targetOutputPosition, staleYaml, reply, showProblems, showDiff]);
 
   function goToDocument(line: number) {
     const view = outputEditor.current;

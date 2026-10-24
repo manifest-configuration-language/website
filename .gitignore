@@ -7,3 +7,5 @@ src/content/docs/reference/stdlib-functions.md
 src/content/docs/reference/.reference-staging-*/
 src/playground/generatedExamples.json
 src/content/docs/examples/index.mdx
+
+public/playground-examples/

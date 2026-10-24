@@ -1,10 +1,12 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const websiteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = join(websiteRoot, "src/content/docs/examples");
 const output = join(websiteRoot, "src/playground/generatedExamples.json");
+const assetsRoot = join(websiteRoot, "public/playground-examples");
 const categories = new Map([
   ["adapters", "Integrations"],
   ["composition", "Composition"],
@@ -50,6 +52,8 @@ async function findEntrypoints(directory, matches = []) {
   return matches;
 }
 
+await rm(assetsRoot, { recursive: true, force: true });
+await mkdir(assetsRoot, { recursive: true });
 const examples = [];
 for (const sampleRoot of (await findEntrypoints(examplesRoot)).sort()) {
   const relativeRoot = relative(examplesRoot, sampleRoot).split(sep).join("/");
@@ -69,7 +73,12 @@ for (const sampleRoot of (await findEntrypoints(examplesRoot)).sort()) {
   if (!Object.hasOwn(files, "main.mcl")) {
     throw new Error(`Example is missing main.mcl: ${relativeRoot}`);
   }
-  examples.push({ category, title, slug, files });
+  const assetContents = `${JSON.stringify({ files }, null, 2)}\n`;
+  const digest = createHash("sha256").update(assetContents).digest("hex").slice(0, 16);
+  const asset = `/playground-examples/${slug}.${digest}.json`;
+  await mkdir(dirname(join(assetsRoot, `${slug}.${digest}.json`)), { recursive: true });
+  await writeFile(join(assetsRoot, `${slug}.${digest}.json`), assetContents);
+  examples.push({ category, title, slug, asset });
 }
 
 if (examples.length === 0) throw new Error("No Playground examples were found.");

@@ -62,8 +62,27 @@ emit deployment
 };
 
 type StoredProject = { source: string; files: Record<string, ProjectFile>; activePath?: string };
-type ExampleSpec = { category: string; title: string; slug: string; files: Record<string, string> };
+type ExampleSpec = { category: string; title: string; slug: string; asset: string };
 type DraftMetadata = { id: string; name: string; updatedAt: number };
+
+async function loadExampleFiles(example: ExampleSpec): Promise<Record<string, string>> {
+  const response = await fetch(example.asset, { cache: "force-cache" });
+  if (!response.ok) throw new Error(`サンプルを読み込めません: ${example.title}`);
+  const value: unknown = await response.json();
+  if (!value || typeof value !== "object" || !("files" in value))
+    throw new Error(`サンプルの形式が正しくありません: ${example.title}`);
+  const files = (value as { files: unknown }).files;
+  if (
+    !files ||
+    typeof files !== "object" ||
+    Array.isArray(files) ||
+    !Object.hasOwn(files, "main.mcl") ||
+    !Object.values(files).every((content) => typeof content === "string")
+  ) {
+    throw new Error(`サンプルの形式が正しくありません: ${example.title}`);
+  }
+  return files as Record<string, string>;
+}
 
 function isDraftMetadataList(value: unknown): value is DraftMetadata[] {
   return (
@@ -453,21 +472,26 @@ export default function Playground() {
         const exampleSlug = url.searchParams.get("example");
         const example = examples.find((entry) => entry.slug === exampleSlug);
         if (example) {
-          const { ["main.mcl"]: source, ...otherFiles } = example.files;
-          restored = {
-            source: source ?? "",
-            files: Object.fromEntries(
-              Object.entries(otherFiles).map(([path, content]) => [
-                path,
-                { encoding: "utf8", content },
-              ]),
-            ),
-          };
-          activeId = crypto.randomUUID();
-          activateDraft(activeId, example.title);
-          restoredSample = example.slug;
-          url.searchParams.delete("example");
-          history.replaceState(null, "", url);
+          try {
+            const files = await loadExampleFiles(example);
+            const { ["main.mcl"]: source, ...otherFiles } = files;
+            restored = {
+              source,
+              files: Object.fromEntries(
+                Object.entries(otherFiles).map(([path, content]) => [
+                  path,
+                  { encoding: "utf8", content },
+                ]),
+              ),
+            };
+            activeId = crypto.randomUUID();
+            activateDraft(activeId, example.title);
+            restoredSample = example.slug;
+            url.searchParams.delete("example");
+            history.replaceState(null, "", url);
+          } catch (cause) {
+            if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+          }
         }
       }
       if (cancelled) return;
@@ -734,6 +758,48 @@ export default function Playground() {
     return await client.current.loadProject(files);
   }
 
+  async function selectSample(selected: string) {
+    const builtin = samples[selected as keyof typeof samples];
+    if (builtin !== undefined) {
+      applyingSample.current = true;
+      setSample(selected);
+      applyProject(
+        { source: builtin, files: {} },
+        { name: selected === "configMap" ? "ConfigMap" : "Deployment" },
+      );
+      applyingSample.current = false;
+      return;
+    }
+    const example = examples.find((entry) => entry.slug === selected);
+    if (!example) return;
+
+    setLoadingProject(true);
+    applyingSample.current = true;
+    try {
+      const files = await loadExampleFiles(example);
+      const { ["main.mcl"]: source, ...otherFiles } = files;
+      setSample(selected);
+      applyProject(
+        {
+          source,
+          files: Object.fromEntries(
+            Object.entries(otherFiles).map(([path, content]) => [
+              path,
+              { encoding: "utf8", content },
+            ]),
+          ),
+        },
+        { name: example.title },
+      );
+    } catch (cause) {
+      setSample("custom");
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      applyingSample.current = false;
+      setLoadingProject(false);
+    }
+  }
+
   async function openDraft(id: string) {
     if (id === activeDraftIdRef.current) return;
     try {
@@ -948,34 +1014,7 @@ export default function Playground() {
               aria-label="サンプル"
               value={sample}
               disabled={!draftsLoaded || busy || loadingProject}
-              onChange={(event) => {
-                const selected = event.currentTarget.value;
-                applyingSample.current = true;
-                setSample(selected);
-                const builtin = samples[selected as keyof typeof samples];
-                const catalogSample = examples.find((entry) => entry.slug === selected);
-                if (builtin !== undefined) {
-                  applyProject(
-                    { source: builtin, files: {} },
-                    { name: selected === "configMap" ? "ConfigMap" : "Deployment" },
-                  );
-                } else if (catalogSample) {
-                  const { ["main.mcl"]: source, ...otherFiles } = catalogSample.files;
-                  applyProject(
-                    {
-                      source: source ?? "",
-                      files: Object.fromEntries(
-                        Object.entries(otherFiles).map(([path, content]) => [
-                          path,
-                          { encoding: "utf8", content },
-                        ]),
-                      ),
-                    },
-                    { name: catalogSample.title },
-                  );
-                }
-                applyingSample.current = false;
-              }}
+              onChange={(event) => void selectSample(event.currentTarget.value)}
             >
               <option value="custom" disabled>
                 カスタム

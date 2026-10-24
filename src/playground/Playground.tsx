@@ -77,6 +77,34 @@ function clearSharedFragment() {
   history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
 }
 
+function sharedProjectError(cause: unknown, creating: boolean): string {
+  const message = cause instanceof Error ? cause.message : String(cause);
+  if (message === "Project URL fragment exceeds 2 MiB")
+    return creating
+      ? "共有URLが2 MiBを超えています。ZIP形式で書き出してください。"
+      : "共有URLが2 MiBを超えているため読み込めません。送信者にZIP形式で共有してもらってください。";
+  if (message === "Shared project is too large")
+    return "共有プロジェクトの展開サイズが上限を超えています。送信者に内容を小さくしてもらってください。";
+  if (message === "Project serialization exceeds the share size limit")
+    return creating
+      ? "共有データのサイズ上限を超えています。ZIP形式で書き出してください。"
+      : "共有データのサイズ上限を超えているため読み込めません。送信者にZIP形式で共有してもらってください。";
+  return message;
+}
+
+function sourcePositionOffset(
+  view: EditorView,
+  line: number,
+  character: number,
+): number | undefined {
+  if (!Number.isInteger(line) || !Number.isInteger(character) || line < 0 || character < 0)
+    return undefined;
+  if (line >= view.state.doc.lines) return undefined;
+  const docLine = view.state.doc.line(line + 1);
+  if (character > docLine.length) return undefined;
+  return docLine.from + character;
+}
+
 export default function Playground() {
   const examples = exampleCatalog as unknown as ExampleSpec[];
   const {
@@ -97,6 +125,7 @@ export default function Playground() {
   const quickOpenDialog = useRef<HTMLDialogElement>(null);
   const commandPaletteDialog = useRef<HTMLDialogElement>(null);
   const fileActionDialog = useRef<HTMLDialogElement>(null);
+  const symbolRenameDialog = useRef<HTMLDialogElement>(null);
   const startupReady = useRef(false);
   const applyingSample = useRef(false);
   const [reply, setReply] = useState<PlaygroundReply>();
@@ -129,6 +158,9 @@ export default function Playground() {
   const [fileAction, setFileAction] = useState<FileAction>();
   const [filePathInput, setFilePathInput] = useState("");
   const [fileActionError, setFileActionError] = useState("");
+  const [symbolRenameOpen, setSymbolRenameOpen] = useState(false);
+  const [symbolRenameInput, setSymbolRenameInput] = useState("");
+  const [symbolRenameError, setSymbolRenameError] = useState("");
 
   const reportPersistenceError = useCallback(
     (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)),
@@ -212,6 +244,18 @@ export default function Playground() {
   const commands = [
     { name: "実行", action: () => void run() },
     { name: "整形", action: () => void formatSource() },
+    ...(activePath.endsWith(".mcl")
+      ? [
+          {
+            name: "シンボル名を変更",
+            action: () => {
+              setSymbolRenameError("");
+              setSymbolRenameInput("");
+              setSymbolRenameOpen(true);
+            },
+          },
+        ]
+      : []),
     {
       name: "共有",
       action: () => void shareProject(),
@@ -367,7 +411,7 @@ export default function Playground() {
           }
         }
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        if (!cancelled) setError(sharedProjectError(cause, false));
       }
 
       if (!window.location.hash.startsWith("#project=")) {
@@ -496,6 +540,13 @@ export default function Playground() {
     if (fileAction && !dialog.open) dialog.showModal();
     else if (!fileAction && dialog.open) dialog.close();
   }, [fileAction]);
+
+  useEffect(() => {
+    const dialog = symbolRenameDialog.current;
+    if (!dialog) return;
+    if (symbolRenameOpen && !dialog.open) dialog.showModal();
+    else if (!symbolRenameOpen && dialog.open) dialog.close();
+  }, [symbolRenameOpen]);
 
   const onEditorReady = useCallback(
     (view: EditorView | undefined) => {
@@ -740,7 +791,7 @@ export default function Playground() {
       history.replaceState(null, "", fragment);
       setNotice("共有URLをコピーしました");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(sharedProjectError(cause, true));
     }
   }
 
@@ -791,6 +842,87 @@ export default function Playground() {
       return;
     }
     goToEditorPosition(navigation);
+  }
+
+  function navigateToSourceMapLocation(path: string, line: number, character: number) {
+    if (!mclPaths.includes(path)) return;
+    const navigation: PlaygroundDiagnostic = {
+      code: "MCL-SOURCE-MAP",
+      message: "",
+      severity: "info",
+      path,
+      line: line + 1,
+      column: character + 1,
+    };
+    setMobileView("editor");
+    if (path !== projectRef.current.activePath) {
+      selectFile(path, navigation);
+      return;
+    }
+    goToEditorPosition(navigation);
+  }
+
+  async function renameSymbol(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const view = editor.current;
+    const playground = client.current;
+    const path = projectRef.current.activePath;
+    const newName = symbolRenameInput.trim();
+    if (!view || !playground || !path.endsWith(".mcl") || !newName) return;
+
+    const cursor = view.state.selection.main.head;
+    const sourceLine = view.state.doc.lineAt(cursor);
+    const position = { line: sourceLine.number - 1, character: cursor - sourceLine.from };
+    const source = view.state.doc.toString();
+    const currentRevision = revision.current;
+    setSymbolRenameError("");
+    try {
+      const edits = await trackWasmRequest(
+        playground.rename(source, path, position, newName, languageServiceFiles()),
+      );
+      if (currentRevision !== revision.current || editor.current !== view) return;
+      if (edits.length === 0) {
+        setSymbolRenameError(
+          "この位置では変更できません。現在は同じファイル内の非export宣言だけに対応しています。",
+        );
+        return;
+      }
+      if (edits.some((edit) => edit.path !== path)) {
+        setSymbolRenameError(
+          "複数ファイルにまたがる変更には対応していません。ファイルは変更していません。",
+        );
+        return;
+      }
+      const changes = edits
+        .map((edit) => {
+          const from = sourcePositionOffset(
+            view,
+            edit.range.start.line,
+            edit.range.start.character,
+          );
+          const to = sourcePositionOffset(view, edit.range.end.line, edit.range.end.character);
+          return from === undefined || to === undefined || from > to
+            ? undefined
+            : { from, to, insert: edit.newText };
+        })
+        .sort((left, right) => (left?.from ?? Infinity) - (right?.from ?? Infinity));
+      if (changes.some((change) => change === undefined)) {
+        setSymbolRenameError("変更位置が現在のファイルと一致しないため、適用しませんでした。");
+        return;
+      }
+      const validChanges = changes as Array<{ from: number; to: number; insert: string }>;
+      if (
+        validChanges.some((change, index) => index > 0 && validChanges[index - 1].to > change.from)
+      ) {
+        setSymbolRenameError("変更位置が重複しているため、適用しませんでした。");
+        return;
+      }
+      view.dispatch({ changes: validChanges });
+      setSymbolRenameOpen(false);
+      setNotice("シンボル名を変更しました");
+    } catch (cause) {
+      setSymbolRenameError(cause instanceof Error ? cause.message : String(cause));
+    }
   }
 
   function sourceForPath(path: string) {
@@ -1342,6 +1474,7 @@ export default function Playground() {
               showDiff={showDiff}
               showProblems={showProblems}
               onDiagnostic={goToDiagnostic}
+              onSourceLocation={navigateToSourceMapLocation}
             />
             {showProblems && reply && diagnostics.length === 0 && (
               <p className="playground-no-problems">問題はありません</p>
@@ -1398,6 +1531,39 @@ export default function Playground() {
             </div>
           </form>
         )}
+      </dialog>
+      <dialog
+        ref={symbolRenameDialog}
+        className="playground-file-action"
+        aria-labelledby="playground-symbol-rename-title"
+        onCancel={() => setSymbolRenameOpen(false)}
+      >
+        <form onSubmit={(event) => void renameSymbol(event)}>
+          <h2 id="playground-symbol-rename-title">シンボル名の変更</h2>
+          <label>
+            <span>新しい名前</span>
+            <input
+              autoFocus
+              value={symbolRenameInput}
+              onChange={(event) => setSymbolRenameInput(event.currentTarget.value)}
+              required
+              maxLength={256}
+            />
+          </label>
+          <ul>
+            <li>ⓘ 同じファイル内の非export宣言</li>
+            <li>ⓘ export/import、Schemaフィールド、複数ファイルは対象外</li>
+          </ul>
+          {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
+          <div className="playground-file-action-buttons">
+            <button type="button" onClick={() => setSymbolRenameOpen(false)}>
+              キャンセル
+            </button>
+            <button type="submit" disabled={busy || loadingProject}>
+              変更
+            </button>
+          </div>
+        </form>
       </dialog>
       {editorError && (
         <p role="alert">

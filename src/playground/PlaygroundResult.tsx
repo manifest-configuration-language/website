@@ -7,7 +7,7 @@ import { foldGutter, foldKeymap } from "@codemirror/language";
 import { openSearchPanel, searchKeymap } from "@codemirror/search";
 import { keymap } from "@codemirror/view";
 import { parseAllDocuments } from "yaml";
-import type { PlaygroundDiagnostic, PlaygroundReply } from "./types";
+import type { PlaygroundDiagnostic, PlaygroundReply, PlaygroundSourceMap } from "./types";
 
 type Props = {
   reply?: PlaygroundReply;
@@ -18,6 +18,7 @@ type Props = {
   showDiff: boolean;
   showProblems: boolean;
   onDiagnostic: (diagnostic: PlaygroundDiagnostic) => void;
+  onSourceLocation: (path: string, line: number, character: number) => void;
 };
 
 export function PlaygroundResult({
@@ -29,11 +30,15 @@ export function PlaygroundResult({
   showDiff,
   showProblems,
   onDiagnostic,
+  onSourceLocation,
 }: Props) {
   const diffHost = useRef<HTMLDivElement>(null);
   const outputHost = useRef<HTMLDivElement>(null);
   const outputEditor = useRef<EditorView | undefined>(undefined);
+  const onSourceLocationRef = useRef(onSourceLocation);
+  onSourceLocationRef.current = onSourceLocation;
   const currentYaml = reply?.ok ? reply.result?.yaml : undefined;
+  const sourceMap = staleYaml === undefined && reply?.ok ? reply.result?.sourceMap : undefined;
   const canShowDiff =
     previousYaml !== undefined && currentYaml !== undefined && previousYaml !== currentYaml;
 
@@ -54,6 +59,20 @@ export function PlaygroundResult({
           EditorView.theme({ ".cm-content, .cm-gutters": { fontSize: `${fontSize}px` } }),
           keymap.of([...searchKeymap, ...foldKeymap]),
           EditorView.contentAttributes.of({ "aria-label": "YAML結果" }),
+          ...(sourceMap?.complete
+            ? [
+                EditorView.domEventHandlers({
+                  click(event, editor) {
+                    const offset = editor.posAtCoords({ x: event.clientX, y: event.clientY });
+                    if (offset === null) return false;
+                    const source = sourceForOutputPosition(editor, sourceMap, offset);
+                    if (!source) return false;
+                    onSourceLocationRef.current(source.path, source.line, source.character);
+                    return true;
+                  },
+                }),
+              ]
+            : []),
         ],
       }),
     });
@@ -62,7 +81,7 @@ export function PlaygroundResult({
       outputEditor.current = undefined;
       view.destroy();
     };
-  }, [fontSize, staleYaml, currentYaml, showProblems, showDiff]);
+  }, [fontSize, staleYaml, currentYaml, sourceMap, showProblems, showDiff]);
 
   function goToDocument(line: number) {
     const view = outputEditor.current;
@@ -178,6 +197,44 @@ export function PlaygroundResult({
       )}
     </>
   );
+}
+
+function sourceForOutputPosition(
+  editor: EditorView,
+  sourceMap: PlaygroundSourceMap,
+  offset: number,
+): { path: string; line: number; character: number } | undefined {
+  const candidates = sourceMap.entries.flatMap((entry) => {
+    const start = positionOffset(editor, entry.output.start.line, entry.output.start.character);
+    const end = positionOffset(editor, entry.output.end.line, entry.output.end.character);
+    if (start === undefined || end === undefined || offset < start || offset >= end) return [];
+    return [{ entry, start, end }];
+  });
+  if (candidates.length === 0) return undefined;
+
+  const shortest = Math.min(...candidates.map(({ start, end }) => end - start));
+  const mostSpecific = candidates.filter(({ start, end }) => end - start === shortest);
+  if (mostSpecific.length !== 1) return undefined;
+
+  const sources = mostSpecific[0].entry.sources;
+  if (sources.length !== 1) return undefined;
+  const [source] = sources;
+  if (source.kind !== "mcl" || source.multiplicity !== "unique" || source.occurrences !== 1)
+    return undefined;
+  return {
+    path: source.path,
+    line: source.range.start.line,
+    character: source.range.start.character,
+  };
+}
+
+function positionOffset(editor: EditorView, line: number, character: number): number | undefined {
+  if (!Number.isInteger(line) || !Number.isInteger(character) || line < 0 || character < 0)
+    return undefined;
+  if (line >= editor.state.doc.lines) return undefined;
+  const docLine = editor.state.doc.line(line + 1);
+  if (character > docLine.length) return undefined;
+  return docLine.from + character;
 }
 
 function YamlNavigation({ text, onSelect }: { text: string; onSelect: (line: number) => void }) {

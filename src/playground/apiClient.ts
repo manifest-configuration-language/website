@@ -8,9 +8,6 @@ import type { PlaygroundClient, PlaygroundDiagnostic, ProjectFile } from "./type
 import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;
-type UpdatableMclProject = MclProject & {
-  update?: (files: ProjectFiles) => MclProject;
-};
 
 function toProjectFiles(
   source: string,
@@ -52,7 +49,7 @@ function toError(error: unknown): PlaygroundDiagnostic {
 export function createPlaygroundClient(): PlaygroundClient {
   const runtime = createMclRuntime({ operationTimeoutMs });
   const activeControllers = new Set<AbortController>();
-  let projectSession: UpdatableMclProject | undefined;
+  let projectSession: MclProject | undefined;
 
   function updateProject(
     source: string,
@@ -60,7 +57,7 @@ export function createPlaygroundClient(): PlaygroundClient {
     entrypoint = "main.mcl",
   ): MclProject {
     const snapshot = toProjectFiles(source, files, entrypoint);
-    const nextProject = projectSession?.update
+    const nextProject = projectSession
       ? projectSession.update(snapshot)
       : runtime.openProject(snapshot);
     projectSession = nextProject;
@@ -159,6 +156,22 @@ export function createPlaygroundClient(): PlaygroundClient {
         finishRequest(controller);
       }
     },
+    async rename(source, entrypoint, position, newName, files) {
+      const controller = beginRequest();
+      try {
+        const project = updateProject(source, files, entrypoint);
+        const result = await project.rename({
+          entrypoint,
+          position,
+          newName,
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+        });
+        return result.edits;
+      } finally {
+        finishRequest(controller);
+      }
+    },
     async run(source, revision, files) {
       const controller = beginRequest();
       let diagnostics: PlaygroundDiagnostic[] | undefined;
@@ -178,7 +191,11 @@ export function createPlaygroundClient(): PlaygroundClient {
           revision,
           ok: true,
           diagnostics: lint.diagnostics,
-          result: { yaml: rendered.yaml, artifacts: rendered.artifacts },
+          result: {
+            yaml: rendered.yaml,
+            artifacts: rendered.artifacts,
+            sourceMap: rendered.sourceMap,
+          },
         };
       } catch (error) {
         return {

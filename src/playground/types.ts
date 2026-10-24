@@ -3,6 +3,8 @@ import type {
   CompletionPosition as BrowserCompletionPosition,
   DefinitionLocation as BrowserDefinitionLocation,
   HoverInfo as BrowserHoverInfo,
+  RenameEdit as BrowserRenameEdit,
+  SourceMap as BrowserSourceMap,
 } from "@manifest-configuration-language/browser";
 
 export type PlaygroundDiagnostic = {
@@ -30,6 +32,9 @@ export type PlaygroundCompletionPosition = BrowserCompletionPosition;
 export type PlaygroundDefinitionLocation = BrowserDefinitionLocation;
 export type PlaygroundHover = BrowserHoverInfo;
 
+export type PlaygroundSourceMap = BrowserSourceMap;
+export type PlaygroundRenameEdit = BrowserRenameEdit;
+
 export type ProjectFile =
   | { encoding: "utf8"; content: string }
   | { encoding: "binary"; bytes: Uint8Array };
@@ -51,6 +56,7 @@ export type PlaygroundReply = {
     source?: string;
     artifacts?: number;
     renderedBytes?: number;
+    sourceMap?: PlaygroundSourceMap;
     diagnostics?: PlaygroundDiagnostic[];
   };
   error?: PlaygroundDiagnostic;
@@ -82,6 +88,13 @@ export interface PlaygroundClient {
     position: PlaygroundCompletionPosition,
     files?: Record<string, ProjectFile>,
   ): Promise<PlaygroundHover | null>;
+  rename(
+    source: string,
+    entrypoint: string,
+    position: PlaygroundCompletionPosition,
+    newName: string,
+    files?: Record<string, ProjectFile>,
+  ): Promise<PlaygroundRenameEdit[]>;
   run(
     source: string,
     revision: number,

@@ -4,7 +4,12 @@ import {
   type MclProject,
   type ProjectFiles,
 } from "@manifest-configuration-language/browser";
-import type { PlaygroundClient, PlaygroundDiagnostic, ProjectFile } from "./types";
+import type {
+  PlaygroundClient,
+  PlaygroundDiagnostic,
+  PlaygroundPriority,
+  ProjectFile,
+} from "./types";
 import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;
@@ -78,21 +83,22 @@ export function createPlaygroundClient(): PlaygroundClient {
     loadProject(files) {
       return readProject(files);
     },
-    async warmUp() {
+    async warmUp(priority: PlaygroundPriority = "background") {
       const controller = beginRequest();
       try {
-        await runtime.warmUp({ signal: controller.signal, timeoutMs: 30_000 });
+        await runtime.warmUp({ signal: controller.signal, timeoutMs: 30_000, priority });
       } finally {
         finishRequest(controller);
       }
     },
-    async lint(source, revision, files) {
+    async lint(source, revision, files, priority = "background") {
       const controller = beginRequest();
       try {
         const project = updateProject(source, files);
         const lint = await project.lint({
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         return {
           requestId: revision,
@@ -111,7 +117,7 @@ export function createPlaygroundClient(): PlaygroundClient {
         finishRequest(controller);
       }
     },
-    async complete(source, entrypoint, position, files) {
+    async complete(source, entrypoint, position, files, priority = "interactive") {
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
@@ -120,13 +126,14 @@ export function createPlaygroundClient(): PlaygroundClient {
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         return completion.items;
       } finally {
         finishRequest(controller);
       }
     },
-    async definition(source, entrypoint, position, files) {
+    async definition(source, entrypoint, position, files, priority = "interactive") {
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
@@ -135,13 +142,14 @@ export function createPlaygroundClient(): PlaygroundClient {
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         return result.location;
       } finally {
         finishRequest(controller);
       }
     },
-    async hover(source, entrypoint, position, files) {
+    async hover(source, entrypoint, position, files, priority = "interactive") {
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
@@ -150,13 +158,14 @@ export function createPlaygroundClient(): PlaygroundClient {
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         return result.hover;
       } finally {
         finishRequest(controller);
       }
     },
-    async rename(source, entrypoint, position, newName, files) {
+    async rename(source, entrypoint, position, newName, files, priority = "interactive") {
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
@@ -166,13 +175,14 @@ export function createPlaygroundClient(): PlaygroundClient {
           newName,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         return result.edits;
       } finally {
         finishRequest(controller);
       }
     },
-    async references(source, entrypoint, position, files) {
+    async references(source, entrypoint, position, files, priority = "interactive") {
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
@@ -181,13 +191,14 @@ export function createPlaygroundClient(): PlaygroundClient {
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         return result.references;
       } finally {
         finishRequest(controller);
       }
     },
-    async run(source, revision, files) {
+    async run(source, revision, files, priority = "interactive") {
       const controller = beginRequest();
       let diagnostics: PlaygroundDiagnostic[] | undefined;
       try {
@@ -195,11 +206,13 @@ export function createPlaygroundClient(): PlaygroundClient {
         const lint = await project.lint({
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         diagnostics = lint.diagnostics;
         const rendered = await project.render({
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         return {
           requestId: revision,
@@ -224,12 +237,13 @@ export function createPlaygroundClient(): PlaygroundClient {
         finishRequest(controller);
       }
     },
-    async format(source, revision) {
+    async format(source, revision, priority = "interactive") {
       const controller = beginRequest();
       try {
         const formatted = await runtime.format(source, {
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
+          priority,
         });
         return {
           requestId: revision,

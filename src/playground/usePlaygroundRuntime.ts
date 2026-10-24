@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type { PlaygroundClient, PlaygroundReply } from "./types";
+import type { PlaygroundClient, PlaygroundPriority, PlaygroundReply } from "./types";
 import type { PlaygroundProject } from "./usePlaygroundProject";
 
 type PendingLint = { source: string; revision: number };
@@ -26,39 +26,33 @@ type Options = {
 
 export function usePlaygroundRuntime({ client, project, revision, onLint, onWasmReady }: Options) {
   const renderInFlight = useRef(false);
-  const requestCount = useRef(0);
   const pendingLint = useRef<PendingLint | undefined>(undefined);
   const lintTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const flushPendingLintRef = useRef<() => void>(() => {});
   const [renderPending, setRenderPending] = useState(false);
 
-  const trackRequest = useCallback(async <T>(request: Promise<T>) => {
-    requestCount.current += 1;
-    try {
-      return await request;
-    } finally {
-      requestCount.current -= 1;
-      flushPendingLintRef.current();
-    }
-  }, []);
-
   const scheduleLint = useCallback(
     (source: string, requestRevision: number) => {
       if (lintTimer.current) clearTimeout(lintTimer.current);
-      if (renderInFlight.current || requestCount.current > 0) {
+      if (renderInFlight.current) {
         pendingLint.current = { source, revision: requestRevision };
         return;
       }
       lintTimer.current = setTimeout(async () => {
         lintTimer.current = undefined;
         if (requestRevision !== revision.current) return;
-        if (renderInFlight.current || requestCount.current > 0) {
+        if (renderInFlight.current) {
           pendingLint.current = { source, revision: requestRevision };
           return;
         }
         try {
-          const request = client.current?.lint(source, requestRevision, project.current.files);
-          const result = request ? await trackRequest(request) : undefined;
+          const request = client.current?.lint(
+            source,
+            requestRevision,
+            project.current.files,
+            "background",
+          );
+          const result = request ? await request : undefined;
           if (result && requestRevision === revision.current && !isAbortReply(result)) {
             onWasmReady();
             onLint(result, requestRevision);
@@ -83,11 +77,11 @@ export function usePlaygroundRuntime({ client, project, revision, onLint, onWasm
         }
       }, 400);
     },
-    [client, onLint, onWasmReady, project, revision, trackRequest],
+    [client, onLint, onWasmReady, project, revision],
   );
 
   const flushPendingLint = useCallback(() => {
-    if (renderInFlight.current || requestCount.current > 0) return;
+    if (renderInFlight.current) return;
     const pending = pendingLint.current;
     pendingLint.current = undefined;
     if (pending && pending.revision === revision.current)
@@ -96,16 +90,18 @@ export function usePlaygroundRuntime({ client, project, revision, onLint, onWasm
   flushPendingLintRef.current = flushPendingLint;
 
   const run = useCallback(
-    (source: string, requestRevision: number): Promise<PlaygroundReply> | undefined => {
+    (
+      source: string,
+      requestRevision: number,
+      priority: PlaygroundPriority = "interactive",
+    ): Promise<PlaygroundReply> | undefined => {
       const activeClient = client.current;
       if (!activeClient || renderInFlight.current) return undefined;
       renderInFlight.current = true;
       setRenderPending(true);
       return (async () => {
         try {
-          return await trackRequest(
-            activeClient.run(source, requestRevision, project.current.files),
-          );
+          return await activeClient.run(source, requestRevision, project.current.files, priority);
         } finally {
           renderInFlight.current = false;
           setRenderPending(false);
@@ -113,7 +109,7 @@ export function usePlaygroundRuntime({ client, project, revision, onLint, onWasm
         }
       })();
     },
-    [client, flushPendingLint, project, trackRequest],
+    [client, flushPendingLint, project],
   );
 
   const isRendering = useCallback(() => renderInFlight.current, []);
@@ -125,5 +121,5 @@ export function usePlaygroundRuntime({ client, project, revision, onLint, onWasm
     [],
   );
 
-  return { isRendering, renderPending, run, scheduleLint, trackRequest };
+  return { isRendering, renderPending, run, scheduleLint };
 }

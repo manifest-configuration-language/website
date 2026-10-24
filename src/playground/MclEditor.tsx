@@ -4,8 +4,10 @@ import {
   defaultHighlightStyle,
   foldGutter,
   indentUnit,
+  indentOnInput,
   syntaxHighlighting,
 } from "@codemirror/language";
+import { acceptCompletion, closeBrackets } from "@codemirror/autocomplete";
 import {
   setDiagnostics,
   lintGutter,
@@ -59,9 +61,9 @@ function positionOffset(
 
 function languageForPath(path: string): Extension {
   if (path.endsWith(".mcl")) return mclLanguageSupport();
-  if (path.endsWith(".yaml") || path.endsWith(".yml")) return yaml();
-  if (path.endsWith(".json")) return json();
-  return [];
+  if (path.endsWith(".yaml") || path.endsWith(".yml")) return [yaml(), closeBrackets()];
+  if (path.endsWith(".json")) return [json(), closeBrackets()];
+  return closeBrackets();
 }
 
 export type EditorSettings = {
@@ -111,6 +113,7 @@ type Props = {
   ) => Promise<PlaygroundHover | null>;
   onNavigate: (location: PlaygroundDefinitionLocation) => void;
   onNavigateToYaml: () => void;
+  onShowProblems: () => void;
   onFindReferences: () => void;
   onRenameSymbol: () => void;
 };
@@ -168,6 +171,7 @@ export function MclEditor({
   onHover,
   onNavigate,
   onNavigateToYaml,
+  onShowProblems,
   onFindReferences,
   onRenameSymbol,
 }: Props) {
@@ -200,6 +204,7 @@ export function MclEditor({
     onHover,
     onNavigate,
     onNavigateToYaml,
+    onShowProblems,
     onFindReferences,
     onRenameSymbol,
   });
@@ -215,6 +220,7 @@ export function MclEditor({
     onHover,
     onNavigate,
     onNavigateToYaml,
+    onShowProblems,
     onFindReferences,
     onRenameSymbol,
   };
@@ -254,6 +260,7 @@ export function MclEditor({
           EditorState.tabSize.of(settingsRef.current.tabSize),
           indentUnit.of(" ".repeat(settingsRef.current.tabSize)),
         ]),
+        indentOnInput(),
         EditorState.allowMultipleSelections.of(true),
         textSize.current.of(
           EditorView.theme({
@@ -315,7 +322,11 @@ export function MclEditor({
           }
         }),
         keymap.of([
-          indentWithTab,
+          {
+            key: "Tab",
+            run: (view) => acceptCompletion(view) || (indentWithTab.run?.(view) ?? false),
+            shift: indentWithTab.shift,
+          },
           { key: "Mod-/", run: toggleComment },
           {
             key: "Mod-Enter",
@@ -354,6 +365,14 @@ export function MclEditor({
               callbacks.current.onFindReferences();
               return true;
             },
+          },
+          {
+            key: "Mod-Shift-m",
+            run: () => {
+              callbacks.current.onShowProblems();
+              return true;
+            },
+            preventDefault: true,
           },
           { key: "F8", run: nextDiagnostic },
           { key: "Shift-F8", run: previousDiagnostic },

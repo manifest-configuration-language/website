@@ -433,13 +433,7 @@ export default function Playground() {
     onLint: handleLintResult,
     onWasmReady: handleWasmReady,
   });
-  const {
-    isRendering,
-    renderPending,
-    run: runWasm,
-    scheduleLint,
-    trackRequest: trackWasmRequest,
-  } = runtime;
+  const { isRendering, renderPending, run: runWasm, scheduleLint } = runtime;
 
   const editablePaths = useMemo(
     () => [
@@ -517,6 +511,10 @@ export default function Playground() {
       },
     },
     { name: "サンプルを開く", action: () => setExamplesOpen(true) },
+    {
+      name: "ファイル一覧を切り替え",
+      action: () => setExplorerOpen((value) => !value),
+    },
     ...(activePath.endsWith(".mcl")
       ? [{ name: "定義へ移動", action: () => void goToDefinitionAtCursor() }]
       : []),
@@ -574,6 +572,8 @@ export default function Playground() {
     参照箇所を検索: "Shift+F12",
     シンボル名を変更: "F2",
     ファイルを開く: "Ctrl/⌘ P",
+    ファイル一覧を切り替え: "Ctrl/⌘ ⇧ E",
+    問題を表示: "Ctrl/⌘ ⇧ M",
   };
   const commandKeywords: Record<string, string[]> = {
     実行: ["run", "render"],
@@ -588,10 +588,11 @@ export default function Playground() {
     シンボル名を変更: ["rename", "f2"],
     共有: ["share"],
     ファイルを開く: ["quick open", "open file", "ctrl p"],
+    ファイル一覧を切り替え: ["explorer", "files", "ctrl shift e"],
     ファイルを作成: ["new file", "create file"],
     新しいプロジェクト: ["new project"],
     出力を表示: ["output"],
-    問題を表示: ["problems", "diagnostics"],
+    問題を表示: ["problems", "diagnostics", "ctrl shift m"],
   };
   const commandItems: QuickAccessItem[] = commands.map((command) => ({
     value: command.name,
@@ -834,7 +835,8 @@ export default function Playground() {
       }
       startupReady.current = true;
       markDraftsLoaded();
-      void trackWasmRequest(createdClient.warmUp())
+      void createdClient
+        .warmUp("background")
         .then(() => {
           if (cancelled) return;
           setWasmReady(true);
@@ -862,7 +864,6 @@ export default function Playground() {
     projectRef,
     saveDraftSnapshot,
     setActiveDraft,
-    trackWasmRequest,
     updateDraftMetadata,
   ]);
 
@@ -875,6 +876,7 @@ export default function Playground() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (document.querySelector("dialog[open]")) return;
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
@@ -886,6 +888,18 @@ export default function Playground() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
         event.preventDefault();
         setQuickOpen(true);
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "e") {
+        event.preventDefault();
+        setExplorerOpen((value) => !value);
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        setMobileView("problems");
+        setShowProblems(true);
+        setShowDiff(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -1015,10 +1029,10 @@ export default function Playground() {
     [activeDraftIdRef, projectRef, scheduleLint, setFileContent],
   );
 
-  async function run(focusOutput = true) {
+  async function run(focusOutput = true, priority: "interactive" | "background" = "interactive") {
     if (!editor.current || !client.current || loadingProject || isRendering()) return;
     const currentRevision = ++revision.current;
-    const request = runWasm(projectRef.current.source, currentRevision);
+    const request = runWasm(projectRef.current.source, currentRevision, priority);
     if (!request) return;
     setBusy(true);
     setError("");
@@ -1047,7 +1061,7 @@ export default function Playground() {
     }
   }
 
-  runAction.current = () => void run(false);
+  runAction.current = () => void run(false, "background");
 
   async function formatSource() {
     if (
@@ -1062,9 +1076,7 @@ export default function Playground() {
     setBusy(true);
     setError("");
     try {
-      const result = await trackWasmRequest(
-        client.current.format(view.state.doc.toString(), currentRevision),
-      );
+      const result = await client.current.format(view.state.doc.toString(), currentRevision);
       if (currentRevision !== revision.current) return;
       if (!result.ok) {
         if (result.error) setError(`${result.error.code}: ${result.error.message}`);
@@ -1286,8 +1298,11 @@ export default function Playground() {
     setError("");
     setNotice("");
     try {
-      const location = await trackWasmRequest(
-        playground.definition(view.state.doc.toString(), path, position, languageServiceFiles()),
+      const location = await playground.definition(
+        view.state.doc.toString(),
+        path,
+        position,
+        languageServiceFiles(),
       );
       if (currentRevision !== revision.current || editor.current !== view) return;
       if (location) navigateToDefinition(location);
@@ -1312,8 +1327,11 @@ export default function Playground() {
     setSymbolReferencesError("");
     setSymbolReferences([]);
     try {
-      const references = await trackWasmRequest(
-        playground.references(source, path, position, languageServiceFiles()),
+      const references = await playground.references(
+        source,
+        path,
+        position,
+        languageServiceFiles(),
       );
       if (currentRevision !== revision.current || editor.current !== view) return;
       setSymbolReferences(references.filter((reference) => mclPaths.includes(reference.path)));
@@ -1369,8 +1387,12 @@ export default function Playground() {
     const currentRevision = revision.current;
     setSymbolRenameError("");
     try {
-      const edits = await trackWasmRequest(
-        playground.rename(source, path, position, newName, languageServiceFiles()),
+      const edits = await playground.rename(
+        source,
+        path,
+        position,
+        newName,
+        languageServiceFiles(),
       );
       if (currentRevision !== revision.current || editor.current !== view) return;
       if (edits.length === 0) {
@@ -1936,42 +1958,41 @@ export default function Playground() {
               onFormat={() => void formatSource()}
               onComplete={(path, position) =>
                 client.current
-                  ? trackWasmRequest(
-                      client.current.complete(
-                        sourceForPath(path),
-                        path,
-                        position,
-                        languageServiceFiles(),
-                      ),
+                  ? client.current.complete(
+                      sourceForPath(path),
+                      path,
+                      position,
+                      languageServiceFiles(),
                     )
                   : Promise.resolve([])
               }
               onDefinition={(path, position) =>
                 client.current
-                  ? trackWasmRequest(
-                      client.current.definition(
-                        sourceForPath(path),
-                        path,
-                        position,
-                        languageServiceFiles(),
-                      ),
+                  ? client.current.definition(
+                      sourceForPath(path),
+                      path,
+                      position,
+                      languageServiceFiles(),
                     )
                   : Promise.resolve(null)
               }
               onHover={(path, position) =>
                 client.current
-                  ? trackWasmRequest(
-                      client.current.hover(
-                        sourceForPath(path),
-                        path,
-                        position,
-                        languageServiceFiles(),
-                      ),
+                  ? client.current.hover(
+                      sourceForPath(path),
+                      path,
+                      position,
+                      languageServiceFiles(),
                     )
                   : Promise.resolve(null)
               }
               onNavigate={navigateToDefinition}
               onNavigateToYaml={navigateToYaml}
+              onShowProblems={() => {
+                setMobileView("problems");
+                setShowProblems(true);
+                setShowDiff(false);
+              }}
               onFindReferences={() => void findSymbolReferences()}
               onRenameSymbol={openSymbolRename}
             />

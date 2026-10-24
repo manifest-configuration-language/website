@@ -64,31 +64,37 @@ export type PlaygroundReply = {
   error?: PlaygroundDiagnostic;
 };
 
+export type PlaygroundPriority = "interactive" | "background";
+
 export interface PlaygroundClient {
   loadProject(files: FileList | File[]): Promise<LoadedProject>;
-  warmUp(): Promise<void>;
+  warmUp(priority?: PlaygroundPriority): Promise<void>;
   lint(
     source: string,
     revision: number,
     files?: Record<string, ProjectFile>,
+    priority?: PlaygroundPriority,
   ): Promise<PlaygroundReply>;
   complete(
     source: string,
     entrypoint: string,
     position: PlaygroundCompletionPosition,
     files?: Record<string, ProjectFile>,
+    priority?: PlaygroundPriority,
   ): Promise<PlaygroundCompletionItem[]>;
   definition(
     source: string,
     entrypoint: string,
     position: PlaygroundCompletionPosition,
     files?: Record<string, ProjectFile>,
+    priority?: PlaygroundPriority,
   ): Promise<PlaygroundDefinitionLocation | null>;
   hover(
     source: string,
     entrypoint: string,
     position: PlaygroundCompletionPosition,
     files?: Record<string, ProjectFile>,
+    priority?: PlaygroundPriority,
   ): Promise<PlaygroundHover | null>;
   rename(
     source: string,
@@ -96,19 +102,22 @@ export interface PlaygroundClient {
     position: PlaygroundCompletionPosition,
     newName: string,
     files?: Record<string, ProjectFile>,
+    priority?: PlaygroundPriority,
   ): Promise<PlaygroundRenameEdit[]>;
   references(
     source: string,
     entrypoint: string,
     position: PlaygroundCompletionPosition,
     files?: Record<string, ProjectFile>,
+    priority?: PlaygroundPriority,
   ): Promise<PlaygroundReference[]>;
   run(
     source: string,
     revision: number,
     files?: Record<string, ProjectFile>,
+    priority?: PlaygroundPriority,
   ): Promise<PlaygroundReply>;
-  format(source: string, revision: number): Promise<PlaygroundReply>;
+  format(source: string, revision: number, priority?: PlaygroundPriority): Promise<PlaygroundReply>;
   cancel(): void;
   dispose(): void;
 }

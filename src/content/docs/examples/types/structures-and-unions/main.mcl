@@ -1,0 +1,26 @@
+type Box<T> = {value: T}
+type DeploymentWorkload = {kind: String, name: String, replicas: Int}
+type JobWorkload = {kind: String, name: String, completions: Int}
+type Workload = DeploymentWorkload | JobWorkload
+type Container =
+  name: String
+  image: String
+  command?: List<String>
+
+let boxedName: Box<String> =
+  value: "sample-worker"
+let worker: Workload =
+  kind: "Job"
+  name: boxedName.value
+  completions: 1
+let container: Container =
+  name: "worker"
+  image: "example.test.walnuts.dev/worker:v1"
+
+let result =
+  workload: worker
+  workloadName: "sample-worker"
+  workloadSize: 1
+  container: container
+
+emit result

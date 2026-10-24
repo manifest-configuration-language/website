@@ -1,0 +1,28 @@
+let app = "sample-api"
+let image = "example.test.walnuts.dev/sample-api:v1.2.0"
+
+let labels =
+  app: app
+  "app.kubernetes.io/name": app
+
+let deployment =
+  apiVersion: "apps/v1"
+  kind: "Deployment"
+  metadata:
+    name: app
+    labels: labels
+  spec:
+    replicas: 2
+    selector:
+      matchLabels:
+        app: app
+    template:
+      metadata:
+        labels:
+          app: app
+      spec:
+        containers:
+          - name: app
+            image: image
+
+emit deployment

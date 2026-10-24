@@ -1,0 +1,23 @@
+let names =
+  - "api"
+  - "worker"
+  - "scheduler"
+
+let containers =
+  for name in names:
+    name: name
+    image: "example.test.walnuts.dev/" + name + ":v1"
+
+let ports =
+  - 8080
+  - 9090
+  - 9443
+let publicPorts = filter(ports, fn(port) => port >= 9000)
+let totalPublicPorts = fold(publicPorts, 0, fn(total, port) => total + port)
+
+let result =
+  containers: containers
+  publicPorts: publicPorts
+  totalPublicPorts: totalPublicPorts
+
+emit result

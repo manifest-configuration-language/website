@@ -1,6 +1,12 @@
 import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
-import { EditorView, hoverTooltip, type Extension, type KeyBinding } from "@codemirror/view";
-import type { PlaygroundCompletionItem, PlaygroundDefinitionLocation, PlaygroundHover } from "./types";
+import { hoverTooltip } from "@codemirror/view";
+import { EditorView, type KeyBinding } from "@codemirror/view";
+import type { Extension } from "@codemirror/state";
+import type {
+  PlaygroundCompletionItem,
+  PlaygroundDefinitionLocation,
+  PlaygroundHover,
+} from "./types";
 
 type Position = { line: number; character: number };
 
@@ -31,55 +37,77 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
   return {
     extensions: [
       autocompletion({
-        override: [async (completionContext) => {
-          const word = completionContext.matchBefore(/[\w.-]*/);
-          if (!completionContext.explicit && (!word || word.from === word.to)) return null;
-          if (!await waitForCompletionDelay(completionContext, 120)) return null;
-          const line = completionContext.state.doc.lineAt(completionContext.pos);
-          const items = await context.callbacks.current.onComplete(context.currentPath.current, {
-            line: line.number - 1,
-            character: completionContext.pos - line.from,
-          });
-          if (completionContext.aborted || items.length === 0) return null;
-          const options: Completion[] = items.map((item) => ({
-            label: item.label,
-            type: completionType(item.kind),
-            ...(item.insertText === undefined ? {} : { apply: item.insertText }),
-          }));
-          return { from: word?.from ?? completionContext.pos, options };
-        }],
+        override: [
+          async (completionContext) => {
+            if (!context.currentPath.current.endsWith(".mcl")) return null;
+            const word = completionContext.matchBefore(/[\w.-]*/);
+            if (!completionContext.explicit && (!word || word.from === word.to)) return null;
+            if (!(await waitForCompletionDelay(completionContext, 120))) return null;
+            const line = completionContext.state.doc.lineAt(completionContext.pos);
+            const items = await context.callbacks.current.onComplete(context.currentPath.current, {
+              line: line.number - 1,
+              character: completionContext.pos - line.from,
+            });
+            if (completionContext.aborted || items.length === 0) return null;
+            const options: Completion[] = items.map((item) => ({
+              label: item.label,
+              type: completionType(item.kind),
+              ...(item.insertText === undefined ? {} : { apply: item.insertText }),
+            }));
+            return { from: word?.from ?? completionContext.pos, options };
+          },
+        ],
       }),
-      hoverTooltip(async (view, position) => {
-        const requestId = ++context.hoverRequest.current;
-        const requestGeneration = context.documentGeneration.current;
-        const requestPath = context.currentPath.current;
-        const requestDocument = view.state.doc;
-        const line = view.state.doc.lineAt(position);
-        try {
-          const hover = await context.callbacks.current.onHover(requestPath, {
-            line: line.number - 1,
-            character: position - line.from,
-          });
-          if (!isCurrentRequest(context, view, requestId, requestGeneration, requestPath, requestDocument, context.hoverRequest)) return null;
-          if (!hover) return null;
-          const fromLine = view.state.doc.line(Math.min(hover.range.start.line + 1, view.state.doc.lines));
-          const toLine = view.state.doc.line(Math.min(hover.range.end.line + 1, view.state.doc.lines));
-          const from = Math.min(fromLine.to, fromLine.from + hover.range.start.character);
-          const to = Math.max(from, Math.min(toLine.to, toLine.from + hover.range.end.character));
-          return {
-            pos: from,
-            end: to,
-            create() {
-              const dom = document.createElement("div");
-              dom.className = "cm-tooltip-hover";
-              dom.textContent = hover.contents;
-              return { dom };
-            },
-          };
-        } catch {
-          return null;
-        }
-      }, { hoverTime: 450, hideOnChange: true }),
+      hoverTooltip(
+        async (view, position) => {
+          const requestId = ++context.hoverRequest.current;
+          const requestGeneration = context.documentGeneration.current;
+          const requestPath = context.currentPath.current;
+          if (!requestPath.endsWith(".mcl")) return null;
+          const requestDocument = view.state.doc;
+          const line = view.state.doc.lineAt(position);
+          try {
+            const hover = await context.callbacks.current.onHover(requestPath, {
+              line: line.number - 1,
+              character: position - line.from,
+            });
+            if (
+              !isCurrentRequest(
+                context,
+                view,
+                requestId,
+                requestGeneration,
+                requestPath,
+                requestDocument,
+                context.hoverRequest,
+              )
+            )
+              return null;
+            if (!hover) return null;
+            const fromLine = view.state.doc.line(
+              Math.min(hover.range.start.line + 1, view.state.doc.lines),
+            );
+            const toLine = view.state.doc.line(
+              Math.min(hover.range.end.line + 1, view.state.doc.lines),
+            );
+            const from = Math.min(fromLine.to, fromLine.from + hover.range.start.character);
+            const to = Math.max(from, Math.min(toLine.to, toLine.from + hover.range.end.character));
+            return {
+              pos: from,
+              end: to,
+              create() {
+                const dom = document.createElement("div");
+                dom.className = "cm-tooltip-hover";
+                dom.textContent = hover.contents;
+                return { dom };
+              },
+            };
+          } catch {
+            return null;
+          }
+        },
+        { hoverTime: 450, hideOnChange: true },
+      ),
     ],
     definitionKeyBinding: {
       key: "F12",
@@ -102,6 +130,7 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
 }
 
 async function goToDefinition(context: LanguageServiceContext, view: EditorView, position: number) {
+  if (!context.currentPath.current.endsWith(".mcl")) return;
   const requestId = ++context.definitionRequest.current;
   const requestGeneration = context.documentGeneration.current;
   const requestPath = context.currentPath.current;
@@ -112,10 +141,32 @@ async function goToDefinition(context: LanguageServiceContext, view: EditorView,
       line: line.number - 1,
       character: position - line.from,
     });
-    if (!isCurrentRequest(context, view, requestId, requestGeneration, requestPath, requestDocument, context.definitionRequest)) return;
+    if (
+      !isCurrentRequest(
+        context,
+        view,
+        requestId,
+        requestGeneration,
+        requestPath,
+        requestDocument,
+        context.definitionRequest,
+      )
+    )
+      return;
     if (location) context.callbacks.current.onNavigate(location);
   } catch (cause) {
-    if (!isCurrentRequest(context, view, requestId, requestGeneration, requestPath, requestDocument, context.definitionRequest)) return;
+    if (
+      !isCurrentRequest(
+        context,
+        view,
+        requestId,
+        requestGeneration,
+        requestPath,
+        requestDocument,
+        context.definitionRequest,
+      )
+    )
+      return;
     context.callbacks.current.onError(cause instanceof Error ? cause : new Error(String(cause)));
   }
 }
@@ -129,26 +180,38 @@ function isCurrentRequest(
   requestDocument: EditorView["state"]["doc"],
   request: Ref<number>,
 ): boolean {
-  return request.current === requestId &&
+  return (
+    request.current === requestId &&
     context.documentGeneration.current === requestGeneration &&
     context.view.current === view &&
     context.currentPath.current === requestPath &&
-    view.state.doc === requestDocument;
+    view.state.doc === requestDocument
+  );
 }
 
 function completionType(kind: number): Completion["type"] {
   switch (kind) {
-    case 2: return "method";
-    case 3: return "function";
+    case 2:
+      return "method";
+    case 3:
+      return "function";
     case 5:
-    case 10: return "property";
-    case 6: return "variable";
-    case 7: return "class";
-    case 8: return "type";
-    case 9: return "namespace";
-    case 14: return "keyword";
-    case 21: return "constant";
-    default: return "text";
+    case 10:
+      return "property";
+    case 6:
+      return "variable";
+    case 7:
+      return "class";
+    case 8:
+      return "type";
+    case 9:
+      return "namespace";
+    case 14:
+      return "keyword";
+    case 21:
+      return "constant";
+    default:
+      return "text";
   }
 }
 

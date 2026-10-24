@@ -1,0 +1,29 @@
+let application =
+  metadata:
+    labels:
+      "app.kubernetes.io/name": "sample-api"
+      "app.kubernetes.io/environment": "production"
+  spec:
+    replicas: 3
+    template:
+      spec:
+        containers:
+          - name: "api"
+            image: "example.test.walnuts.dev/api:v1"
+            args:
+              - "serve"
+              - "--read-only"
+          - name: "metrics"
+            image: "example.test.walnuts.dev/metrics:v1"
+
+let result =
+  deployment: application
+  overrides:
+    replicas: 5
+    containers:
+      - name: "api"
+        image: "example.test.walnuts.dev/api:v2"
+      - name: "worker"
+        image: "example.test.walnuts.dev/worker:v1"
+
+emit result

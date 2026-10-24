@@ -5,6 +5,9 @@ type Props = {
   files: Record<string, ProjectFile>;
   activePath: string;
   onSelect: (path: string) => void;
+  onCreate: () => void;
+  onRename: (path: string) => void;
+  onDelete: (path: string) => void;
   disabled?: boolean;
 };
 
@@ -41,12 +44,21 @@ function compareNodes(left: FileTreeNode, right: FileTreeNode): number {
   return left.name.localeCompare(right.name);
 }
 
-export function ProjectTabs({ paths, files, activePath, onSelect, disabled = false }: Props) {
+export function ProjectTabs({
+  paths,
+  files,
+  activePath,
+  onSelect,
+  onCreate,
+  onRename,
+  onDelete,
+  disabled = false,
+}: Props) {
   const tree = createFileTree(paths);
 
   function renderNode(node: FileTreeNode) {
     if (node.file) {
-      const selectable = node.path === "main.mcl" || node.path.endsWith(".mcl") && files[node.path]?.encoding === "utf8";
+      const selectable = node.path === "main.mcl" || files[node.path]?.encoding === "utf8";
       return (
         <li key={node.path}>
           {selectable ? (
@@ -59,8 +71,34 @@ export function ProjectTabs({ paths, files, activePath, onSelect, disabled = fal
             >
               {node.name}
             </button>
-          ) : <span title={node.path}>{node.name}</span>}
-          {node.children.size > 0 && <ul>{[...node.children.values()].sort(compareNodes).map(renderNode)}</ul>}
+          ) : (
+            <span title={node.path}>{node.name}</span>
+          )}
+          {selectable && node.path !== "main.mcl" && (
+            <span className="project-file-actions">
+              <button
+                type="button"
+                aria-label={`${node.path}の名前を変更`}
+                title="名前を変更"
+                disabled={disabled}
+                onClick={() => onRename(node.path)}
+              >
+                名前
+              </button>
+              <button
+                type="button"
+                aria-label={`${node.path}を削除`}
+                title="削除"
+                disabled={disabled}
+                onClick={() => onDelete(node.path)}
+              >
+                削除
+              </button>
+            </span>
+          )}
+          {node.children.size > 0 && (
+            <ul>{[...node.children.values()].sort(compareNodes).map(renderNode)}</ul>
+          )}
         </li>
       );
     }
@@ -75,10 +113,14 @@ export function ProjectTabs({ paths, files, activePath, onSelect, disabled = fal
   }
 
   return (
-    <nav aria-label="プロジェクトファイル" style={{ maxHeight: "8rem", overflow: "auto" }}>
-      <ul style={{ listStyle: "none", margin: 0, paddingInlineStart: "0.75rem" }}>
-        {[...tree.children.values()].sort(compareNodes).map(renderNode)}
-      </ul>
+    <nav className="project-explorer" aria-label="プロジェクトファイル">
+      <div className="project-explorer-toolbar">
+        <span>ファイル</span>
+        <button type="button" disabled={disabled} onClick={onCreate}>
+          新規ファイル
+        </button>
+      </div>
+      <ul>{[...tree.children.values()].sort(compareNodes).map(renderNode)}</ul>
     </nav>
   );
 }

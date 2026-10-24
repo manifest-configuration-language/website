@@ -1,0 +1,8 @@
+export let container =
+  securityContext:
+    allowPrivilegeEscalation: false
+    seccompProfile:
+      type: "RuntimeDefault"
+    capabilities:
+      drop:
+        - "ALL"

@@ -1,0 +1,75 @@
+---
+import Playground from "../../playground/Playground.tsx";
+import "../../styles/custom.css";
+---
+
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="ブラウザー上のWASMでMCLを編集してKubernetesマニフェストを生成します。" />
+    <title>MCL Playground</title>
+  </head>
+  <body>
+    <main class="playground-app">
+      <Playground client:load />
+    </main>
+  </body>
+</html>
+
+<style is:global>
+  :root {
+    color-scheme: light dark;
+    --sl-color-bg: #fff;
+    --sl-color-text: #18181b;
+    --sl-color-gray-2: #52525b;
+    --sl-color-gray-5: #d4d4d8;
+    --sl-color-gray-6: #f4f4f5;
+    --sl-color-accent: #6750a4;
+    --sl-color-text-accent: #6750a4;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --sl-color-bg: #18181b;
+      --sl-color-text: #f4f4f5;
+      --sl-color-gray-2: #a1a1aa;
+      --sl-color-gray-5: #3f3f46;
+      --sl-color-gray-6: #27272a;
+      --sl-color-accent: #c4b5fd;
+      --sl-color-text-accent: #c4b5fd;
+    }
+  }
+
+  html,
+  body {
+    min-height: 100%;
+    margin: 0;
+    background: var(--sl-color-bg);
+    color: var(--sl-color-text);
+    font-family: system-ui, sans-serif;
+  }
+
+  .playground-app {
+    min-height: 100dvh;
+    padding: 1rem clamp(0.5rem, 2vw, 1.5rem);
+    box-sizing: border-box;
+  }
+
+  .playground {
+    min-height: calc(100dvh - 2rem);
+  }
+
+  .playground-panels {
+    height: calc(100dvh - 6.5rem);
+    min-height: 32rem;
+  }
+
+  @media (max-width: 48rem) {
+    .playground-panels {
+      height: calc(100dvh - 7rem);
+      min-height: 28rem;
+    }
+  }
+</style>

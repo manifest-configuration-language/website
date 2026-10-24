@@ -1,0 +1,20 @@
+type Endpoint =
+  port?: Int
+  host?: String
+
+type Service =
+  name: String
+  endpoint: Endpoint
+
+let service: Service =
+  name: "sample-api"
+  endpoint: {}
+
+let configuredPort = service.endpoint?.port ?? 8080
+let configuredHost = service.endpoint?.host ?? "127.0.0.1"
+let result =
+  name: service.name
+  host: configuredHost
+  port: configuredPort
+
+emit result

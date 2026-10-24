@@ -1,0 +1,12 @@
+let configuration =
+  environments:
+    - "staging"
+    - "production"
+  components:
+    - "api"
+    - "worker"
+  ports:
+    - 8080
+    - 9090
+
+emit configuration

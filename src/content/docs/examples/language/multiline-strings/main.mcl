@@ -1,0 +1,15 @@
+let policy = """
+  allow-read: true
+  allow-write: false
+  # This comment marker is part of the string.
+  """
+
+let configMap =
+  apiVersion: "v1"
+  kind: "ConfigMap"
+  metadata:
+    name: "sample-policy"
+  data:
+    "policy.yaml": policy
+
+emit configMap

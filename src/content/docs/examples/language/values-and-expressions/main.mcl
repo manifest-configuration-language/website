@@ -1,0 +1,32 @@
+let environment = "production"
+let serviceName = "sample-api"
+let defaultReplicas = 1
+let replicas =
+  if environment == "production":
+    3
+  else:
+    defaultReplicas
+
+let appLabel = "app.kubernetes.io/name"
+let commonLabels =
+  key(appLabel): serviceName
+  "app.kubernetes.io/environment": environment
+
+let config =
+  mode: environment
+  retries: 3
+  ports:
+    - 8080
+    - 9090
+  metadata: {}
+
+let missingRegion = "local"
+let result =
+  environment: environment
+  replicaCount: replicas
+  firstPort: 8080
+  fallbackRegion: missingRegion
+  configuration: config
+  summary: "region=local"
+
+emit result

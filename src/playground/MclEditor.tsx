@@ -15,11 +15,26 @@ import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { closeBracketsKeymap } from "@codemirror/autocomplete";
 import { vim } from "@replit/codemirror-vim";
-import type { PlaygroundCompletionItem, PlaygroundDefinitionLocation, PlaygroundDiagnostic, PlaygroundHover } from "./types";
+import { yaml } from "@codemirror/lang-yaml";
+import { json } from "@codemirror/lang-json";
+import type {
+  PlaygroundCompletionItem,
+  PlaygroundDefinitionLocation,
+  PlaygroundDiagnostic,
+  PlaygroundHover,
+} from "./types";
 import { createEditorLanguageServices } from "./editorLanguage";
+
+function languageForPath(path: string): Extension {
+  if (path.endsWith(".mcl")) return mclLanguageSupport();
+  if (path.endsWith(".yaml") || path.endsWith(".yml")) return yaml();
+  if (path.endsWith(".json")) return json();
+  return [];
+}
 
 export type EditorSettings = {
   tabSize: 2 | 4;
+  fontSize: 12 | 14 | 16 | 18 | 20;
   lineWrapping: boolean;
   lineNumbers: boolean;
   vim: boolean;
@@ -39,6 +54,7 @@ emit configMap
 
 type Props = {
   path: string;
+  paths: string[];
   source: string;
   settings: EditorSettings;
   onReady: (view: EditorView | undefined) => void;
@@ -47,41 +63,73 @@ type Props = {
   diagnostics?: PlaygroundDiagnostic[];
   onRun: () => void;
   onFormat: () => void;
-  onComplete: (path: string, position: { line: number; character: number }) => Promise<PlaygroundCompletionItem[]>;
-  onDefinition: (path: string, position: { line: number; character: number }) => Promise<PlaygroundDefinitionLocation | null>;
-  onHover: (path: string, position: { line: number; character: number }) => Promise<PlaygroundHover | null>;
+  onComplete: (
+    path: string,
+    position: { line: number; character: number },
+  ) => Promise<PlaygroundCompletionItem[]>;
+  onDefinition: (
+    path: string,
+    position: { line: number; character: number },
+  ) => Promise<PlaygroundDefinitionLocation | null>;
+  onHover: (
+    path: string,
+    position: { line: number; character: number },
+  ) => Promise<PlaygroundHover | null>;
   onNavigate: (location: PlaygroundDefinitionLocation) => void;
 };
 
-function toEditorDiagnostics(diagnostics: PlaygroundDiagnostic[], path: string, view: EditorView): Diagnostic[] {
+function toEditorDiagnostics(
+  diagnostics: PlaygroundDiagnostic[],
+  path: string,
+  view: EditorView,
+): Diagnostic[] {
   const doc = view.state.doc;
   const position = (lineNumber: number, column: number) => {
     const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)));
     return Math.min(line.to, line.from + Math.max(0, column - 1));
   };
 
-  return diagnostics.filter((diagnostic) => (diagnostic.path ?? "main.mcl") === path).map((diagnostic) => {
-    const from = position(diagnostic.line, diagnostic.column);
-    const to = diagnostic.endLine === undefined || diagnostic.endColumn === undefined
-      ? Math.min(doc.length, from + 1)
-      : Math.max(from, position(diagnostic.endLine, diagnostic.endColumn));
-    const severity: Diagnostic["severity"] = diagnostic.severity.toLowerCase() === "warning"
-      ? "warning"
-      : diagnostic.severity.toLowerCase() === "info"
-        ? "info"
-        : diagnostic.severity.toLowerCase() === "hint"
-          ? "hint"
-          : "error";
-    return {
-      from,
-      to,
-      severity,
-      message: diagnostic.code ? `${diagnostic.code}: ${diagnostic.message}` : diagnostic.message,
-    };
-  });
+  return diagnostics
+    .filter((diagnostic) => (diagnostic.path ?? "main.mcl") === path)
+    .map((diagnostic) => {
+      const from = position(diagnostic.line, diagnostic.column);
+      const to =
+        diagnostic.endLine === undefined || diagnostic.endColumn === undefined
+          ? Math.min(doc.length, from + 1)
+          : Math.max(from, position(diagnostic.endLine, diagnostic.endColumn));
+      const severity: Diagnostic["severity"] =
+        diagnostic.severity.toLowerCase() === "warning"
+          ? "warning"
+          : diagnostic.severity.toLowerCase() === "info"
+            ? "info"
+            : diagnostic.severity.toLowerCase() === "hint"
+              ? "hint"
+              : "error";
+      return {
+        from,
+        to,
+        severity,
+        message: diagnostic.code ? `${diagnostic.code}: ${diagnostic.message}` : diagnostic.message,
+      };
+    });
 }
 
-export function MclEditor({ path, source, settings, onReady, onDocumentChange, onError, diagnostics = [], onRun, onFormat, onComplete, onDefinition, onHover, onNavigate }: Props) {
+export function MclEditor({
+  path,
+  paths,
+  source,
+  settings,
+  onReady,
+  onDocumentChange,
+  onError,
+  diagnostics = [],
+  onRun,
+  onFormat,
+  onComplete,
+  onDefinition,
+  onHover,
+  onNavigate,
+}: Props) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const currentPath = useRef(path);
@@ -93,11 +141,33 @@ export function MclEditor({ path, source, settings, onReady, onDocumentChange, o
   const gutter = useRef(new Compartment());
   const wrapping = useRef(new Compartment());
   const indentation = useRef(new Compartment());
+  const textSize = useRef(new Compartment());
   const vimMode = useRef(new Compartment());
+  const languageMode = useRef(new Compartment());
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
-  const callbacks = useRef({ onReady, onDocumentChange, onError, onRun, onFormat, onComplete, onDefinition, onHover, onNavigate });
-  callbacks.current = { onReady, onDocumentChange, onError, onRun, onFormat, onComplete, onDefinition, onHover, onNavigate };
+  const callbacks = useRef({
+    onReady,
+    onDocumentChange,
+    onError,
+    onRun,
+    onFormat,
+    onComplete,
+    onDefinition,
+    onHover,
+    onNavigate,
+  });
+  callbacks.current = {
+    onReady,
+    onDocumentChange,
+    onError,
+    onRun,
+    onFormat,
+    onComplete,
+    onDefinition,
+    onHover,
+    onNavigate,
+  };
 
   function settingsEffects(next: EditorSettings) {
     return [
@@ -107,6 +177,9 @@ export function MclEditor({ path, source, settings, onReady, onDocumentChange, o
         EditorState.tabSize.of(next.tabSize),
         indentUnit.of(" ".repeat(next.tabSize)),
       ]),
+      textSize.current.reconfigure(
+        EditorView.theme({ ".cm-content, .cm-gutters": { fontSize: `${next.fontSize}px` } }),
+      ),
       vimMode.current.reconfigure(next.vim ? vim() : []),
     ];
   }
@@ -131,12 +204,17 @@ export function MclEditor({ path, source, settings, onReady, onDocumentChange, o
           EditorState.tabSize.of(settingsRef.current.tabSize),
           indentUnit.of(" ".repeat(settingsRef.current.tabSize)),
         ]),
+        textSize.current.of(
+          EditorView.theme({
+            ".cm-content, .cm-gutters": { fontSize: `${settingsRef.current.fontSize}px` },
+          }),
+        ),
         drawSelection(),
-        EditorView.contentAttributes.of({ "aria-label": "MCLソース" }),
+        EditorView.contentAttributes.of({ "aria-label": `${path}の内容` }),
         history(),
         bracketMatching(),
         foldGutter(),
-        mclLanguageSupport(),
+        languageMode.current.of(languageForPath(path)),
         lintGutter(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ...languageServices.extensions,
@@ -151,8 +229,21 @@ export function MclEditor({ path, source, settings, onReady, onDocumentChange, o
           }
         }),
         keymap.of([
-          { key: "Mod-Enter", run: () => { callbacks.current.onRun(); return true; } },
-          { key: "Shift-Alt-f", run: () => { callbacks.current.onFormat(); return true; } },
+          {
+            key: "Mod-Enter",
+            run: () => {
+              callbacks.current.onRun();
+              return true;
+            },
+          },
+          {
+            key: "Shift-Alt-f",
+            run: () => {
+              if (!currentPath.current.endsWith(".mcl")) return false;
+              callbacks.current.onFormat();
+              return true;
+            },
+          },
           languageServices.definitionKeyBinding,
           ...closeBracketsKeymap,
           indentWithTab,
@@ -189,16 +280,29 @@ export function MclEditor({ path, source, settings, onReady, onDocumentChange, o
     hoverRequest.current += 1;
     states.current.set(currentPath.current, view.state);
     currentPath.current = path;
-    const nextState = states.current.get(path) ?? EditorState.create({ doc: source, extensions: extensions.current }).update({ effects: settingsEffects(settingsRef.current) }).state;
+    const nextState =
+      states.current.get(path) ??
+      EditorState.create({ doc: source, extensions: extensions.current }).update({
+        effects: settingsEffects(settingsRef.current),
+      }).state;
     states.current.set(path, nextState);
     view.setState(nextState);
+    view.dispatch({ effects: languageMode.current.reconfigure(languageForPath(path)) });
     callbacks.current.onReady(view);
   }, [path, source]);
 
   useEffect(() => {
+    const currentPaths = new Set(paths);
+    for (const statePath of states.current.keys()) {
+      if (!currentPaths.has(statePath)) states.current.delete(statePath);
+    }
+  }, [paths]);
+
+  useEffect(() => {
     const effects = settingsEffects(settings);
     for (const [statePath, state] of states.current) {
-      if (statePath !== currentPath.current) states.current.set(statePath, state.update({ effects }).state);
+      if (statePath !== currentPath.current)
+        states.current.set(statePath, state.update({ effects }).state);
     }
     const view = viewRef.current;
     if (view) {
@@ -209,7 +313,8 @@ export function MclEditor({ path, source, settings, onReady, onDocumentChange, o
 
   useEffect(() => {
     const view = viewRef.current;
-    if (view) view.dispatch(setDiagnostics(view.state, toEditorDiagnostics(diagnostics, path, view)));
+    if (view)
+      view.dispatch(setDiagnostics(view.state, toEditorDiagnostics(diagnostics, path, view)));
   }, [diagnostics, path]);
 
   return <div className="playground-editor" ref={host} />;

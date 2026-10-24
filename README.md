@@ -11,9 +11,13 @@ mise run install
 mise run dev
 ```
 
-`@manifest-configuration-language/browser`の固定バージョンがPlaygroundのWASMと対応する`wasm_exec.js`を供給します。`@manifest-configuration-language/language`はTextMate GrammarとCodeMirror LanguageSupportを提供します。依存バージョンは`package.json`と`pnpm-lock.yaml`で管理し、Renovateのnpm更新で追従します。ビルドではフィンガープリント付きのCSS、JavaScript、WASMをBrotli Quality 9とgzip Level 9で事前圧縮し、元ファイルも残します。
+`@manifest-configuration-language/browser`の固定バージョンがPlaygroundのWASMと対応する`wasm_exec.js`を供給します。`@manifest-configuration-language/language`はTextMate GrammarとCodeMirror LanguageSupportを提供します。依存バージョンは`package.json`と`pnpm-lock.yaml`で管理し、Renovateのnpm更新で追従します。ビルドではアセットを事前圧縮せず、Caddyが`Accept-Encoding`に応じてzstdまたはgzipでオンザフライ圧縮します。
 
 WebsiteのビルドではMCLのGoソースを取得せず、Goコンパイラも使いません。
+
+Playgroundとドキュメントのサンプルは`src/content/docs/examples/`で管理します。`main.mcl`がある各ディレクトリをPlaygroundから開けます。
+
+Playgroundは`Uint8Array.prototype.toBase64()`と`Uint8Array.fromBase64()`を実装するBaseline 2025対応ブラウザーを対象とします。
 
 ## Docker
 
@@ -22,7 +26,7 @@ docker build -t mcl-website:latest .
 docker run --rm -p 8080:8080 mcl-website:latest
 ```
 
-`http://localhost:8080/`でサイトを開きます。Caddyは静的ファイルを非rootで配信し、Playgroundは初回操作時にBrowser SDKのWorkerとWASMを読み込みます。WASMは`Accept-Encoding`に応じてBrotli、gzip、非圧縮の順に配信します。
+`http://localhost:8080/`でサイトを開きます。Caddyは静的ファイルを非rootで配信し、Playgroundは初回操作時にBrowser SDKのWorkerとWASMを読み込みます。Caddyはクライアントが対応する場合にzstd、gzip、非圧縮のいずれかで応答します。
 
 ## コンテナイメージ
 

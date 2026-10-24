@@ -5,3 +5,5 @@ src/playground/runtime/
 src/content/docs/reference/cli-commands/
 src/content/docs/reference/stdlib-functions.md
 src/content/docs/reference/.reference-staging-*/
+src/playground/generatedExamples.json
+src/content/docs/examples/index.mdx

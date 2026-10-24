@@ -1,7 +1,7 @@
 :8080 {
 	admin off
 	root * /srv
-	encode gzip
+	encode zstd gzip
 	file_server
 
 	header {

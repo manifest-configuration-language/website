@@ -1,0 +1,6 @@
+import "./types.mcl" as types
+
+export rule hardened(container: types.Container):
+  require container.securityContext.allowPrivilegeEscalation == false message "allowPrivilegeEscalation must be false"
+  require container.securityContext.seccompProfile.type == "RuntimeDefault" message "seccompProfile must use RuntimeDefault"
+  require contains(container.securityContext.capabilities.drop, "ALL") message "capabilities must drop ALL"

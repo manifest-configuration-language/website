@@ -1,0 +1,28 @@
+let defaults =
+  - name: "api"
+    image: "example.test.walnuts.dev/api:v1"
+    resources:
+      requests:
+        cpu: "100m"
+  - name: "worker"
+    image: "example.test.walnuts.dev/worker:v1"
+    resources:
+      requests:
+        cpu: "200m"
+
+let overrides =
+  - name: "api"
+    image: "example.test.walnuts.dev/api:v2"
+    resources:
+      requests:
+        memory: "128Mi"
+  - name: "metrics"
+    image: "example.test.walnuts.dev/metrics:v1"
+
+let containers = mergeByKey(
+  existing = defaults,
+  overrides = overrides,
+  key = "name",
+)
+
+emit each containers

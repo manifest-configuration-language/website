@@ -1,9 +1,4 @@
-import {
-  BlobReader,
-  BlobWriter,
-  ZipReader,
-  ZipWriter,
-} from "@zip.js/zip.js";
+import { BlobReader, BlobWriter, ZipReader, ZipWriter } from "@zip.js/zip.js";
 import { projectLimits } from "./projectValidation.js";
 import { isValidProjectPath } from "./projectFiles.js";
 import type { ProjectFile } from "./types";
@@ -32,7 +27,9 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
     const entries = allEntries.filter((entry) => !entry.directory);
     if (entries.length === 0) throw new Error("ZIPファイルにファイルがありません。");
     if (entries.length > projectLimits.projectFiles) {
-      throw new Error(`プロジェクトの上限は${projectLimits.projectFiles.toLocaleString()}ファイルです。`);
+      throw new Error(
+        `プロジェクトの上限は${projectLimits.projectFiles.toLocaleString()}ファイルです。`,
+      );
     }
 
     const paths = new Set<string>();
@@ -42,14 +39,17 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
       if (!isValidProjectPath(path)) throw new Error("ZIPファイルに無効なパスがあります。");
     }
     for (const entry of entries) {
-      if (paths.has(entry.filename)) throw new Error(`ZIPファイルに重複したパスがあります: ${entry.filename}`);
+      if (paths.has(entry.filename))
+        throw new Error(`ZIPファイルに重複したパスがあります: ${entry.filename}`);
       paths.add(entry.filename);
       if (!Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0) {
         throw new Error("ZIPファイルのサイズ情報が無効です。");
       }
       declaredBytes += entry.uncompressedSize;
       if (declaredBytes > projectLimits.projectBytes) {
-        throw new Error(`プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`);
+        throw new Error(
+          `プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`,
+        );
       }
     }
 
@@ -65,7 +65,9 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
       const boundedWriter = new WritableStream<Uint8Array>({
         write(chunk) {
           if (actualBytes + chunk.byteLength > projectLimits.projectBytes) {
-            throw new Error(`プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`);
+            throw new Error(
+              `プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`,
+            );
           }
           actualBytes += chunk.byteLength;
           return outputWriter.write(chunk);
@@ -92,7 +94,9 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
 export async function writeProjectArchive(project: Project): Promise<Blob> {
   const files = Object.entries(project.files).sort(([left], [right]) => left.localeCompare(right));
   if (files.length + 1 > projectLimits.projectFiles) {
-    throw new Error(`プロジェクトの上限は${projectLimits.projectFiles.toLocaleString()}ファイルです。`);
+    throw new Error(
+      `プロジェクトの上限は${projectLimits.projectFiles.toLocaleString()}ファイルです。`,
+    );
   }
   const encoder = new TextEncoder();
   let totalBytes = encoder.encode(project.source).byteLength;
@@ -100,8 +104,10 @@ export async function writeProjectArchive(project: Project): Promise<Blob> {
     throw new Error(`プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`);
   }
   for (const [path, file] of files) {
-    if (!isValidProjectPath(path) || path === "main.mcl") throw new Error("プロジェクトに無効なパスがあります。");
-    totalBytes += file.encoding === "utf8" ? encoder.encode(file.content).byteLength : file.bytes.byteLength;
+    if (!isValidProjectPath(path) || path === "main.mcl")
+      throw new Error("プロジェクトに無効なパスがあります。");
+    totalBytes +=
+      file.encoding === "utf8" ? encoder.encode(file.content).byteLength : file.bytes.byteLength;
     if (totalBytes > projectLimits.projectBytes) {
       throw new Error(`プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`);
     }

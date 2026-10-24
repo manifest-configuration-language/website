@@ -1,0 +1,26 @@
+let defaultFeatures =
+  - "metrics"
+  - "tracing"
+let requestedFeatures =
+  - "tracing"
+  - "audit"
+let enabledFeatures = union(defaultFeatures, requestedFeatures)
+let rolloutSteps =
+  - 10
+  - 50
+  - 100
+let safeRolloutSteps = replaceAt(rolloutSteps, 0, 5)
+let labels =
+  app: "sample-api"
+  tier: "backend"
+let appLabel = keyOf(labels, "app")
+let hasAudit = contains(enabledFeatures, "audit")
+let selectedFeature = exactlyOne(enabledFeatures, fn(feature) => feature == "audit")
+let result =
+  features: enabledFeatures
+  rolloutSteps: safeRolloutSteps
+  app: appLabel
+  auditEnabled: hasAudit
+  selectedFeature: selectedFeature
+
+emit result

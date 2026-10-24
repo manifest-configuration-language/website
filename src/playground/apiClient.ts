@@ -3,12 +3,16 @@ import {
   MclRuntimeError,
   type ProjectFiles,
 } from "@manifest-configuration-language/browser";
-import type { PlaygroundClient, PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
+import type { PlaygroundClient, PlaygroundDiagnostic, ProjectFile } from "./types";
 import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;
 
-function toProjectFiles(source: string, files: Record<string, ProjectFile> = {}, entrypoint = "main.mcl"): ProjectFiles {
+function toProjectFiles(
+  source: string,
+  files: Record<string, ProjectFile> = {},
+  entrypoint = "main.mcl",
+): ProjectFiles {
   const project = Object.create(null) as Record<string, string | Uint8Array>;
   project[entrypoint] = source;
   for (const [filePath, file] of Object.entries(files)) {

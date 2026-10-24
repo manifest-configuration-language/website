@@ -8,12 +8,29 @@ import { ProjectTabs } from "./ProjectTabs";
 import { decodeSharedProject, encodeSharedProject } from "./projectShare";
 import { PlaygroundResult } from "./PlaygroundResult";
 import { ProjectFileInput } from "./ProjectFileInput";
-import type { PlaygroundDefinitionLocation, PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
+import type {
+  PlaygroundDefinitionLocation,
+  PlaygroundDiagnostic,
+  PlaygroundReply,
+  ProjectFile,
+} from "./types";
 import { writeProjectArchive } from "./projectZip";
+import exampleCatalog from "./generatedExamples.json";
+import { usePlaygroundProject } from "./usePlaygroundProject";
 
 const storageKey = "mcl-playground-project-v1";
+const activeDraftKey = "mcl-playground-active-draft-v1";
+const draftIndexKey = "mcl-playground-drafts-v1";
+const draftKeyPrefix = "mcl-playground-draft-v1:";
+const draftShareKeyPrefix = "mcl-playground-draft-share-v1:";
 const editorSettingsKey = "mcl-playground-editor-settings-v1";
-const defaultEditorSettings: EditorSettings = { tabSize: 2, lineWrapping: false, lineNumbers: true, vim: false };
+const defaultEditorSettings: EditorSettings = {
+  tabSize: 2,
+  fontSize: 14,
+  lineWrapping: false,
+  lineNumbers: true,
+  vim: false,
+};
 const samples = {
   configMap: initialSource,
   deployment: `let port = node:
@@ -45,65 +62,183 @@ emit deployment
 };
 
 type StoredProject = { source: string; files: Record<string, ProjectFile>; activePath?: string };
+type ExampleSpec = { category: string; title: string; slug: string; files: Record<string, string> };
+type DraftMetadata = { id: string; name: string; updatedAt: number };
+
+function isDraftMetadataList(value: unknown): value is DraftMetadata[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        item !== null &&
+        typeof item === "object" &&
+        typeof (item as DraftMetadata).id === "string" &&
+        typeof (item as DraftMetadata).name === "string" &&
+        typeof (item as DraftMetadata).updatedAt === "number",
+    )
+  );
+}
+
+function draftDataKey(id: string) {
+  return `${draftKeyPrefix}${id}`;
+}
+
+function draftShareKey(id: string) {
+  return `${draftShareKeyPrefix}${id}`;
+}
+
+function clearSharedFragment() {
+  if (!window.location.hash.startsWith("#project=")) return;
+  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+}
 
 function isStoredProject(value: unknown): value is StoredProject {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
-  if (typeof candidate.source !== "string" || !candidate.files || typeof candidate.files !== "object" || Array.isArray(candidate.files) || candidate.activePath !== undefined && typeof candidate.activePath !== "string") return false;
+  if (
+    typeof candidate.source !== "string" ||
+    !candidate.files ||
+    typeof candidate.files !== "object" ||
+    Array.isArray(candidate.files) ||
+    (candidate.activePath !== undefined && typeof candidate.activePath !== "string")
+  )
+    return false;
   return Object.values(candidate.files).every((file) => {
     if (!file || typeof file !== "object") return false;
     const candidateFile = file as Record<string, unknown>;
-    return candidateFile.encoding === "utf8" && typeof candidateFile.content === "string" ||
-      candidateFile.encoding === "binary" && candidateFile.bytes instanceof Uint8Array;
+    return (
+      (candidateFile.encoding === "utf8" && typeof candidateFile.content === "string") ||
+      (candidateFile.encoding === "binary" && candidateFile.bytes instanceof Uint8Array)
+    );
   });
 }
 
-function isEditorSettings(value: unknown): value is EditorSettings {
+function isEditorSettings(
+  value: unknown,
+): value is Omit<EditorSettings, "fontSize"> & { fontSize?: EditorSettings["fontSize"] } {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
-  return (candidate.tabSize === 2 || candidate.tabSize === 4) &&
+  return (
+    (candidate.tabSize === 2 || candidate.tabSize === 4) &&
+    (candidate.fontSize === undefined ||
+      [12, 14, 16, 18, 20].includes(candidate.fontSize as number)) &&
     typeof candidate.lineWrapping === "boolean" &&
     typeof candidate.lineNumbers === "boolean" &&
-    typeof candidate.vim === "boolean";
+    typeof candidate.vim === "boolean"
+  );
 }
 
 function projectSize(files: Record<string, ProjectFile>): number {
   const encoder = new TextEncoder();
-  return Object.values(files).reduce((total, file) => total + (file.encoding === "utf8" ? encoder.encode(file.content).byteLength : file.bytes.byteLength), 0);
+  return Object.values(files).reduce(
+    (total, file) =>
+      total +
+      (file.encoding === "utf8" ? encoder.encode(file.content).byteLength : file.bytes.byteLength),
+    0,
+  );
 }
 
 export default function Playground() {
+  const examples = exampleCatalog as unknown as ExampleSpec[];
+  const {
+    project,
+    projectRef,
+    replace: replaceProjectState,
+    setFileContent,
+    select: selectProjectFile,
+    createFile: createProjectFile,
+    renameFile: renameProjectFile,
+    deleteFile: deleteProjectFile,
+  } = usePlaygroundProject(initialSource);
   const editor = useRef<EditorView | undefined>(undefined);
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
+  const renderInFlight = useRef(false);
+  const wasmRequestCount = useRef(0);
+  const pendingLint = useRef<{ source: string; revision: number } | undefined>(undefined);
+  const flushPendingLintRef = useRef<() => void>(() => {});
   const revision = useRef(0);
   const lintTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const sourceRef = useRef(initialSource);
-  const projectFilesRef = useRef<Record<string, ProjectFile>>({});
   const latestYaml = useRef<string | undefined>(undefined);
-  const activePathRef = useRef("main.mcl");
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
+  const quickOpenDialog = useRef<HTMLDialogElement>(null);
   const startupReady = useRef(false);
+  const activeDraftIdRef = useRef("");
   const applyingSample = useRef(false);
   const [reply, setReply] = useState<PlaygroundReply>();
   const [staleYaml, setStaleYaml] = useState<string>();
   const [previousYaml, setPreviousYaml] = useState<string>();
   const [showDiff, setShowDiff] = useState(false);
+  const [showProblems, setShowProblems] = useState(false);
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(defaultEditorSettings);
   const [editorSettingsLoaded, setEditorSettingsLoaded] = useState(false);
   const [diagnostics, setDiagnostics] = useState<PlaygroundDiagnostic[]>([]);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [editorError, setEditorError] = useState("");
   const [editorAttempt, setEditorAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [renderPending, setRenderPending] = useState(false);
   const [loadingProject, setLoadingProject] = useState(false);
-  const [projectFiles, setProjectFiles] = useState<Record<string, ProjectFile>>({});
-  const [projectSizeBytes, setProjectSizeBytes] = useState(0);
-  const [activePath, setActivePath] = useState("main.mcl");
+  const projectFiles = project.files;
+  const projectSizeBytes =
+    projectSize(project.files) + new TextEncoder().encode(project.source).byteLength;
+  const activePath = project.activePath;
   const [projectGeneration, setProjectGeneration] = useState(0);
-  const [contentRevision, setContentRevision] = useState(0);
   const [wasmReady, setWasmReady] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "failed">("saved");
+  const [activeDraftId, setActiveDraftId] = useState("");
+  const [drafts, setDrafts] = useState<DraftMetadata[]>([]);
+  const [draftsLoaded, setDraftsLoaded] = useState(false);
   const [orientation, setOrientation] = useState<"horizontal" | "vertical">("horizontal");
-  const [sample, setSample] = useState<keyof typeof samples | "custom">("configMap");
+  const [sample, setSample] = useState("configMap");
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickQuery, setQuickQuery] = useState("");
+  const [recentPaths, setRecentPaths] = useState(["main.mcl"]);
+  const [quickSelection, setQuickSelection] = useState(0);
+  const draftsRef = useRef<DraftMetadata[]>([]);
+
+  const updateDraftMetadata = useCallback((id: string, name?: string) => {
+    const previous = draftsRef.current.find((draft) => draft.id === id);
+    const nextDraft = {
+      id,
+      name: name ?? previous?.name ?? "作業",
+      updatedAt: Date.now(),
+    };
+    const next = [nextDraft, ...draftsRef.current.filter((draft) => draft.id !== id)];
+    draftsRef.current = next;
+    setDrafts(next);
+    void set(draftIndexKey, next).catch((cause: unknown) => {
+      setSaveStatus("failed");
+      setError(cause instanceof Error ? cause.message : String(cause));
+    });
+  }, []);
+
+  const saveDraftSnapshot = useCallback(
+    async (id: string, value: StoredProject) => {
+      if (!id) return;
+      await set(draftDataKey(id), value);
+      updateDraftMetadata(id);
+    },
+    [updateDraftMetadata],
+  );
+
+  const activateDraft = useCallback(
+    (id: string, name?: string, shareFragment?: string) => {
+      activeDraftIdRef.current = id;
+      setActiveDraftId(id);
+      void set(activeDraftKey, id).catch((cause: unknown) => {
+        setSaveStatus("failed");
+        setError(cause instanceof Error ? cause.message : String(cause));
+      });
+      if (shareFragment !== undefined)
+        void set(draftShareKey(id), shareFragment).catch((cause: unknown) => {
+          setSaveStatus("failed");
+          setError(cause instanceof Error ? cause.message : String(cause));
+        });
+      updateDraftMetadata(id, name);
+    },
+    [updateDraftMetadata],
+  );
 
   const mclPaths = [
     "main.mcl",
@@ -113,60 +248,141 @@ export default function Playground() {
       .sort(),
   ];
   const projectPaths = ["main.mcl", ...Object.keys(projectFiles).sort()];
-  const activeSource = activePath === "main.mcl"
-    ? sourceRef.current
-    : projectFiles[activePath]?.encoding === "utf8" ? projectFiles[activePath].content : "";
+  const quickPaths = projectPaths
+    .filter((path) => projectFiles[path]?.encoding === "utf8" || path === "main.mcl")
+    .sort((left, right) => {
+      const leftRecent = recentPaths.indexOf(left);
+      const rightRecent = recentPaths.indexOf(right);
+      if (leftRecent >= 0 || rightRecent >= 0)
+        return (
+          (leftRecent < 0 ? Infinity : leftRecent) - (rightRecent < 0 ? Infinity : rightRecent)
+        );
+      return left.localeCompare(right);
+    })
+    .filter((path) => path.toLowerCase().includes(quickQuery.trim().toLowerCase()));
+  const activeSource =
+    activePath === "main.mcl"
+      ? project.source
+      : projectFiles[activePath]?.encoding === "utf8"
+        ? projectFiles[activePath].content
+        : "";
+
+  function finishProjectMutation() {
+    const currentRevision = ++revision.current;
+    setDiagnostics([]);
+    setStaleYaml(latestYaml.current);
+    setShowDiff(false);
+    setReply((previous) =>
+      previous ? { ...previous, ok: false, result: undefined, diagnostics: [] } : previous,
+    );
+    setBusy(false);
+    if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
+  }
 
   function languageServiceFiles(): Record<string, ProjectFile> {
-    const files = Object.assign(Object.create(null), projectFilesRef.current) as Record<string, ProjectFile>;
-    files["main.mcl"] = { encoding: "utf8", content: sourceRef.current };
+    const files = Object.assign(Object.create(null), projectRef.current.files) as Record<
+      string,
+      ProjectFile
+    >;
+    files["main.mcl"] = { encoding: "utf8", content: projectRef.current.source };
     return files;
   }
 
-  const scheduleLint = useCallback((source: string, currentRevision: number) => {
-    if (lintTimer.current) clearTimeout(lintTimer.current);
-    lintTimer.current = setTimeout(async () => {
-      const result = await client.current?.lint(source, currentRevision, projectFilesRef.current);
-      if (result && currentRevision === revision.current) {
-        setWasmReady(true);
-        const currentDiagnostics = result.ok ? result.diagnostics ?? [] : result.error ? [result.error] : [];
-        setDiagnostics(currentDiagnostics);
-        setReply((previous) => ({
-          ...(previous ?? { requestId: currentRevision, revision: currentRevision, ok: false }),
-          ok: false,
-          result: undefined,
-          error: undefined,
-          diagnostics: currentDiagnostics,
-        }));
-      }
-    }, 400);
+  const trackWasmRequest = useCallback(async <T,>(request: Promise<T>) => {
+    wasmRequestCount.current += 1;
+    try {
+      return await request;
+    } finally {
+      wasmRequestCount.current -= 1;
+      flushPendingLintRef.current();
+    }
   }, []);
 
-  const applyProject = useCallback((project: StoredProject) => {
-    if (!applyingSample.current) setSample("custom");
-    sourceRef.current = project.source;
-    projectFilesRef.current = project.files;
-    latestYaml.current = undefined;
-    setStaleYaml(undefined);
-    setPreviousYaml(undefined);
-    setShowDiff(false);
-    const requestedPath = project.activePath;
-    const nextPath = requestedPath && requestedPath.endsWith(".mcl") && project.files[requestedPath]?.encoding === "utf8"
-      ? requestedPath
-      : "main.mcl";
-    activePathRef.current = nextPath;
-    setActivePath(nextPath);
-    setProjectFiles(project.files);
-    setProjectSizeBytes(projectSize(project.files) + new TextEncoder().encode(project.source).byteLength);
-    setProjectGeneration((value) => value + 1);
-    setBusy(false);
-    setError("");
-    const currentRevision = ++revision.current;
-    setDiagnostics([]);
-    setReply(undefined);
-    setContentRevision((value) => value + 1);
-    if (startupReady.current) scheduleLint(project.source, currentRevision);
+  const scheduleLint = useCallback(
+    (source: string, currentRevision: number) => {
+      if (lintTimer.current) clearTimeout(lintTimer.current);
+      if (renderInFlight.current || wasmRequestCount.current > 0) {
+        pendingLint.current = { source, revision: currentRevision };
+        return;
+      }
+      lintTimer.current = setTimeout(async () => {
+        if (currentRevision !== revision.current) return;
+        if (renderInFlight.current || wasmRequestCount.current > 0) {
+          pendingLint.current = { source, revision: currentRevision };
+          return;
+        }
+        const request = client.current?.lint(source, currentRevision, projectRef.current.files);
+        const result = request ? await trackWasmRequest(request) : undefined;
+        if (result && currentRevision === revision.current) {
+          setWasmReady(true);
+          const currentDiagnostics = result.ok
+            ? (result.diagnostics ?? [])
+            : result.error
+              ? [result.error]
+              : [];
+          setDiagnostics(currentDiagnostics);
+          setReply((previous) => ({
+            ...(previous ?? { requestId: currentRevision, revision: currentRevision, ok: false }),
+            ok: false,
+            result: undefined,
+            error: undefined,
+            diagnostics: currentDiagnostics,
+          }));
+        }
+      }, 400);
+    },
+    [projectRef, trackWasmRequest],
+  );
+
+  const flushPendingLint = useCallback(() => {
+    if (renderInFlight.current || wasmRequestCount.current > 0) return;
+    const pending = pendingLint.current;
+    pendingLint.current = undefined;
+    if (pending && pending.revision === revision.current)
+      scheduleLint(pending.source, pending.revision);
   }, [scheduleLint]);
+  flushPendingLintRef.current = flushPendingLint;
+
+  const applyProject = useCallback(
+    (project: StoredProject, options: { newDraft?: boolean; name?: string } = {}) => {
+      if (options.newDraft !== false) {
+        clearSharedFragment();
+        void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
+          (cause: unknown) => {
+            setSaveStatus("failed");
+            setError(cause instanceof Error ? cause.message : String(cause));
+          },
+        );
+        activateDraft(crypto.randomUUID(), options.name ?? "インポート");
+      }
+      if (!applyingSample.current) setSample("custom");
+      latestYaml.current = undefined;
+      setStaleYaml(undefined);
+      setPreviousYaml(undefined);
+      setShowDiff(false);
+      const requestedPath = project.activePath;
+      const nextPath =
+        requestedPath &&
+        (requestedPath === "main.mcl" || project.files[requestedPath]?.encoding === "utf8")
+          ? requestedPath
+          : "main.mcl";
+      replaceProjectState(project.source, project.files, nextPath);
+      void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
+        (cause: unknown) => {
+          setSaveStatus("failed");
+          setError(cause instanceof Error ? cause.message : String(cause));
+        },
+      );
+      setProjectGeneration((value) => value + 1);
+      setBusy(false);
+      setError("");
+      const currentRevision = ++revision.current;
+      setDiagnostics([]);
+      setReply(undefined);
+      if (startupReady.current) scheduleLint(project.source, currentRevision);
+    },
+    [activateDraft, projectRef, replaceProjectState, saveDraftSnapshot, scheduleLint],
+  );
 
   useEffect(() => {
     const createdClient = createPlaygroundClient();
@@ -175,31 +391,102 @@ export default function Playground() {
     let cancelled = false;
     void (async () => {
       let restored: StoredProject | undefined;
+      let activeId = "";
+      let restoredSample: string | undefined;
       try {
-        const shared = await decodeSharedProject(window.location.hash);
-        if (shared) restored = shared;
+        const savedIndex: unknown = await get(draftIndexKey);
+        const savedDrafts = isDraftMetadataList(savedIndex) ? savedIndex : [];
+        draftsRef.current = savedDrafts;
+        setDrafts(savedDrafts);
+
+        const savedActiveId: unknown = await get(activeDraftKey);
+        if (typeof savedActiveId === "string" && /^[0-9a-f-]{36}$/i.test(savedActiveId)) {
+          const saved: unknown = await get(draftDataKey(savedActiveId));
+          if (isStoredProject(saved)) {
+            restored = saved;
+            activeId = savedActiveId;
+          }
+        }
+        if (!restored) {
+          const legacy: unknown = await get(storageKey);
+          if (isStoredProject(legacy)) {
+            restored = legacy;
+            activeId = crypto.randomUUID();
+            await set(draftDataKey(activeId), legacy);
+            activateDraft(activeId, "復元した作業");
+          }
+        }
+        if (!activeId) {
+          activeId = crypto.randomUUID();
+        } else {
+          activeDraftIdRef.current = activeId;
+          setActiveDraftId(activeId);
+          void set(activeDraftKey, activeId);
+          if (!draftsRef.current.some((draft) => draft.id === activeId))
+            updateDraftMetadata(activeId, "作業");
+        }
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
       }
-      if (!restored) {
-        try {
-          const saved: unknown = await get(storageKey);
-          if (isStoredProject(saved)) restored = saved;
-        } catch (cause) {
-          if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      if (!activeId) {
+        activeId = crypto.randomUUID();
+        activateDraft(activeId, "作業");
+      }
+
+      try {
+        const shared = await decodeSharedProject(window.location.hash);
+        if (shared) {
+          const savedShare: unknown = await get(draftShareKey(activeId));
+          if (!(restored && savedShare === window.location.hash)) {
+            restored = shared;
+            activeId = crypto.randomUUID();
+            activateDraft(activeId, "共有プロジェクト", window.location.hash);
+          }
+        }
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      }
+
+      if (!window.location.hash.startsWith("#project=")) {
+        const url = new URL(window.location.href);
+        const exampleSlug = url.searchParams.get("example");
+        const example = examples.find((entry) => entry.slug === exampleSlug);
+        if (example) {
+          const { ["main.mcl"]: source, ...otherFiles } = example.files;
+          restored = {
+            source: source ?? "",
+            files: Object.fromEntries(
+              Object.entries(otherFiles).map(([path, content]) => [
+                path,
+                { encoding: "utf8", content },
+              ]),
+            ),
+          };
+          activeId = crypto.randomUUID();
+          activateDraft(activeId, example.title);
+          restoredSample = example.slug;
+          url.searchParams.delete("example");
+          history.replaceState(null, "", url);
         }
       }
       if (cancelled) return;
-      if (restored) applyProject(restored);
+      if (!draftsRef.current.some((draft) => draft.id === activeId))
+        activateDraft(activeId, "作業");
+      if (restored) {
+        applyProject(restored, { newDraft: false });
+        if (restoredSample) setSample(restoredSample);
+      }
       startupReady.current = true;
-      setContentRevision((value) => value + 1);
+      setDraftsLoaded(true);
       const currentRevision = ++revision.current;
-      void createdClient.warmUp().then(() => {
-        if (!cancelled) setWasmReady(true);
-      }).catch((cause: unknown) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
-      });
-      scheduleLint(sourceRef.current, currentRevision);
+      void trackWasmRequest(createdClient.warmUp())
+        .then(() => {
+          if (!cancelled) setWasmReady(true);
+        })
+        .catch((cause: unknown) => {
+          if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        });
+      scheduleLint(projectRef.current.source, currentRevision);
     })();
 
     return () => {
@@ -208,7 +495,15 @@ export default function Playground() {
       createdClient.dispose();
       client.current = undefined;
     };
-  }, [applyProject, scheduleLint]);
+  }, [
+    activateDraft,
+    applyProject,
+    examples,
+    projectRef,
+    scheduleLint,
+    trackWasmRequest,
+    updateDraftMetadata,
+  ]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 48rem)");
@@ -219,23 +514,67 @@ export default function Playground() {
   }, []);
 
   useEffect(() => {
-    if (!startupReady.current) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        setQuickQuery("");
+        setQuickSelection(0);
+        setQuickOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    setQuickSelection(0);
+  }, [quickQuery]);
+
+  useEffect(() => {
+    const dialog = quickOpenDialog.current;
+    if (!dialog) return;
+    if (quickOpen && !dialog.open) dialog.showModal();
+    else if (!quickOpen && dialog.open) dialog.close();
+  }, [quickOpen]);
+
+  useEffect(() => {
+    if (!draftsLoaded || !activeDraftId) return;
+    setSaveStatus("saving");
     const timer = setTimeout(() => {
-      void set(storageKey, { source: sourceRef.current, files: projectFilesRef.current, activePath: activePathRef.current });
+      const savedProject = {
+        source: project.source,
+        files: project.files,
+        activePath: project.activePath,
+      };
+      void saveDraftSnapshot(activeDraftId, savedProject)
+        .then(() => setSaveStatus("saved"))
+        .catch((cause: unknown) => {
+          setSaveStatus("failed");
+          setError(cause instanceof Error ? cause.message : String(cause));
+        });
     }, 300);
     return () => clearTimeout(timer);
-  }, [contentRevision]);
+  }, [activeDraftId, draftsLoaded, project, saveDraftSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
-    void get(editorSettingsKey).then((saved: unknown) => {
-      if (!cancelled && isEditorSettings(saved)) setEditorSettings(saved);
-    }).catch((cause: unknown) => {
-      if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
-    }).finally(() => {
-      if (!cancelled) setEditorSettingsLoaded(true);
-    });
-    return () => { cancelled = true; };
+    void get(editorSettingsKey)
+      .then((saved: unknown) => {
+        if (!cancelled && isEditorSettings(saved))
+          setEditorSettings({
+            ...saved,
+            fontSize: saved.fontSize ?? defaultEditorSettings.fontSize,
+          });
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      })
+      .finally(() => {
+        if (!cancelled) setEditorSettingsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -245,89 +584,128 @@ export default function Playground() {
     });
   }, [editorSettings, editorSettingsLoaded]);
 
-  const onEditorReady = useCallback((view: EditorView | undefined) => {
-    editor.current = view;
-    if (view && activePathRef.current === "main.mcl") sourceRef.current = view.state.doc.toString();
-    const diagnostic = pendingNavigation.current;
-    if (view && diagnostic && (diagnostic.path ?? "main.mcl") === activePathRef.current) {
-      pendingNavigation.current = undefined;
-      goToEditorPosition(diagnostic);
-    }
-  }, []);
+  const onEditorReady = useCallback(
+    (view: EditorView | undefined) => {
+      editor.current = view;
+      if (
+        view &&
+        projectRef.current.activePath === "main.mcl" &&
+        projectRef.current.source !== view.state.doc.toString()
+      ) {
+        setFileContent("main.mcl", view.state.doc.toString());
+      }
+      const diagnostic = pendingNavigation.current;
+      if (view && diagnostic && (diagnostic.path ?? "main.mcl") === projectRef.current.activePath) {
+        pendingNavigation.current = undefined;
+        goToEditorPosition(diagnostic);
+      }
+    },
+    [projectRef, setFileContent],
+  );
 
   const onEditorError = useCallback((cause: Error) => {
     setEditorError(cause.message);
   }, []);
 
-  const onDocumentChange = useCallback((source: string, path: string) => {
-    if (path === "main.mcl") {
-      sourceRef.current = source;
-    } else {
-      const files = Object.assign(Object.create(null), projectFilesRef.current) as Record<string, ProjectFile>;
-      files[path] = { encoding: "utf8", content: source };
-      projectFilesRef.current = files;
-      setProjectFiles(files);
-      setProjectSizeBytes(projectSize(files) + new TextEncoder().encode(sourceRef.current).byteLength);
-    }
-    if (!applyingSample.current) setSample("custom");
-    const currentRevision = ++revision.current;
-    setContentRevision((value) => value + 1);
-    setDiagnostics([]);
-    setStaleYaml(latestYaml.current);
-    setShowDiff(false);
-    setReply((previous) => previous ? { ...previous, ok: false, result: undefined, error: undefined, diagnostics: [] } : previous);
-    setError("");
-    setBusy(false);
-    if (startupReady.current) scheduleLint(sourceRef.current, currentRevision);
-  }, [scheduleLint]);
+  const onDocumentChange = useCallback(
+    (source: string, path: string) => {
+      setFileContent(path, source);
+      setRecentPaths((previous) => [path, ...previous.filter((entry) => entry !== path)]);
+      if (!applyingSample.current) setSample("custom");
+      const currentRevision = ++revision.current;
+      setDiagnostics([]);
+      setStaleYaml(latestYaml.current);
+      setShowDiff(false);
+      setReply((previous) =>
+        previous
+          ? { ...previous, ok: false, result: undefined, error: undefined, diagnostics: [] }
+          : previous,
+      );
+      setError("");
+      setBusy(false);
+      if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
+    },
+    [projectRef, scheduleLint, setFileContent],
+  );
 
   async function run() {
-    if (!editor.current || !client.current || loadingProject) return;
+    if (!editor.current || !client.current || loadingProject || renderInFlight.current) return;
+    renderInFlight.current = true;
+    setRenderPending(true);
     const currentRevision = ++revision.current;
     setBusy(true);
     setError("");
+    setStaleYaml(latestYaml.current);
+    setReply(undefined);
+    setShowDiff(false);
     try {
-      const result = await client.current.run(sourceRef.current, currentRevision, projectFilesRef.current);
+      const result = await trackWasmRequest(
+        client.current.run(projectRef.current.source, currentRevision, projectRef.current.files),
+      );
       if (currentRevision !== revision.current) return;
       setDiagnostics(result.diagnostics ?? (result.error ? [result.error] : []));
       if (result.ok) {
+        setStaleYaml(undefined);
         const yaml = result.result?.yaml;
         if (yaml !== undefined) {
           setPreviousYaml(latestYaml.current);
           latestYaml.current = yaml;
-          setStaleYaml(undefined);
           setShowDiff(false);
         }
         setReply(result);
+      } else {
+        setReply(result);
+        if (result.error) setError(`${result.error.code}: ${result.error.message}`);
       }
-      else if (result.error) setError(`${result.error.code}: ${result.error.message}`);
     } catch (cause) {
-      if (currentRevision === revision.current) setError(cause instanceof Error ? cause.message : String(cause));
+      if (currentRevision === revision.current)
+        setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
+      renderInFlight.current = false;
+      setRenderPending(false);
       if (currentRevision === revision.current) setBusy(false);
+      flushPendingLint();
     }
   }
 
   async function formatSource() {
-    if (!editor.current || !client.current || loadingProject) return;
+    if (
+      !editor.current ||
+      !client.current ||
+      loadingProject ||
+      !projectRef.current.activePath.endsWith(".mcl")
+    )
+      return;
     const view = editor.current;
     const currentRevision = ++revision.current;
     setBusy(true);
     setError("");
     try {
-      const result = await client.current.format(view.state.doc.toString(), currentRevision);
+      const result = await trackWasmRequest(
+        client.current.format(view.state.doc.toString(), currentRevision),
+      );
       if (currentRevision !== revision.current) return;
       if (!result.ok) {
         if (result.error) setError(`${result.error.code}: ${result.error.message}`);
         return;
       }
       const formatted = result.result?.source;
-      if (activePathRef.current !== activePath || formatted === undefined) return;
+      if (projectRef.current.activePath !== activePath || formatted === undefined) return;
       const original = view.state.doc.toString();
       let prefix = 0;
-      while (prefix < original.length && prefix < formatted.length && original[prefix] === formatted[prefix]) prefix += 1;
+      while (
+        prefix < original.length &&
+        prefix < formatted.length &&
+        original[prefix] === formatted[prefix]
+      )
+        prefix += 1;
       let suffix = 0;
-      while (suffix < original.length - prefix && suffix < formatted.length - prefix && original[original.length - suffix - 1] === formatted[formatted.length - suffix - 1]) suffix += 1;
+      while (
+        suffix < original.length - prefix &&
+        suffix < formatted.length - prefix &&
+        original[original.length - suffix - 1] === formatted[formatted.length - suffix - 1]
+      )
+        suffix += 1;
       view.dispatch({
         changes: {
           from: prefix,
@@ -336,7 +714,8 @@ export default function Playground() {
         },
       });
     } catch (cause) {
-      if (currentRevision === revision.current) setError(cause instanceof Error ? cause.message : String(cause));
+      if (currentRevision === revision.current)
+        setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (currentRevision === revision.current) setBusy(false);
     }
@@ -354,16 +733,42 @@ export default function Playground() {
     return await client.current.loadProject(files);
   }
 
+  async function openDraft(id: string) {
+    if (id === activeDraftIdRef.current) return;
+    try {
+      await saveDraftSnapshot(activeDraftIdRef.current, projectRef.current);
+      const saved: unknown = await get(draftDataKey(id));
+      if (!isStoredProject(saved)) throw new Error("作業を読み込めません");
+      activeDraftIdRef.current = id;
+      setActiveDraftId(id);
+      await set(activeDraftKey, id);
+      clearSharedFragment();
+      applyProject(saved, { newDraft: false });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  function createDraft() {
+    applyingSample.current = true;
+    setSample("configMap");
+    applyProject({ source: initialSource, files: {} }, { name: "作業" });
+    applyingSample.current = false;
+  }
+
   async function exportProject() {
     try {
-      const archive = await writeProjectArchive({ source: sourceRef.current, files: projectFilesRef.current });
+      const archive = await writeProjectArchive({
+        source: projectRef.current.source,
+        files: projectRef.current.files,
+      });
       const url = URL.createObjectURL(archive);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = "mcl-project.zip";
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setError("ZIPを書き出しました");
+      setNotice("ZIPを書き出しました");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -371,12 +776,18 @@ export default function Playground() {
 
   async function shareProject() {
     try {
-      const fragment = await encodeSharedProject({ source: sourceRef.current, files: projectFilesRef.current, activePath: activePathRef.current });
+      const fragment = await encodeSharedProject({
+        source: projectRef.current.source,
+        files: projectRef.current.files,
+        activePath: projectRef.current.activePath,
+      });
       const shareURL = new URL(window.location.href);
       shareURL.hash = fragment.slice(1);
+      await saveDraftSnapshot(activeDraftIdRef.current, projectRef.current);
+      await set(draftShareKey(activeDraftIdRef.current), fragment);
       await navigator.clipboard.writeText(shareURL.href);
       history.replaceState(null, "", fragment);
-      setError("共有URLをコピーしました");
+      setNotice("共有URLをコピーしました");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -387,7 +798,7 @@ export default function Playground() {
     if (yaml === undefined) return;
     try {
       await navigator.clipboard.writeText(yaml);
-      setError("YAMLをコピーしました");
+      setNotice("YAMLをコピーしました");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -407,7 +818,7 @@ export default function Playground() {
   function goToDiagnostic(diagnostic: PlaygroundDiagnostic) {
     const targetPath = diagnostic.path ?? "main.mcl";
     if (!mclPaths.includes(targetPath)) return;
-    if (targetPath !== activePathRef.current) {
+    if (targetPath !== projectRef.current.activePath) {
       selectFile(targetPath, diagnostic);
       return;
     }
@@ -424,7 +835,7 @@ export default function Playground() {
       line: location.range.start.line + 1,
       column: location.range.start.character + 1,
     };
-    if (location.path !== activePathRef.current) {
+    if (location.path !== projectRef.current.activePath) {
       selectFile(location.path, navigation);
       return;
     }
@@ -432,8 +843,8 @@ export default function Playground() {
   }
 
   function sourceForPath(path: string) {
-    if (path === "main.mcl") return sourceRef.current;
-    const file = projectFilesRef.current[path];
+    if (path === "main.mcl") return projectRef.current.source;
+    const file = projectRef.current.files[path];
     return file?.encoding === "utf8" ? file.content : "";
   }
 
@@ -447,71 +858,332 @@ export default function Playground() {
   }
 
   function selectFile(path: string, diagnostic?: PlaygroundDiagnostic) {
-    if (path === activePathRef.current) return;
+    if (path === projectRef.current.activePath) return;
     pendingNavigation.current = diagnostic;
-    activePathRef.current = path;
     revision.current += 1;
     setBusy(false);
-    setActivePath(path);
-    setContentRevision((value) => value + 1);
+    selectProjectFile(path);
+    setRecentPaths((previous) => [path, ...previous.filter((entry) => entry !== path)]);
+  }
+
+  function createFile() {
+    const path = window.prompt("作成するファイルのパス", "values.yaml")?.trim();
+    if (!path) return;
+    const result = createProjectFile(path);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    finishProjectMutation();
+    setRecentPaths((previous) => [path, ...previous.filter((entry) => entry !== path)]);
+  }
+
+  function renameFile(path: string) {
+    const nextPath = window.prompt("新しいファイルパス", path)?.trim();
+    if (!nextPath || nextPath === path) return;
+    const result = renameProjectFile(path, nextPath);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    finishProjectMutation();
+    setRecentPaths((previous) => previous.map((entry) => (entry === path ? nextPath : entry)));
+  }
+
+  function deleteFile(path: string) {
+    if (!window.confirm(`${path}を削除しますか？`)) return;
+    const result = deleteProjectFile(path);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    finishProjectMutation();
+    setRecentPaths((previous) => previous.filter((entry) => entry !== path));
   }
 
   return (
     <section className="playground" aria-label="MCLプレイグラウンド" aria-busy={loadingProject}>
-      <div className="playground-toolbar">
-        {busy ? (
-          <button type="button" onClick={cancel}>中断</button>
-        ) : (
-          <>
-            <button type="button" onClick={run} disabled={loadingProject || Boolean(editorError)}>実行</button>
-            <button type="button" onClick={formatSource} disabled={loadingProject || Boolean(editorError)}>整形</button>
-          </>
-        )}
-        <label>
-          サンプル
-          <select value={sample} disabled={busy || loadingProject} onChange={(event) => {
-            const selected = event.currentTarget.value as keyof typeof samples;
-            applyingSample.current = true;
-            setSample(selected);
-            applyProject({ source: samples[selected], files: {} });
-            applyingSample.current = false;
-          }}>
-            <option value="custom" disabled>カスタム</option>
-            <option value="configMap">ConfigMap</option>
-            <option value="deployment">Deployment</option>
-          </select>
-        </label>
-        <button type="button" onClick={shareProject} disabled={busy || loadingProject}>共有</button>
-        <ProjectFileInput
-          fileCount={Object.keys(projectFiles).length + 1}
-          projectSize={projectSizeBytes}
-          onLoad={loadProject}
-          onLoaded={applyProject}
-          onError={setError}
-          onLoading={setLoadingProject}
-          onExport={exportProject}
-          disabled={busy || loadingProject || Boolean(editorError)}
-        />
-        <a href="/playground/capabilities">対応機能</a>
-        <label className="playground-setting">
-          Tab幅
-          <select value={editorSettings.tabSize} onChange={(event) => setEditorSettings((settings) => ({ ...settings, tabSize: Number(event.currentTarget.value) as 2 | 4 }))}>
-            <option value={2}>2</option>
-            <option value={4}>4</option>
-          </select>
-        </label>
-        <label className="playground-setting"><input type="checkbox" checked={editorSettings.lineWrapping} onChange={(event) => setEditorSettings((settings) => ({ ...settings, lineWrapping: event.currentTarget.checked }))} />折り返し</label>
-        <label className="playground-setting"><input type="checkbox" checked={editorSettings.lineNumbers} onChange={(event) => setEditorSettings((settings) => ({ ...settings, lineNumbers: event.currentTarget.checked }))} />行番号</label>
-        <label className="playground-setting"><input type="checkbox" checked={editorSettings.vim} onChange={(event) => setEditorSettings((settings) => ({ ...settings, vim: event.currentTarget.checked }))} />Vim</label>
-        <span role="status">{wasmReady ? "WASM準備完了" : "WASM準備中"}</span>
-      </div>
+      <header className="playground-header">
+        <div className="playground-brand">
+          <a href="/">MCL</a>
+          <span>Playground</span>
+          <span className="playground-runtime" role="status">
+            {wasmReady ? "WASM準備完了" : "WASM準備中"}
+          </span>
+          <span className="playground-save-status" role="status">
+            {saveStatus === "saved" ? "保存済み" : saveStatus === "saving" ? "保存中" : "保存失敗"}
+          </span>
+        </div>
+        <div className="playground-toolbar">
+          {busy || renderPending ? (
+            <button type="button" onClick={cancel}>
+              中断
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={run}
+                disabled={!draftsLoaded || loadingProject || Boolean(editorError)}
+              >
+                実行
+              </button>
+              <button
+                type="button"
+                onClick={formatSource}
+                disabled={
+                  !draftsLoaded ||
+                  loadingProject ||
+                  Boolean(editorError) ||
+                  !activePath.endsWith(".mcl")
+                }
+              >
+                整形
+              </button>
+            </>
+          )}
+          <label className="playground-sample">
+            <select
+              aria-label="サンプル"
+              value={sample}
+              disabled={!draftsLoaded || busy || loadingProject}
+              onChange={(event) => {
+                const selected = event.currentTarget.value;
+                applyingSample.current = true;
+                setSample(selected);
+                const builtin = samples[selected as keyof typeof samples];
+                const catalogSample = examples.find((entry) => entry.slug === selected);
+                if (builtin !== undefined) {
+                  applyProject(
+                    { source: builtin, files: {} },
+                    { name: selected === "configMap" ? "ConfigMap" : "Deployment" },
+                  );
+                } else if (catalogSample) {
+                  const { ["main.mcl"]: source, ...otherFiles } = catalogSample.files;
+                  applyProject(
+                    {
+                      source: source ?? "",
+                      files: Object.fromEntries(
+                        Object.entries(otherFiles).map(([path, content]) => [
+                          path,
+                          { encoding: "utf8", content },
+                        ]),
+                      ),
+                    },
+                    { name: catalogSample.title },
+                  );
+                }
+                applyingSample.current = false;
+              }}
+            >
+              <option value="custom" disabled>
+                カスタム
+              </option>
+              <option value="configMap">ConfigMap</option>
+              <option value="deployment">Deployment</option>
+              {[...new Set(examples.map((entry) => entry.category))].map((category) => (
+                <optgroup key={category} label={category}>
+                  {examples
+                    .filter((entry) => entry.category === category)
+                    .map((entry) => (
+                      <option key={entry.slug} value={entry.slug}>
+                        {entry.title}
+                      </option>
+                    ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <label className="playground-sample">
+            <select
+              aria-label="ローカル作業"
+              value={activeDraftId}
+              disabled={!draftsLoaded || busy || loadingProject}
+              onChange={(event) => void openDraft(event.currentTarget.value)}
+            >
+              {drafts.map((draft) => (
+                <option key={draft.id} value={draft.id}>
+                  {draft.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={createDraft}
+            disabled={!draftsLoaded || busy || loadingProject}
+          >
+            新規作業
+          </button>
+          <button
+            type="button"
+            onClick={shareProject}
+            disabled={!draftsLoaded || busy || loadingProject}
+          >
+            共有
+          </button>
+          <details className="playground-more">
+            <summary>ファイル・設定</summary>
+            <div className="playground-more-menu">
+              <ProjectFileInput
+                fileCount={Object.keys(projectFiles).length + 1}
+                projectSize={projectSizeBytes}
+                onLoad={loadProject}
+                onLoaded={applyProject}
+                onError={setError}
+                onLoading={setLoadingProject}
+                onExport={exportProject}
+                disabled={!draftsLoaded || busy || loadingProject || Boolean(editorError)}
+              />
+              <a href="/playground/capabilities">対応機能</a>
+              <label className="playground-setting">
+                Tab幅
+                <select
+                  value={editorSettings.tabSize}
+                  onChange={(event) =>
+                    setEditorSettings((settings) => ({
+                      ...settings,
+                      tabSize: Number(event.currentTarget.value) as 2 | 4,
+                    }))
+                  }
+                >
+                  <option value={2}>2</option>
+                  <option value={4}>4</option>
+                </select>
+              </label>
+              <label className="playground-setting">
+                文字サイズ
+                <input
+                  type="range"
+                  min={12}
+                  max={20}
+                  step={2}
+                  value={editorSettings.fontSize}
+                  aria-label="文字サイズ"
+                  onChange={(event) =>
+                    setEditorSettings((settings) => ({
+                      ...settings,
+                      fontSize: Number(event.currentTarget.value) as EditorSettings["fontSize"],
+                    }))
+                  }
+                />
+                <output>{editorSettings.fontSize}px</output>
+              </label>
+              <label className="playground-setting">
+                <input
+                  type="checkbox"
+                  checked={editorSettings.lineWrapping}
+                  onChange={(event) =>
+                    setEditorSettings((settings) => ({
+                      ...settings,
+                      lineWrapping: event.currentTarget.checked,
+                    }))
+                  }
+                />
+                折り返し
+              </label>
+              <label className="playground-setting">
+                <input
+                  type="checkbox"
+                  checked={editorSettings.lineNumbers}
+                  onChange={(event) =>
+                    setEditorSettings((settings) => ({
+                      ...settings,
+                      lineNumbers: event.currentTarget.checked,
+                    }))
+                  }
+                />
+                行番号
+              </label>
+              <label className="playground-setting">
+                <input
+                  type="checkbox"
+                  checked={editorSettings.vim}
+                  onChange={(event) =>
+                    setEditorSettings((settings) => ({
+                      ...settings,
+                      vim: event.currentTarget.checked,
+                    }))
+                  }
+                />
+                Vim
+              </label>
+            </div>
+          </details>
+        </div>
+      </header>
       {loadingProject && <p role="status">読み込み中</p>}
+      {quickOpen && (
+        <dialog
+          ref={quickOpenDialog}
+          className="playground-quick-open"
+          aria-label="ファイルを開く"
+          onCancel={() => setQuickOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              setQuickOpen(false);
+            }
+            if (event.key === "ArrowDown" && quickPaths.length > 0) {
+              event.preventDefault();
+              setQuickSelection((index) => (index + 1) % quickPaths.length);
+            }
+            if (event.key === "ArrowUp" && quickPaths.length > 0) {
+              event.preventDefault();
+              setQuickSelection((index) => (index - 1 + quickPaths.length) % quickPaths.length);
+            }
+            if (event.key === "Enter" && quickPaths[quickSelection]) {
+              event.preventDefault();
+              selectFile(quickPaths[quickSelection]);
+              setQuickOpen(false);
+            }
+          }}
+        >
+          <label>
+            <span>ファイルへ移動</span>
+            <input
+              autoFocus
+              value={quickQuery}
+              onChange={(event) => setQuickQuery(event.currentTarget.value)}
+              placeholder="ファイル名を入力"
+            />
+          </label>
+          <ul>
+            {quickPaths.map((path, index) => (
+              <li key={path}>
+                <button
+                  type="button"
+                  aria-current={index === quickSelection ? "true" : undefined}
+                  onMouseEnter={() => setQuickSelection(index)}
+                  onClick={() => {
+                    selectFile(path);
+                    setQuickOpen(false);
+                  }}
+                >
+                  {path}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {quickPaths.length === 0 && <p>一致するファイルはありません</p>}
+        </dialog>
+      )}
       <Group className="playground-panels" orientation={orientation}>
         <Panel defaultSize={55} minSize={25}>
-          <ProjectTabs paths={projectPaths} files={projectFiles} activePath={activePath} onSelect={selectFile} disabled={busy || loadingProject} />
+          <ProjectTabs
+            paths={projectPaths}
+            files={projectFiles}
+            activePath={activePath}
+            onSelect={selectFile}
+            onCreate={createFile}
+            onRename={renameFile}
+            onDelete={deleteFile}
+            disabled={!draftsLoaded || busy || loadingProject}
+          />
           <MclEditor
             key={`${editorAttempt}:${projectGeneration}`}
             path={activePath}
+            paths={projectPaths}
             source={activeSource}
             settings={editorSettings}
             onReady={onEditorReady}
@@ -520,9 +1192,42 @@ export default function Playground() {
             diagnostics={diagnostics}
             onRun={() => void run()}
             onFormat={() => void formatSource()}
-            onComplete={(path, position) => client.current?.complete(sourceForPath(path), path, position, languageServiceFiles()) ?? Promise.resolve([])}
-            onDefinition={(path, position) => client.current?.definition(sourceForPath(path), path, position, languageServiceFiles()) ?? Promise.resolve(null)}
-            onHover={(path, position) => client.current?.hover(sourceForPath(path), path, position, languageServiceFiles()) ?? Promise.resolve(null)}
+            onComplete={(path, position) =>
+              client.current
+                ? trackWasmRequest(
+                    client.current.complete(
+                      sourceForPath(path),
+                      path,
+                      position,
+                      languageServiceFiles(),
+                    ),
+                  )
+                : Promise.resolve([])
+            }
+            onDefinition={(path, position) =>
+              client.current
+                ? trackWasmRequest(
+                    client.current.definition(
+                      sourceForPath(path),
+                      path,
+                      position,
+                      languageServiceFiles(),
+                    ),
+                  )
+                : Promise.resolve(null)
+            }
+            onHover={(path, position) =>
+              client.current
+                ? trackWasmRequest(
+                    client.current.hover(
+                      sourceForPath(path),
+                      path,
+                      position,
+                      languageServiceFiles(),
+                    ),
+                  )
+                : Promise.resolve(null)
+            }
             onNavigate={navigateToDefinition}
           />
         </Panel>
@@ -530,21 +1235,91 @@ export default function Playground() {
         <Panel defaultSize={45} minSize={25}>
           <div className="playground-result-panel">
             <div className="playground-result-toolbar">
-              <span>YAML</span>
-              <button type="button" onClick={() => setShowDiff((value) => !value)} disabled={!reply?.ok || previousYaml === undefined || previousYaml === reply.result?.yaml} aria-pressed={showDiff}>差分</button>
-              <button type="button" onClick={() => void copyOutput()} disabled={staleYaml === undefined && reply?.result?.yaml === undefined}>コピー</button>
-              <button type="button" onClick={downloadOutput} disabled={staleYaml === undefined && reply?.result?.yaml === undefined}>ダウンロード</button>
+              <div className="playground-result-tabs" role="group" aria-label="結果表示">
+                <button
+                  type="button"
+                  aria-pressed={!showProblems && !showDiff}
+                  onClick={() => {
+                    setShowProblems(false);
+                    setShowDiff(false);
+                  }}
+                >
+                  YAML
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={showProblems}
+                  onClick={() => {
+                    setShowProblems(true);
+                    setShowDiff(false);
+                  }}
+                >
+                  Problems{diagnostics.length > 0 ? ` ${diagnostics.length}` : ""}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={showDiff}
+                  onClick={() => {
+                    setShowProblems(false);
+                    setShowDiff(true);
+                  }}
+                  disabled={
+                    !reply?.ok || previousYaml === undefined || previousYaml === reply.result?.yaml
+                  }
+                >
+                  Diff
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => void copyOutput()}
+                disabled={
+                  showProblems ||
+                  showDiff ||
+                  (staleYaml === undefined && reply?.result?.yaml === undefined)
+                }
+              >
+                コピー
+              </button>
+              <button
+                type="button"
+                onClick={downloadOutput}
+                disabled={
+                  showProblems ||
+                  showDiff ||
+                  (staleYaml === undefined && reply?.result?.yaml === undefined)
+                }
+              >
+                ダウンロード
+              </button>
             </div>
-            <PlaygroundResult reply={reply} staleYaml={staleYaml} previousYaml={previousYaml} showDiff={showDiff} onDiagnostic={goToDiagnostic} />
+            <PlaygroundResult
+              reply={reply}
+              staleYaml={staleYaml}
+              previousYaml={previousYaml}
+              fontSize={editorSettings.fontSize}
+              showDiff={showDiff}
+              showProblems={showProblems}
+              onDiagnostic={goToDiagnostic}
+            />
           </div>
         </Panel>
       </Group>
       {editorError && (
         <p role="alert">
-          {editorError} <button onClick={() => { setEditorError(""); setEditorAttempt((attempt) => attempt + 1); }}>再試行</button>
+          {editorError}{" "}
+          <button
+            onClick={() => {
+              setEditorError("");
+              setEditorAttempt((attempt) => attempt + 1);
+            }}
+          >
+            再試行
+          </button>
         </p>
       )}
-      {error && <p role="status">{error}</p>}
+      {error && <p role="alert">{error}</p>}
+      {notice && <p role="status">{notice}</p>}
     </section>
   );
 }

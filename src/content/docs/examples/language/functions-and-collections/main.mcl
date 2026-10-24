@@ -1,0 +1,13 @@
+fn resourceName(app: String, component: String) -> String =
+  app + "-" + component
+
+let name = resourceName("sample", "api")
+let values =
+  - 1
+  - 2
+let incremented = map(values, fn(value) => value + 1)
+let result =
+  name: name
+  incremented: incremented
+
+emit result

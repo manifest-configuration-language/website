@@ -1,0 +1,4 @@
+export type Container =
+  name: String
+  image: String
+  securityContext: {allowPrivilegeEscalation: Bool, seccompProfile: {type: String}, capabilities: {drop: List<String>}}

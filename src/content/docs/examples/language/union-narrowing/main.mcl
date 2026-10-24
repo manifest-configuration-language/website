@@ -1,0 +1,18 @@
+type DeploymentKind = "Deployment"
+type JobKind = "Job"
+type DeploymentWorkload = {kind: DeploymentKind, name: String, replicas: Int}
+type JobWorkload = {kind: JobKind, name: String, completions: Int}
+type Workload = DeploymentWorkload | JobWorkload
+
+let workload: Workload =
+  kind: "Job"
+  name: "database-migration"
+  completions: 1
+
+let summary =
+  if workload.kind == "Deployment":
+    workload.replicas
+  else:
+    workload.completions
+
+emit summary

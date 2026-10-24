@@ -96,4 +96,4 @@ Adapter関数は外部ファイルやChartを読み込み、Manifest Bundleを�
 | `std:kustomize.build(source, revision, directory)` | ローカルKustomize overlayまたは固定commitのGit sourceをビルドします。 |
 | `std:helm.render(source, options)`                 | ローカルまたはロック済みのHTTPS・OCI Chartをレンダリングします。      |
 
-例は[Manifest Adapter](https://github.com/manifest-configuration-language/examples/tree/main/adapters/manifest)、[Kustomize Adapter](https://github.com/manifest-configuration-language/examples/tree/main/adapters/kustomize)、[Helm Adapter](https://github.com/manifest-configuration-language/examples/tree/main/adapters/helm)を参照してください。
+例は[Manifest Adapter](/playground/?example=adapters%2Fmanifest)、[Kustomize Adapter](/playground/?example=adapters%2Fkustomize)、[Helm Adapter](/playground/?example=adapters%2Fhelm)をPlaygroundで確認できます。

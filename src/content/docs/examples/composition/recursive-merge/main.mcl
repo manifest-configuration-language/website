@@ -1,0 +1,22 @@
+let defaults =
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - "ALL"
+      add:
+        - "SYS_TIME"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+
+let container = defaults with:
+  name: "api"
+  image: "example.test.walnuts.dev/api:v1"
+  securityContext:
+    capabilities:
+      add:
+        - "NET_BIND_SERVICE"
+
+emit container

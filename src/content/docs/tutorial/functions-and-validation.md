@@ -75,4 +75,4 @@ validate deployment using scalable
 
 - [標準ライブラリ](../reference/stdlib)でList、Map、Adapterの関数を確認します。
 - [言語仕様](../reference/spec)で構文と評価の概要を確認します。
-- [examples/](https://github.com/manifest-configuration-language/examples/tree/main)でAdapterやSchemaを使う実例を確認します。
+- [サンプル一覧](/examples/)からAdapterやSchemaを使う実例をPlaygroundで確認します。

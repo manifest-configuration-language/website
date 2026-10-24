@@ -30,4 +30,4 @@ emit service
 - [標準ライブラリ](/reference/stdlib)で関数とAdapterを確認します。
 - [言語仕様](/reference/spec)で処理モデルと対応構文を確認します。
 
-MCLの[GitHubリポジトリ](https://github.com/manifest-configuration-language/mcl)にはCLIがあります。VS Code拡張は[別のリポジトリ](https://github.com/manifest-configuration-language/vscode)、すべての[例](https://github.com/manifest-configuration-language/examples)は専用リポジトリで管理しています。
+MCLの[GitHubリポジトリ](https://github.com/manifest-configuration-language/mcl)にはCLIがあります。VS Code拡張は[別のリポジトリ](https://github.com/manifest-configuration-language/vscode)で管理しています。サンプルは[Examples](/examples/)からPlaygroundで開けます。

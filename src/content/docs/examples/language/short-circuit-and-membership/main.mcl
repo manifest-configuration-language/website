@@ -1,0 +1,14 @@
+let service =
+  enabled: true
+  port: 8080
+  labels:
+    app: "sample-api"
+    tier: "backend"
+
+let isBackend = "tier" in service.labels
+let canServe = service.enabled and isBackend and service.port > 0
+let result =
+  ready: canServe
+  port: service.port
+
+emit result

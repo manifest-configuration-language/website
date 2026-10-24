@@ -1,0 +1,2 @@
+export let replicas = 3
+export fn resourceName(app: String, component: String) -> String = app + "-" + component

@@ -1,0 +1,28 @@
+type Container =
+  name: String
+  image: String
+  ports?: List<Int>
+
+fn makeContainer(name: String) -> Container =
+  name: name
+  image: "example.test.walnuts.dev/" + name + ":v1"
+
+fn addPort(total: Int, port: Int) -> Int = total + port
+
+let names =
+  - "api"
+  - "worker"
+let containerFactory: Function<String, Container> = makeContainer
+let containers = map(names, containerFactory)
+let ports =
+  - 8080
+  - 9090
+  - 9443
+let publicPorts = filter(ports, fn(port) => port >= 9000)
+let totalPublicPorts = fold(publicPorts, 0, addPort)
+let summary =
+  containers: containers
+  publicPorts: publicPorts
+  totalPublicPorts: totalPublicPorts
+
+emit summary

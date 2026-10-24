@@ -1,0 +1,57 @@
+import "./types.mcl" as types
+import "./defaults.mcl" as defaults
+import "./security.mcl" as security
+
+let app = "sample-api"
+let namespace = "default"
+let labels =
+  app: app
+
+let container = defaults.container with:
+  name: "api"
+  image: "example.test.walnuts.dev/api:v1"
+
+let config = node:
+  apiVersion: "v1"
+  kind: "ConfigMap"
+  metadata:
+    name: app + "-config"
+    namespace: namespace
+  data:
+    LOG_LEVEL: "info"
+
+let deployment = node:
+  apiVersion: "apps/v1"
+  kind: "Deployment"
+  metadata:
+    name: app
+    namespace: namespace
+    labels: labels
+  spec:
+    replicas: 2
+    selector:
+      matchLabels: labels
+    template:
+      metadata:
+        labels: labels
+      spec:
+        containers:
+          - container
+
+let service = node:
+  apiVersion: "v1"
+  kind: "Service"
+  metadata:
+    name: app
+    namespace: namespace
+  spec:
+    selector: ref(deployment).spec.template.metadata.labels
+    ports:
+      - name: "http"
+        port: 80
+        targetPort: 8080
+
+emit config
+emit deployment
+emit service
+validate each descendants(output, types.Container) using security.hardened

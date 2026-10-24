@@ -11,6 +11,7 @@ const draftShareKeyPrefix = "mcl-playground-draft-share-v1:";
 const editorSettingsKey = "mcl-playground-editor-settings-v1";
 
 export const defaultEditorSettings: EditorSettings = {
+  theme: "system",
   tabSize: 2,
   fontSize: 14,
   lineWrapping: false,
@@ -68,12 +69,17 @@ export function isStoredProject(value: unknown): value is StoredProject {
   });
 }
 
-function isEditorSettings(
-  value: unknown,
-): value is Omit<EditorSettings, "fontSize"> & { fontSize?: EditorSettings["fontSize"] } {
+function isEditorSettings(value: unknown): value is Omit<EditorSettings, "fontSize" | "theme"> & {
+  fontSize?: EditorSettings["fontSize"];
+  theme?: EditorSettings["theme"];
+} {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
   return (
+    (candidate.theme === undefined ||
+      candidate.theme === "system" ||
+      candidate.theme === "light" ||
+      candidate.theme === "dark") &&
     (candidate.tabSize === 2 || candidate.tabSize === 4) &&
     (candidate.fontSize === undefined ||
       [12, 14, 16, 18, 20].includes(candidate.fontSize as number)) &&
@@ -89,7 +95,6 @@ export function usePlaygroundPersistence(
 ) {
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(defaultEditorSettings);
   const [editorSettingsLoaded, setEditorSettingsLoaded] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "failed">("saved");
   const [activeDraftId, setActiveDraftId] = useState("");
   const [drafts, setDrafts] = useState<DraftMetadata[]>([]);
   const [draftsLoaded, setDraftsLoaded] = useState(false);
@@ -108,17 +113,13 @@ export function usePlaygroundPersistence(
       const previous = draftsRef.current.find((draft) => draft.id === id);
       const nextDraft = {
         id,
-        name: name ?? previous?.name ?? "作業",
+        name: name ?? previous?.name ?? "プロジェクト",
         updatedAt: Date.now(),
       };
       const next = [nextDraft, ...draftsRef.current.filter((draft) => draft.id !== id)];
       draftsRef.current = next;
       setDrafts(next);
-      if (persist)
-        void enqueueWrite(() => set(draftIndexKey, next)).catch((cause: unknown) => {
-          setSaveStatus("failed");
-          onError(cause);
-        });
+      if (persist) void enqueueWrite(() => set(draftIndexKey, next)).catch(onError);
       return next;
     },
     [enqueueWrite, onError],
@@ -140,14 +141,8 @@ export function usePlaygroundPersistence(
 
   useEffect(() => {
     if (!draftsLoaded || !activeDraftId) return;
-    setSaveStatus("saving");
     const timer = setTimeout(() => {
-      void saveDraftSnapshot(activeDraftId, project)
-        .then(() => setSaveStatus("saved"))
-        .catch((cause: unknown) => {
-          setSaveStatus("failed");
-          onError(cause);
-        });
+      void saveDraftSnapshot(activeDraftId, project).catch(onError);
     }, 300);
     return () => clearTimeout(timer);
   }, [activeDraftId, draftsLoaded, onError, project, saveDraftSnapshot]);
@@ -156,15 +151,8 @@ export function usePlaygroundPersistence(
     (id: string, name?: string, shareFragment?: string) => {
       activeDraftIdRef.current = id;
       setActiveDraftId(id);
-      void set(activeDraftKey, id).catch((cause: unknown) => {
-        setSaveStatus("failed");
-        onError(cause);
-      });
-      if (shareFragment !== undefined)
-        void set(draftShareKey(id), shareFragment).catch((cause: unknown) => {
-          setSaveStatus("failed");
-          onError(cause);
-        });
+      void set(activeDraftKey, id).catch(onError);
+      if (shareFragment !== undefined) void set(draftShareKey(id), shareFragment).catch(onError);
       updateDraftMetadata(id, name);
     },
     [onError, updateDraftMetadata],
@@ -195,6 +183,7 @@ export function usePlaygroundPersistence(
         if (!cancelled && isEditorSettings(saved))
           setEditorSettings({
             ...saved,
+            theme: saved.theme ?? defaultEditorSettings.theme,
             fontSize: saved.fontSize ?? defaultEditorSettings.fontSize,
           });
       })
@@ -228,8 +217,6 @@ export function usePlaygroundPersistence(
     editorSettings,
     setEditorSettings,
     editorSettingsLoaded,
-    saveStatus,
-    setSaveStatus,
     activeDraftId,
     activeDraftIdRef,
     drafts,

@@ -60,10 +60,11 @@ export function ProjectTabs({
     if (node.file) {
       const selectable = node.path === "main.mcl" || files[node.path]?.encoding === "utf8";
       return (
-        <li key={node.path}>
+        <li className="project-file-row" key={node.path}>
           {selectable ? (
             <button
               type="button"
+              className="project-file-open"
               aria-current={node.path === activePath ? "page" : undefined}
               title={node.path}
               disabled={disabled}
@@ -83,7 +84,7 @@ export function ProjectTabs({
                 disabled={disabled}
                 onClick={() => onRename(node.path)}
               >
-                名前
+                名前変更
               </button>
               <button
                 type="button"
@@ -116,8 +117,8 @@ export function ProjectTabs({
     <nav className="project-explorer" aria-label="プロジェクトファイル">
       <div className="project-explorer-toolbar">
         <span>ファイル</span>
-        <button type="button" disabled={disabled} onClick={onCreate}>
-          新規ファイル
+        <button type="button" aria-label="ファイルを作成" disabled={disabled} onClick={onCreate}>
+          ＋ ファイル
         </button>
       </div>
       <ul>{[...tree.children.values()].sort(compareNodes).map(renderNode)}</ul>

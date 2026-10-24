@@ -1,0 +1,206 @@
+.playground-code-surface,
+.playground-result-content {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.55rem;
+  background: var(--sl-color-bg);
+}
+
+.playground-code-surface:focus-within,
+.playground-result-content:focus-within {
+  border-color: var(--sl-color-accent);
+  box-shadow: 0 0 0 1px var(--sl-color-accent);
+}
+
+.playground-result-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.playground-result-toolbar {
+  flex: 0 0 auto;
+}
+
+.playground-result-panel > .playground-diagnostics,
+.playground-result-panel > .playground-result-content,
+.playground-result-panel > .playground-result-empty,
+.playground-result-panel > .playground-diff {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.playground-code-header,
+.playground-yaml-toolbar {
+  display: flex;
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.35rem 0.8rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-gray-6);
+}
+
+.playground-code-heading {
+  color: var(--sl-color-text);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.playground-code-file {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--sl-color-gray-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playground-code-language,
+.playground-result-status,
+.playground-result-stale {
+  margin-inline-start: auto;
+  padding: 0.12rem 0.42rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 999px;
+  color: var(--sl-color-gray-2);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+  line-height: 1.5;
+}
+
+.playground-result-status {
+  color: var(--sl-color-green-high);
+}
+
+.playground-result-stale {
+  color: var(--sl-color-orange-high);
+}
+
+.playground-code-surface > .playground-editor {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+}
+
+.playground-code-surface .cm-editor {
+  height: 100%;
+  min-height: 0;
+  background: var(--sl-color-bg);
+}
+
+.playground-code-surface .cm-scroller,
+.playground-result-content .playground-output .cm-scroller {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.65;
+}
+
+.playground-code-surface .cm-content,
+.playground-code-surface .cm-gutters,
+.playground-result-content .cm-content,
+.playground-result-content .cm-gutters {
+  min-height: 100%;
+}
+
+.playground-code-surface .cm-content {
+  padding-block: 1rem;
+}
+
+.playground-code-surface .cm-gutters {
+  border-inline-end: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-bg);
+}
+
+.playground-result-content .playground-yaml-toolbar {
+  justify-content: flex-start;
+  border-bottom: 0;
+  color: var(--sl-color-text);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.playground-result-content .playground-yaml-toolbar button {
+  margin-inline-start: auto;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: 0.75rem;
+}
+
+.playground-result-content .playground-yaml-toolbar button:hover {
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-text-accent);
+}
+
+.playground-result-content .playground-output {
+  min-height: 0;
+  max-height: none;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+  border-top: 1px solid var(--sl-color-gray-5);
+  border-radius: 0;
+  background: var(--sl-color-bg);
+}
+
+.playground-result-content .playground-output .cm-editor {
+  height: 100%;
+  min-height: 100%;
+  background: var(--sl-color-bg);
+}
+
+.playground-result-content .playground-output .cm-content {
+  padding-block: 0.9rem;
+}
+
+.playground-result-empty {
+  display: flex;
+  min-height: 12rem;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 1.5rem;
+  color: var(--sl-color-gray-2);
+  text-align: center;
+}
+
+.playground-result-empty-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 50%;
+  color: var(--sl-color-text-accent);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+@media (max-width: 48rem) {
+  .playground-code-surface,
+  .playground-result-content {
+    border-radius: 0.4rem;
+  }
+
+  .playground-code-surface .cm-content {
+    padding-block: 0.65rem;
+  }
+}

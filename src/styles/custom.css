@@ -60,12 +60,6 @@ body:has(.playground) .right-sidebar-container {
   font-weight: 400;
 }
 
-.playground-save-status {
-  color: var(--sl-color-gray-2);
-  font-size: 0.75rem;
-  font-weight: 400;
-}
-
 .playground-quick-open {
   position: fixed;
   z-index: 20;
@@ -115,7 +109,11 @@ body:has(.playground) .right-sidebar-container {
 }
 
 .playground-quick-open button {
+  display: flex;
   width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   padding: 0.45rem 0.6rem;
   border: 0;
   border-radius: 0.25rem;
@@ -123,6 +121,16 @@ body:has(.playground) .right-sidebar-container {
   color: var(--sl-color-text);
   text-align: start;
   cursor: pointer;
+}
+
+.playground-quick-open button kbd {
+  flex: 0 0 auto;
+  padding: 0.08rem 0.35rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.25rem;
+  color: var(--sl-color-gray-2);
+  font: inherit;
+  font-size: 0.72rem;
 }
 
 .playground-quick-open button[aria-current="true"],

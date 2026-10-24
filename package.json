@@ -28,6 +28,7 @@
     "@manifest-configuration-language/browser": "0.3.1",
     "@manifest-configuration-language/language": "0.3.1",
     "@replit/codemirror-vim": "6.4.0",
+    "@replit/codemirror-vscode-keymap": "6.0.2",
     "@zip.js/zip.js": "2.24.0",
     "idb-keyval": "6.3.0",
     "react": "19.3.1",

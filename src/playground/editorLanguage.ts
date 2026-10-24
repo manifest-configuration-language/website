@@ -1,4 +1,4 @@
-import { autocompletion, type Completion, type CompletionContext } from "@codemirror/autocomplete";
+import { autocompletion, type Completion } from "@codemirror/autocomplete";
 import { hoverTooltip } from "@codemirror/view";
 import { EditorView, type KeyBinding } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
@@ -37,24 +37,51 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
   return {
     extensions: [
       autocompletion({
+        activateOnTypingDelay: 120,
+        defaultKeymap: false,
         override: [
           async (completionContext) => {
-            if (!context.currentPath.current.endsWith(".mcl")) return null;
+            const view = context.view.current;
+            const requestPath = context.currentPath.current;
+            const requestGeneration = context.documentGeneration.current;
+            const requestDocument = completionContext.state.doc;
+            if (!view || !requestPath.endsWith(".mcl")) return null;
             const word = completionContext.matchBefore(/[\w.-]*/);
             if (!completionContext.explicit && (!word || word.from === word.to)) return null;
-            if (!(await waitForCompletionDelay(completionContext, 120))) return null;
             const line = completionContext.state.doc.lineAt(completionContext.pos);
-            const items = await context.callbacks.current.onComplete(context.currentPath.current, {
-              line: line.number - 1,
-              character: completionContext.pos - line.from,
-            });
-            if (completionContext.aborted || items.length === 0) return null;
-            const options: Completion[] = items.map((item) => ({
-              label: item.label,
-              type: completionType(item.kind),
-              ...(item.insertText === undefined ? {} : { apply: item.insertText }),
-            }));
-            return { from: word?.from ?? completionContext.pos, options };
+            try {
+              const items = await context.callbacks.current.onComplete(requestPath, {
+                line: line.number - 1,
+                character: completionContext.pos - line.from,
+              });
+              if (
+                completionContext.aborted ||
+                context.view.current !== view ||
+                context.currentPath.current !== requestPath ||
+                context.documentGeneration.current !== requestGeneration ||
+                view.state.doc !== requestDocument ||
+                items.length === 0
+              )
+                return null;
+              const options: Completion[] = items.map((item) => ({
+                label: item.label,
+                type: completionType(item.kind),
+                ...(item.insertText === undefined ? {} : { apply: item.insertText }),
+              }));
+              return { from: word?.from ?? completionContext.pos, options };
+            } catch (cause) {
+              if (
+                !completionContext.aborted &&
+                context.view.current === view &&
+                context.currentPath.current === requestPath &&
+                context.documentGeneration.current === requestGeneration &&
+                view.state.doc === requestDocument
+              )
+                context.callbacks.current.onError(
+                  cause instanceof Error ? cause : new Error(String(cause)),
+                );
+              return null;
+            }
           },
         ],
       }),
@@ -102,7 +129,21 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
                 return { dom };
               },
             };
-          } catch {
+          } catch (cause) {
+            if (
+              isCurrentRequest(
+                context,
+                view,
+                requestId,
+                requestGeneration,
+                requestPath,
+                requestDocument,
+                context.hoverRequest,
+              )
+            )
+              context.callbacks.current.onError(
+                cause instanceof Error ? cause : new Error(String(cause)),
+              );
             return null;
           }
         },
@@ -213,19 +254,4 @@ function completionType(kind: number): Completion["type"] {
     default:
       return "text";
   }
-}
-
-function waitForCompletionDelay(context: CompletionContext, delayMs: number): Promise<boolean> {
-  if (context.aborted) return Promise.resolve(false);
-  return new Promise((resolve) => {
-    let finished = false;
-    const finish = (active: boolean) => {
-      if (finished) return;
-      finished = true;
-      window.clearTimeout(timer);
-      resolve(active);
-    };
-    const timer = window.setTimeout(() => finish(!context.aborted), delayMs);
-    context.addEventListener("abort", () => finish(false), { onDocChange: true });
-  });
 }

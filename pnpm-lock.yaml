@@ -208,6 +208,9 @@ importers:
       '@replit/codemirror-vim':
         specifier: 6.4.0
         version: 6.4.0(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/search@6.6.0)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
+      '@replit/codemirror-vscode-keymap':
+        specifier: 6.0.2
+        version: 6.0.2(@codemirror/autocomplete@6.20.4)(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/lint@6.9.7)(@codemirror/search@6.6.0)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
       '@zip.js/zip.js':
         specifier: 2.24.0
         version: 2.24.0
@@ -1248,6 +1251,17 @@ packages:
       '@codemirror/language': 6.x.x
       '@codemirror/search': 6.x.x
       '@codemirror/state': 6.x.x
+      '@codemirror/view': 6.43.15
+
+  '@replit/codemirror-vscode-keymap@6.0.2':
+    resolution: {integrity: sha512-j45qTwGxzpsv82lMD/NreGDORFKSctMDVkGRopaP+OrzSzv+pXDQuU3LnFvKpasyjVT0lf+PKG1v2DSCn/vxxg==}
+    peerDependencies:
+      '@codemirror/autocomplete': ^6.0.0
+      '@codemirror/commands': ^6.0.0
+      '@codemirror/language': ^6.0.0
+      '@codemirror/lint': ^6.0.0
+      '@codemirror/search': ^6.0.0
+      '@codemirror/state': ^6.0.0
       '@codemirror/view': 6.43.15
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
@@ -3885,6 +3899,16 @@ snapshots:
       '@codemirror/state': 6.7.6
       '@codemirror/view': 6.43.15
       '@replit/codemirror-vim-core': 0.1.0
+
+  '@replit/codemirror-vscode-keymap@6.0.2(@codemirror/autocomplete@6.20.4)(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/lint@6.9.7)(@codemirror/search@6.6.0)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
+    dependencies:
+      '@codemirror/autocomplete': 6.20.4
+      '@codemirror/commands': 6.11.1
+      '@codemirror/language': 6.13.1
+      '@codemirror/lint': 6.9.7
+      '@codemirror/search': 6.6.0
+      '@codemirror/state': 6.7.6
+      '@codemirror/view': 6.43.15
 
   '@rolldown/binding-android-arm-eabi@1.2.14':
     optional: true

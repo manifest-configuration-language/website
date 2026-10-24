@@ -3,17 +3,15 @@ import {
   bracketMatching,
   defaultHighlightStyle,
   foldGutter,
-  foldKeymap,
   indentUnit,
   syntaxHighlighting,
 } from "@codemirror/language";
 import { setDiagnostics, lintGutter, type Diagnostic } from "@codemirror/lint";
-import { searchKeymap } from "@codemirror/search";
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
 import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { closeBracketsKeymap } from "@codemirror/autocomplete";
+import { history } from "@codemirror/commands";
+import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { vim } from "@replit/codemirror-vim";
 import { yaml } from "@codemirror/lang-yaml";
 import { json } from "@codemirror/lang-json";
@@ -25,8 +23,10 @@ import type {
   PlaygroundRenameEdit,
 } from "./types";
 import { createEditorLanguageServices } from "./editorLanguage";
+import "./playgroundPanels.css";
 
 const workspaceEditAnnotation = Annotation.define<boolean>();
+const rejectedDocumentChangeAnnotation = Annotation.define<boolean>();
 
 export type ApplyWorkspaceEdits = (
   edits: PlaygroundRenameEdit[],
@@ -58,6 +58,7 @@ function languageForPath(path: string): Extension {
 }
 
 export type EditorSettings = {
+  theme: "system" | "light" | "dark";
   tabSize: 2 | 4;
   fontSize: 12 | 14 | 16 | 18 | 20;
   lineWrapping: boolean;
@@ -84,7 +85,7 @@ type Props = {
   settings: EditorSettings;
   onReady: (view: EditorView | undefined) => void;
   onWorkspaceEditApplierReady: (applier: ApplyWorkspaceEdits | undefined) => void;
-  onDocumentChange: (source: string, path: string) => void;
+  onDocumentChange: (source: string, path: string) => boolean | void;
   onError: (error: Error) => void;
   diagnostics?: PlaygroundDiagnostic[];
   onRun: () => void;
@@ -103,6 +104,8 @@ type Props = {
   ) => Promise<PlaygroundHover | null>;
   onNavigate: (location: PlaygroundDefinitionLocation) => void;
   onNavigateToYaml: () => void;
+  onFindReferences: () => void;
+  onRenameSymbol: () => void;
 };
 
 function toEditorDiagnostics(
@@ -158,6 +161,8 @@ export function MclEditor({
   onHover,
   onNavigate,
   onNavigateToYaml,
+  onFindReferences,
+  onRenameSymbol,
 }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
@@ -187,6 +192,8 @@ export function MclEditor({
     onHover,
     onNavigate,
     onNavigateToYaml,
+    onFindReferences,
+    onRenameSymbol,
   });
   callbacks.current = {
     onReady,
@@ -200,6 +207,8 @@ export function MclEditor({
     onHover,
     onNavigate,
     onNavigateToYaml,
+    onFindReferences,
+    onRenameSymbol,
   };
 
   function settingsEffects(next: EditorSettings) {
@@ -237,6 +246,7 @@ export function MclEditor({
           EditorState.tabSize.of(settingsRef.current.tabSize),
           indentUnit.of(" ".repeat(settingsRef.current.tabSize)),
         ]),
+        EditorState.allowMultipleSelections.of(true),
         textSize.current.of(
           EditorView.theme({
             ".cm-content, .cm-gutters": { fontSize: `${settingsRef.current.fontSize}px` },
@@ -257,14 +267,34 @@ export function MclEditor({
             hoverRequest.current += 1;
           }
           if (update.docChanged) {
-            states.current.set(currentPath.current, update.state);
-            if (
-              !update.transactions.some((transaction) =>
-                transaction.annotation(workspaceEditAnnotation),
-              )
-            ) {
-              callbacks.current.onDocumentChange(update.state.doc.toString(), currentPath.current);
+            const rejected = update.transactions.some((transaction) =>
+              transaction.annotation(rejectedDocumentChangeAnnotation),
+            );
+            const workspaceEdit = update.transactions.some((transaction) =>
+              transaction.annotation(workspaceEditAnnotation),
+            );
+            if (!rejected && !workspaceEdit) {
+              const accepted = callbacks.current.onDocumentChange(
+                update.state.doc.toString(),
+                currentPath.current,
+              );
+              if (accepted === false) {
+                queueMicrotask(() => {
+                  if (viewRef.current !== update.view || update.view.state.doc !== update.state.doc)
+                    return;
+                  update.view.dispatch({
+                    changes: {
+                      from: 0,
+                      to: update.state.doc.length,
+                      insert: update.startState.doc.toString(),
+                    },
+                    annotations: rejectedDocumentChangeAnnotation.of(true),
+                  });
+                });
+                return;
+              }
             }
+            states.current.set(currentPath.current, update.view.state);
           }
         }),
         keymap.of([
@@ -290,13 +320,24 @@ export function MclEditor({
               return true;
             },
           },
+          {
+            key: "F2",
+            run: () => {
+              if (!currentPath.current.endsWith(".mcl")) return false;
+              callbacks.current.onRenameSymbol();
+              return true;
+            },
+          },
+          {
+            key: "Shift-F12",
+            run: () => {
+              if (!currentPath.current.endsWith(".mcl")) return false;
+              callbacks.current.onFindReferences();
+              return true;
+            },
+          },
           languageServices.definitionKeyBinding,
-          ...closeBracketsKeymap,
-          indentWithTab,
-          ...searchKeymap,
-          ...foldKeymap,
-          ...defaultKeymap,
-          ...historyKeymap,
+          ...vscodeKeymap,
         ]),
         languageServices.definitionMouseHandler,
       ];
@@ -441,5 +482,24 @@ export function MclEditor({
       view.dispatch(setDiagnostics(view.state, toEditorDiagnostics(diagnostics, path, view)));
   }, [diagnostics, path]);
 
-  return <div className="playground-editor" ref={host} />;
+  const languageLabel = path.endsWith(".mcl")
+    ? "MCL"
+    : path.endsWith(".yaml") || path.endsWith(".yml")
+      ? "YAML"
+      : path.endsWith(".json")
+        ? "JSON"
+        : "TEXT";
+
+  return (
+    <section className="playground-code-surface" aria-label="エディター">
+      <header className="playground-code-header">
+        <span className="playground-code-heading">編集</span>
+        <span className="playground-code-file" title={path}>
+          {path}
+        </span>
+        <span className="playground-code-language">{languageLabel}</span>
+      </header>
+      <div className="playground-editor" ref={host} />
+    </section>
+  );
 }

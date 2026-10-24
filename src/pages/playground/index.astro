@@ -1,6 +1,7 @@
 ---
 import Playground from "../../playground/Playground.tsx";
 import "../../styles/custom.css";
+import "../../styles/playground-shell.css";
 ---
 
 <!doctype html>
@@ -13,63 +14,15 @@ import "../../styles/custom.css";
   </head>
   <body>
     <main class="playground-app">
+      <nav class="playground-site-nav" aria-label="サイト">
+        <a class="playground-site-brand" href="/">MCL</a>
+        <a href="/" aria-label="ドキュメント">ドキュメント</a>
+        <a href="/getting-started/">導入</a>
+        <a href="/guide/">ガイド</a>
+        <a href="/reference/">リファレンス</a>
+        <a href="/playground/" aria-current="page">Playground</a>
+      </nav>
       <Playground client:load />
     </main>
   </body>
 </html>
-
-<style is:global>
-  :root {
-    color-scheme: light dark;
-    --sl-color-bg: #fff;
-    --sl-color-text: #18181b;
-    --sl-color-gray-2: #52525b;
-    --sl-color-gray-5: #d4d4d8;
-    --sl-color-gray-6: #f4f4f5;
-    --sl-color-accent: #6750a4;
-    --sl-color-text-accent: #6750a4;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --sl-color-bg: #18181b;
-      --sl-color-text: #f4f4f5;
-      --sl-color-gray-2: #a1a1aa;
-      --sl-color-gray-5: #3f3f46;
-      --sl-color-gray-6: #27272a;
-      --sl-color-accent: #c4b5fd;
-      --sl-color-text-accent: #c4b5fd;
-    }
-  }
-
-  html,
-  body {
-    min-height: 100%;
-    margin: 0;
-    background: var(--sl-color-bg);
-    color: var(--sl-color-text);
-    font-family: system-ui, sans-serif;
-  }
-
-  .playground-app {
-    min-height: 100dvh;
-    padding: 1rem clamp(0.5rem, 2vw, 1.5rem);
-    box-sizing: border-box;
-  }
-
-  .playground {
-    min-height: calc(100dvh - 2rem);
-  }
-
-  .playground-panels {
-    height: calc(100dvh - 6.5rem);
-    min-height: 32rem;
-  }
-
-  @media (max-width: 48rem) {
-    .playground-panels {
-      height: calc(100dvh - 7rem);
-      min-height: 28rem;
-    }
-  }
-</style>

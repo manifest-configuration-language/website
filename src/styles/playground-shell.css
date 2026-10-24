@@ -1,0 +1,542 @@
+:root {
+  color-scheme: light;
+  --sl-color-bg: #fff;
+  --sl-color-text: #18181b;
+  --sl-color-gray-2: #52525b;
+  --sl-color-gray-5: #d4d4d8;
+  --sl-color-gray-6: #f4f4f5;
+  --sl-color-accent: #6750a4;
+  --sl-color-text-accent: #6750a4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --sl-color-bg: #18181b;
+    --sl-color-text: #f4f4f5;
+    --sl-color-gray-2: #a1a1aa;
+    --sl-color-gray-5: #3f3f46;
+    --sl-color-gray-6: #27272a;
+    --sl-color-accent: #c4b5fd;
+    --sl-color-text-accent: #c4b5fd;
+  }
+}
+
+html[data-playground-theme="light"] {
+  color-scheme: light;
+  --sl-color-bg: #ffffff;
+  --sl-color-text: #202a25;
+  --sl-color-gray-2: #63716a;
+  --sl-color-gray-5: #d9e1dc;
+  --sl-color-gray-6: #f3f7f4;
+  --sl-color-accent: #24734b;
+  --sl-color-text-accent: #1d6842;
+}
+
+html[data-playground-theme="dark"] {
+  color-scheme: dark;
+  --sl-color-bg: #171d19;
+  --sl-color-text: #e5eee8;
+  --sl-color-gray-2: #a5b4aa;
+  --sl-color-gray-5: #35433a;
+  --sl-color-gray-6: #202922;
+  --sl-color-accent: #81c99a;
+  --sl-color-text-accent: #a0d9b2;
+}
+
+html:has(.playground-app),
+body:has(.playground-app) {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+body:has(.playground-app) {
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font-family: "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
+}
+
+body:has(.playground-app) #starlight__sidebar,
+body:has(.playground-app) .sidebar-pane,
+body:has(.playground-app) .right-sidebar-container,
+body:has(.playground-app) .header,
+body:has(.playground-app) .mobile-starlight__sidebar-toggle {
+  display: none !important;
+}
+
+.playground-app {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--sl-color-bg);
+  box-sizing: border-box;
+  isolation: isolate;
+}
+
+.playground-site-nav {
+  display: flex;
+  flex: 0 0 13rem;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 1rem 0.75rem;
+  border-right: 1px solid var(--sl-color-gray-5);
+  background: var(--sl-color-gray-6);
+  box-sizing: border-box;
+}
+
+.playground-site-nav a {
+  display: block;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.4rem;
+  color: var(--sl-color-text);
+  text-decoration: none;
+}
+
+.playground-site-nav a:hover,
+.playground-site-nav a[aria-current="page"] {
+  background: color-mix(in srgb, var(--sl-color-accent) 14%, transparent);
+  color: var(--sl-color-accent);
+}
+
+.playground-site-nav .playground-site-brand {
+  margin-bottom: 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.playground-app .playground {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  margin: 0;
+  padding: clamp(0.5rem, 1.5vw, 1.25rem);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.playground-app > astro-island {
+  display: block;
+  flex: 1 1 0;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.playground-app .playground-panels {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+}
+
+.playground-app .playground-header {
+  min-height: 3.5rem;
+  padding: 0.25rem 0 0.8rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-app .playground-toolbar {
+  flex: 1 1 36rem;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.playground-app .playground-primary-actions,
+.playground-app .playground-secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.playground-app .playground-primary-actions {
+  margin-inline-start: auto;
+}
+
+.playground-app .playground-toolbar button {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 0.45rem;
+  font: inherit;
+  font-size: 0.86rem;
+}
+
+.playground-app .playground-toolbar button:hover:not(:disabled),
+.playground-app .playground-more summary:hover {
+  border-color: var(--sl-color-accent);
+}
+
+.playground-app .playground-toolbar .playground-run-button {
+  border-color: var(--sl-color-accent);
+  background: var(--sl-color-accent);
+  color: #fff;
+  font-weight: 650;
+}
+
+.playground-app .playground-toolbar .playground-run-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.playground-app .playground-run-button kbd {
+  padding: 0.08rem 0.3rem;
+  border: 1px solid #ffffff55;
+  border-radius: 0.25rem;
+  color: #ffffffc9;
+  font: inherit;
+  font-size: 0.68rem;
+}
+
+.playground-app .playground-command-button kbd {
+  padding: 0.08rem 0.3rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.25rem;
+  color: var(--sl-color-gray-2);
+  font: inherit;
+  font-size: 0.68rem;
+}
+
+.playground-app .playground-more summary {
+  display: flex;
+  min-height: 2.5rem;
+  align-items: center;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.45rem;
+  background: var(--sl-color-bg);
+  list-style: none;
+}
+
+.playground-app .playground-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.playground-app .playground-more summary::after {
+  margin-inline-start: 0.55rem;
+  color: var(--sl-color-gray-2);
+  content: "⌄";
+}
+
+.playground-app .playground-more[open] summary::after {
+  content: "⌃";
+}
+
+.playground-app .playground-settings summary::before {
+  content: "⚙";
+  margin-inline-end: 0.45rem;
+}
+
+.playground-app .playground-more-menu {
+  width: min(24rem, calc(100vw - 2rem));
+  max-height: min(80vh, 48rem);
+  overflow: auto;
+  border-radius: 0.6rem;
+}
+
+.playground-app .playground-project-picker {
+  display: grid !important;
+  gap: 0.35rem !important;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  color: var(--sl-color-gray-2);
+  font-size: 0.78rem;
+}
+
+.playground-app .playground-project-picker select {
+  width: 100%;
+  max-width: none;
+  min-height: 2.5rem;
+  color: var(--sl-color-text);
+  font: inherit;
+}
+
+.playground-app .playground-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--sl-color-text);
+}
+
+.playground-app .playground-setting select {
+  min-height: 2rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font: inherit;
+}
+
+.playground-app .playground-setting input[type="range"] {
+  width: 7rem;
+  accent-color: var(--sl-color-accent);
+}
+
+.playground-app .playground-setting output {
+  min-width: 2.8rem;
+  color: var(--sl-color-gray-2);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.playground-app .playground-setting input[type="checkbox"] {
+  justify-self: end;
+  accent-color: var(--sl-color-accent);
+}
+
+.playground-app .playground-project-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.playground-app .playground-editor-panel {
+  display: flex !important;
+  flex-direction: column;
+  overflow: hidden !important;
+}
+
+.playground-app .playground-editor-workspace {
+  display: grid;
+  grid-template-columns: minmax(11rem, 15rem) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.playground-app .playground-editor-workspace > .playground-code-surface {
+  border-radius: 0;
+}
+
+.playground-app .playground-editor-workspace > .project-explorer {
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-inline-end: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-app .project-explorer-toolbar {
+  min-height: 2.75rem;
+  padding-inline: 0.75rem;
+  border-bottom-color: var(--sl-color-gray-5);
+  font-weight: 650;
+}
+
+.playground-app .project-explorer-toolbar button {
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.playground-app .project-explorer > ul {
+  padding: 0.45rem;
+}
+
+.playground-app .project-explorer li {
+  min-height: 2rem;
+}
+
+.playground-app .project-explorer .project-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  border-radius: 0.35rem;
+}
+
+.playground-app .project-file-open {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0.35rem 0.5rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.playground-app .project-file-row:hover,
+.playground-app .project-file-row:focus-within {
+  background: var(--sl-color-gray-6);
+}
+
+.playground-app .project-file-open[aria-current="page"] {
+  background: color-mix(in srgb, var(--sl-color-accent) 15%, transparent);
+  color: var(--sl-color-accent);
+  font-weight: 650;
+}
+
+.playground-app .project-file-actions {
+  display: flex;
+  gap: 0.1rem;
+  margin-inline-start: 0;
+  opacity: 0;
+}
+
+.playground-app .project-file-row:hover .project-file-actions,
+.playground-app .project-file-row:focus-within .project-file-actions {
+  opacity: 1;
+}
+
+.playground-app .project-file-actions button {
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+}
+
+.playground-app .playground-panels > [data-panel]:last-child {
+  display: flex;
+  flex-direction: column;
+}
+
+.playground-app .playground-result-panel {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.playground-app .playground-result-toolbar {
+  position: static;
+}
+
+.playground-app .playground-layout-toggle {
+  min-width: 2.6rem;
+  padding-inline: 0.4rem !important;
+  color: var(--sl-color-gray-2);
+}
+
+.playground-app .playground-statusbar {
+  display: flex;
+  min-height: 1.9rem;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-top: 1px solid var(--sl-color-gray-5);
+  color: var(--sl-color-gray-2);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.playground-app .playground-statusbar > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.playground-app .playground-statusbar .playground-status-ready {
+  color: var(--sl-color-green-high);
+}
+
+.playground-app .playground-statusbar .playground-status-loading {
+  color: var(--sl-color-orange-high);
+}
+
+.playground-app .playground-statusbar .playground-status-path {
+  min-width: 0;
+  margin-inline-start: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 48rem) {
+  .playground-app {
+    flex-direction: column;
+  }
+
+  .playground-site-nav {
+    width: 100%;
+    min-height: 3.25rem;
+    flex: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.15rem;
+    overflow-x: auto;
+    padding: 0.3rem 0.45rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--sl-color-gray-5);
+  }
+
+  .playground-site-nav a {
+    flex: 0 0 auto;
+    padding: 0.4rem 0.55rem;
+    white-space: nowrap;
+  }
+
+  .playground-site-nav .playground-site-brand {
+    margin: 0 0.35rem 0 0;
+  }
+
+  .playground-app > astro-island {
+    height: auto;
+    flex: 1 1 0;
+  }
+
+  .playground-app .playground {
+    padding: 0.5rem;
+  }
+
+  .playground-app .playground-panels {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .playground-app .playground-editor-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .playground-app .project-explorer {
+    max-height: 7rem;
+  }
+
+  .playground-app .playground-toolbar {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+
+  .playground-app .playground-primary-actions {
+    margin-inline-start: 0;
+  }
+
+  .playground-app .playground-statusbar {
+    gap: 0.5rem;
+    overflow-x: auto;
+  }
+
+  .playground-app .project-file-actions {
+    opacity: 1;
+  }
+}

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { parser as mclParser } from "@manifest-configuration-language/language";
 import { isValidProjectFileSet, isValidProjectPath, projectLimits } from "./projectValidation.js";
 import type { ProjectFile } from "./types";
 
@@ -11,9 +12,105 @@ export type PlaygroundProject = {
   totalBytes: number;
 };
 
-type ProjectMutation = { ok: true; project: PlaygroundProject } | { ok: false; error: string };
+export type ProjectMutation =
+  | { ok: true; project: PlaygroundProject }
+  | { ok: false; error: string };
 
 const encoder = new TextEncoder();
+
+type MclImport = { path: string; from: number; to: number };
+
+function parseMclImports(source: string, sourcePath: string): MclImport[] | string {
+  const cursor = mclParser.parse(source).cursor();
+  const imports: MclImport[] = [];
+  do {
+    if (cursor.name !== "ImportDeclaration") continue;
+    let literalRange: { from: number; to: number } | undefined;
+    let malformed = false;
+    if (cursor.firstChild()) {
+      do {
+        if ((cursor.name as string) === "QuotedString")
+          literalRange = { from: cursor.from, to: cursor.to };
+        if (cursor.type.isError) malformed = true;
+      } while (cursor.nextSibling());
+      cursor.parent();
+    }
+    if (!literalRange) {
+      if (malformed)
+        return `MCLのimportを解析できないため、ファイル名を変更できません: ${sourcePath}`;
+      continue;
+    }
+    const raw = source.slice(literalRange.from, literalRange.to);
+    if (raw.startsWith('"std:')) {
+      imports.push({ path: "std:", from: literalRange.from, to: literalRange.to });
+      continue;
+    }
+    let path: unknown;
+    try {
+      path = JSON.parse(raw);
+    } catch {
+      return `MCLのimportパスを解析できないため、ファイル名を変更できません: ${sourcePath}`;
+    }
+    if (typeof path !== "string")
+      return `MCLのimportパスを解析できないため、ファイル名を変更できません: ${sourcePath}`;
+    imports.push({ path, from: literalRange.from, to: literalRange.to });
+  } while (cursor.next());
+  return imports;
+}
+
+function resolveProjectImport(importerPath: string, importPath: string): string | undefined {
+  if (!importPath || importPath.startsWith("std:") || importPath.startsWith("/")) return undefined;
+  const segments = [...importerPath.split("/").slice(0, -1), ...importPath.split("/")];
+  const resolved: string[] = [];
+  for (const segment of segments) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      if (resolved.length === 0) return undefined;
+      resolved.pop();
+    } else {
+      resolved.push(segment);
+    }
+  }
+  return resolved.join("/");
+}
+
+function relativeProjectImport(importerPath: string, targetPath: string): string {
+  const importerDirectory = importerPath.split("/").slice(0, -1);
+  const targetSegments = targetPath.split("/");
+  let common = 0;
+  while (
+    common < importerDirectory.length &&
+    common < targetSegments.length &&
+    importerDirectory[common] === targetSegments[common]
+  )
+    common += 1;
+  return [
+    ...Array.from({ length: importerDirectory.length - common }, () => ".."),
+    ...targetSegments.slice(common),
+  ].join("/");
+}
+
+function mclSources(source: string, files: Record<string, ProjectFile>) {
+  return [
+    { path: "main.mcl", content: source },
+    ...Object.entries(files)
+      .filter(([path, file]) => path.endsWith(".mcl") && file.encoding === "utf8")
+      .map(([path, file]) => ({ path, content: file.encoding === "utf8" ? file.content : "" })),
+  ];
+}
+
+function replaceImportPaths(
+  source: string,
+  replacements: Array<{ from: number; to: number; path: string }>,
+) {
+  return replacements
+    .sort((left, right) => right.from - left.from)
+    .reduce(
+      (content, replacement) =>
+        `${content.slice(0, replacement.from)}${JSON.stringify(replacement.path)}${content.slice(replacement.to)}`,
+      source,
+    );
+}
 
 function fileSize(file: ProjectFile): number {
   return file.encoding === "utf8" ? encoder.encode(file.content).byteLength : file.bytes.byteLength;
@@ -56,32 +153,32 @@ export function usePlaygroundProject(initialSource: string) {
   );
 
   const setFileContent = useCallback(
-    (path: string, content: string) => {
+    (path: string, content: string): ProjectMutation => {
       const current = projectRef.current;
       const size = encoder.encode(content).byteLength;
       const previousSize = current.fileSizes[path] ?? 0;
+      const previous = current.files[path];
+      const totalBytes =
+        current.totalBytes - (path === "main.mcl" || previous ? previousSize : 0) + size;
+      if (totalBytes > projectLimits.projectBytes) {
+        return {
+          ok: false,
+          error: `プロジェクトの上限は${projectLimits.projectBytes / (1024 * 1024)} MiBです`,
+        };
+      }
       const fileSizes = Object.assign(Object.create(null), current.fileSizes) as Record<
         string,
         number
       >;
       fileSizes[path] = size;
       if (path === "main.mcl")
-        return commit({
-          source: content,
-          fileSizes,
-          totalBytes: current.totalBytes - previousSize + size,
-        });
-      const previous = current.files[path];
+        return { ok: true, project: commit({ source: content, fileSizes, totalBytes }) };
       const files = Object.assign(Object.create(null), current.files) as Record<
         string,
         ProjectFile
       >;
       files[path] = { encoding: "utf8", content };
-      return commit({
-        files,
-        fileSizes,
-        totalBytes: current.totalBytes - (previous ? previousSize : 0) + size,
-      });
+      return { ok: true, project: commit({ files, fileSizes, totalBytes }) };
     },
     [commit],
   );
@@ -142,17 +239,58 @@ export function usePlaygroundProject(initialSource: string) {
       >;
       files[nextPath] = files[path];
       delete files[path];
+      let source = current.source;
+      for (const mclSource of mclSources(current.source, current.files)) {
+        const imports = parseMclImports(mclSource.content, mclSource.path);
+        if (typeof imports === "string")
+          return {
+            ok: false,
+            error: `MCLのimportを確認できないため、ファイル名を変更できません: ${mclSource.path}`,
+          };
+        const nextImporterPath = mclSource.path === path ? nextPath : mclSource.path;
+        const replacements = imports.flatMap((entry) => {
+          const resolved = resolveProjectImport(mclSource.path, entry.path);
+          const targetPath =
+            resolved === path
+              ? nextPath
+              : mclSource.path === path &&
+                  resolved !== undefined &&
+                  (resolved === "main.mcl" || Object.hasOwn(current.files, resolved))
+                ? resolved
+                : undefined;
+          if (targetPath === undefined || entry.path.startsWith("std:")) return [];
+          const nextImportPath = relativeProjectImport(nextImporterPath, targetPath);
+          return nextImportPath === entry.path
+            ? []
+            : [{ from: entry.from, to: entry.to, path: nextImportPath }];
+        });
+        if (replacements.length === 0) continue;
+        const updated = replaceImportPaths(mclSource.content, replacements);
+        if (mclSource.path === "main.mcl") source = updated;
+        else {
+          const renamedSourcePath = mclSource.path === path ? nextPath : mclSource.path;
+          files[renamedSourcePath] = { encoding: "utf8", content: updated };
+        }
+      }
+      const nextSizes = projectFileSizes(source, files);
+      if (nextSizes.totalBytes > projectLimits.projectBytes)
+        return {
+          ok: false,
+          error: `プロジェクトの上限は${projectLimits.projectBytes / (1024 * 1024)} MiBです`,
+        };
       const fileSizes = Object.assign(Object.create(null), current.fileSizes) as Record<
         string,
         number
       >;
-      fileSizes[nextPath] = fileSizes[path];
       delete fileSizes[path];
+      Object.assign(fileSizes, nextSizes.fileSizes);
       return {
         ok: true,
         project: commit({
+          source,
           files,
           fileSizes,
+          totalBytes: nextSizes.totalBytes,
           activePath: current.activePath === path ? nextPath : current.activePath,
         }),
       };
@@ -165,6 +303,20 @@ export function usePlaygroundProject(initialSource: string) {
       const current = projectRef.current;
       if (path === "main.mcl" || !Object.hasOwn(current.files, path))
         return { ok: false, error: "ファイルが見つかりません" };
+      for (const mclSource of mclSources(current.source, current.files)) {
+        if (mclSource.path === path) continue;
+        const imports = parseMclImports(mclSource.content, mclSource.path);
+        if (typeof imports === "string")
+          return {
+            ok: false,
+            error: `MCLのimportを確認できないため、ファイルを削除できません: ${mclSource.path}`,
+          };
+        if (imports.some((entry) => resolveProjectImport(mclSource.path, entry.path) === path))
+          return {
+            ok: false,
+            error: `MCLからimportされているため、ファイルを削除できません: ${path}`,
+          };
+      }
       const files = Object.assign(Object.create(null), current.files) as Record<
         string,
         ProjectFile

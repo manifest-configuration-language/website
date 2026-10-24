@@ -61,7 +61,7 @@ export function PlaygroundResult({
           EditorView.theme({ ".cm-content, .cm-gutters": { fontSize: `${fontSize}px` } }),
           keymap.of([...searchKeymap, ...foldKeymap]),
           EditorView.contentAttributes.of({ "aria-label": "YAML結果" }),
-          ...(sourceMap?.complete
+          ...(sourceMap
             ? [
                 EditorView.domEventHandlers({
                   click(event, editor) {
@@ -174,10 +174,10 @@ export function PlaygroundResult({
         </ul>
       )}
       {!showProblems && !showDiff && staleYaml !== undefined && (
-        <section aria-label="前回の結果">
-          <p>前回の結果</p>
+        <section className="playground-result-content" aria-label="前回の結果">
           <div className="playground-yaml-toolbar">
-            <span>前回のYAML</span>
+            <span>前回の結果</span>
+            <span className="playground-result-stale">古い結果</span>
             <button
               type="button"
               onClick={() => outputEditor.current && openSearchPanel(outputEditor.current)}
@@ -190,9 +190,10 @@ export function PlaygroundResult({
         </section>
       )}
       {!showProblems && !showDiff && reply?.ok && (
-        <>
+        <section className="playground-result-content" aria-label="YAML出力">
           <div className="playground-yaml-toolbar">
-            <span>生成されたYAML</span>
+            <span>YAML</span>
+            <span className="playground-result-status">最新</span>
             <button
               type="button"
               onClick={() => outputEditor.current && openSearchPanel(outputEditor.current)}
@@ -202,8 +203,27 @@ export function PlaygroundResult({
           </div>
           <YamlNavigation text={currentYaml ?? ""} onSelect={goToDocument} />
           <div className="playground-output" aria-label="レンダリング結果" ref={outputHost} />
-        </>
+        </section>
       )}
+      {!showProblems &&
+        !showDiff &&
+        staleYaml === undefined &&
+        !reply?.ok &&
+        (reply?.error ? (
+          <div className="playground-result-empty" role="status">
+            <span className="playground-result-empty-icon" aria-hidden="true">
+              !
+            </span>
+            <span>{reply.error.message}</span>
+          </div>
+        ) : (
+          <div className="playground-result-empty" role="status">
+            <span className="playground-result-empty-icon" aria-hidden="true">
+              ▷
+            </span>
+            <span>実行結果はここに表示されます</span>
+          </div>
+        ))}
       {!showProblems && showDiff && canShowDiff && (
         <section className="playground-diff" aria-label="YAML差分">
           <div className="playground-diff-labels">

@@ -1,0 +1,89 @@
+.playground-project-files {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 17rem;
+}
+
+.playground-project-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.playground-project-file-actions button {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.playground-project-file-actions button:hover:not(:disabled) {
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-text-accent);
+}
+
+.playground-project-file-picker {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+.playground-project-dropzone {
+  display: flex;
+  min-height: 4.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  border: 1px dashed var(--sl-color-gray-5);
+  border-radius: 0.45rem;
+  color: var(--sl-color-gray-2);
+  font-size: 0.84rem;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.playground-project-dropzone.is-dragging {
+  border-color: var(--sl-color-accent);
+  background: var(--sl-color-gray-6);
+  color: var(--sl-color-text-accent);
+}
+
+.playground-project-dropzone-icon {
+  display: grid;
+  width: 1.7rem;
+  height: 1.7rem;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 1rem;
+}
+
+.playground-project-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  color: var(--sl-color-gray-2);
+  font-size: 0.78rem;
+}
+
+.playground-project-summary strong {
+  color: var(--sl-color-text);
+  font-weight: 600;
+}
+
+@media (max-width: 30rem) {
+  .playground-project-file-actions > button {
+    flex: 1 1 auto;
+  }
+}

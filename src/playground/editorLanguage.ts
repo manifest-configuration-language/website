@@ -37,16 +37,16 @@ const starterCompletions = [
   {
     trigger: "let",
     completion: snippetCompletion("let ${1:name} = ${0:null}", {
-      label: "let declaration",
-      detail: "MCL snippet",
+      label: "let宣言",
+      detail: "MCLスニペット",
       type: "keyword",
     }),
   },
   {
     trigger: "emit",
     completion: snippetCompletion("emit ${0:resource}", {
-      label: "emit statement",
-      detail: "MCL snippet",
+      label: "emit文",
+      detail: "MCLスニペット",
       type: "keyword",
     }),
   },
@@ -55,8 +55,8 @@ const starterCompletions = [
     completion: snippetCompletion(
       'node:\n  apiVersion: "${1:v1}"\n  kind: "${2:ConfigMap}"\n  metadata:\n    name: "${3:resource-name}"\n  data:\n    ${4:key}: "${5:value}"\n$0',
       {
-        label: "node: ConfigMap resource",
-        detail: "MCL snippet",
+        label: "ConfigMapリソース",
+        detail: "MCLスニペット",
         type: "keyword",
       },
     ),

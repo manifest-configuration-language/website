@@ -6,11 +6,18 @@ import {
   indentUnit,
   syntaxHighlighting,
 } from "@codemirror/language";
-import { setDiagnostics, lintGutter, previousDiagnostic, type Diagnostic } from "@codemirror/lint";
+import {
+  setDiagnostics,
+  lintGutter,
+  nextDiagnostic,
+  previousDiagnostic,
+  type Diagnostic,
+} from "@codemirror/lint";
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
 import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
 import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
 import { history } from "@codemirror/commands";
+import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { vim } from "@replit/codemirror-vim";
 import { yaml } from "@codemirror/lang-yaml";
@@ -255,6 +262,8 @@ export function MclEditor({
         drawSelection(),
         EditorView.contentAttributes.of({ "aria-label": `${path}の内容` }),
         history(),
+        search(),
+        highlightSelectionMatches(),
         bracketMatching(),
         foldGutter(),
         languageMode.current.of(languageForPath(path)),
@@ -336,8 +345,10 @@ export function MclEditor({
               return true;
             },
           },
+          { key: "F8", run: nextDiagnostic },
           { key: "Shift-F8", run: previousDiagnostic },
           languageServices.definitionKeyBinding,
+          ...searchKeymap,
           ...vscodeKeymap,
         ]),
         languageServices.definitionMouseHandler,

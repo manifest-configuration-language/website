@@ -1,7 +1,12 @@
+import {
+  maxProjectBytes,
+  maxProjectFiles,
+} from "@manifest-configuration-language/browser";
+import { isValidProjectPath } from "./projectValidation.js";
 import type { ProjectFile } from "./types";
 
-const maxSharedBytes = 32 * 1024 * 1024;
-const maxSharedFiles = 4096;
+const maxSharedBytes = Math.min(maxProjectBytes, 32 * 1024 * 1024);
+const maxSharedFiles = maxProjectFiles - 1;
 const maxFragmentBytes = 2 * 1024 * 1024;
 const maxSerializedBytes = Math.ceil(maxSharedBytes * 4 / 3) + 1024 * 1024;
 
@@ -23,11 +28,6 @@ function decodeBase64Url(value: string): Uint8Array {
   const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
   const binary = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
-}
-
-function validPath(path: string): boolean {
-  return path.length > 0 && !path.startsWith("/") && !path.includes("\\") &&
-    !path.includes("\0") && path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
 
 async function transform(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
@@ -52,7 +52,7 @@ function serialize(project: SharedProject): Uint8Array {
   if (totalBytes > maxSharedBytes) throw new Error("Project is too large to share");
   const files: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
   for (const [path, file] of entries) {
-    if (!validPath(path) || path === "main.mcl") throw new Error("Invalid project file path");
+    if (!isValidProjectPath(path) || path === "main.mcl") throw new Error("Invalid project file path");
     if (file?.encoding === "utf8" && typeof file.content === "string") {
       totalBytes += new TextEncoder().encode(file.content).byteLength;
       files[path] = { encoding: "utf8", content: file.content };
@@ -67,7 +67,7 @@ function serialize(project: SharedProject): Uint8Array {
   data.source = project.source;
   data.files = files;
   if (project.activePath !== undefined) {
-    if (!validPath(project.activePath) || !project.activePath.endsWith(".mcl") || project.activePath !== "main.mcl" && !Object.hasOwn(project.files, project.activePath)) {
+    if (!isValidProjectPath(project.activePath) || !project.activePath.endsWith(".mcl") || project.activePath !== "main.mcl" && !Object.hasOwn(project.files, project.activePath)) {
       throw new Error("Invalid active project path");
     }
     data.activePath = project.activePath;
@@ -120,7 +120,7 @@ export async function decodeSharedProject(fragment: string): Promise<SharedProje
     if (typeof record.source !== "string" || !record.files || typeof record.files !== "object" || Array.isArray(record.files)) {
       throw new Error("Invalid project");
     }
-    if (record.activePath !== undefined && (typeof record.activePath !== "string" || !validPath(record.activePath) || !record.activePath.endsWith(".mcl"))) {
+    if (record.activePath !== undefined && (typeof record.activePath !== "string" || !isValidProjectPath(record.activePath) || !record.activePath.endsWith(".mcl"))) {
       throw new Error("Invalid active project path");
     }
     const entries = Object.entries(record.files as Record<string, unknown>);
@@ -129,7 +129,7 @@ export async function decodeSharedProject(fragment: string): Promise<SharedProje
     let totalBytes = new TextEncoder().encode(record.source).byteLength;
     if (totalBytes > maxSharedBytes) throw new Error("Project is too large");
     for (const [path, item] of entries) {
-      if (!validPath(path) || path === "main.mcl" || !item || typeof item !== "object") throw new Error("Invalid project file path");
+      if (!isValidProjectPath(path) || path === "main.mcl" || !item || typeof item !== "object") throw new Error("Invalid project file path");
       const file = item as Record<string, unknown>;
       if (file.encoding === "utf8" && typeof file.content === "string") {
         totalBytes += new TextEncoder().encode(file.content).byteLength;

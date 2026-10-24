@@ -17,8 +17,8 @@
     "@codemirror/search": "6.6.0",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.15",
-    "@manifest-configuration-language/browser": "0.1.5",
-    "@manifest-configuration-language/language": "0.1.5",
+    "@manifest-configuration-language/browser": "0.1.6",
+    "@manifest-configuration-language/language": "0.1.6",
     "@replit/codemirror-vim": "6.4.0",
     "@zip.js/zip.js": "2.24.0",
     "idb-keyval": "6.3.0",
@@ -32,7 +32,6 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "astro": "7.2.10",
-    "tar": "7.5.22",
     "typescript": "6.0.2"
   },
   "engines": {

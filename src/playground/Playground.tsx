@@ -85,6 +85,7 @@ export default function Playground() {
   const startupReady = useRef(false);
   const applyingSample = useRef(false);
   const [reply, setReply] = useState<PlaygroundReply>();
+  const [staleYaml, setStaleYaml] = useState<string>();
   const [previousYaml, setPreviousYaml] = useState<string>();
   const [showDiff, setShowDiff] = useState(false);
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(defaultEditorSettings);
@@ -116,6 +117,12 @@ export default function Playground() {
     ? sourceRef.current
     : projectFiles[activePath]?.encoding === "utf8" ? projectFiles[activePath].content : "";
 
+  function languageServiceFiles(): Record<string, ProjectFile> {
+    const files = Object.assign(Object.create(null), projectFilesRef.current) as Record<string, ProjectFile>;
+    files["main.mcl"] = { encoding: "utf8", content: sourceRef.current };
+    return files;
+  }
+
   const scheduleLint = useCallback((source: string, currentRevision: number) => {
     if (lintTimer.current) clearTimeout(lintTimer.current);
     lintTimer.current = setTimeout(async () => {
@@ -124,7 +131,13 @@ export default function Playground() {
         setWasmReady(true);
         const currentDiagnostics = result.ok ? result.diagnostics ?? [] : result.error ? [result.error] : [];
         setDiagnostics(currentDiagnostics);
-        setReply((previous) => previous ? { ...previous, diagnostics: currentDiagnostics } : previous);
+        setReply((previous) => ({
+          ...(previous ?? { requestId: currentRevision, revision: currentRevision, ok: false }),
+          ok: false,
+          result: undefined,
+          error: undefined,
+          diagnostics: currentDiagnostics,
+        }));
       }
     }, 400);
   }, []);
@@ -133,6 +146,10 @@ export default function Playground() {
     if (!applyingSample.current) setSample("custom");
     sourceRef.current = project.source;
     projectFilesRef.current = project.files;
+    latestYaml.current = undefined;
+    setStaleYaml(undefined);
+    setPreviousYaml(undefined);
+    setShowDiff(false);
     const requestedPath = project.activePath;
     const nextPath = requestedPath && requestedPath.endsWith(".mcl") && project.files[requestedPath]?.encoding === "utf8"
       ? requestedPath
@@ -146,6 +163,7 @@ export default function Playground() {
     setError("");
     const currentRevision = ++revision.current;
     setDiagnostics([]);
+    setReply(undefined);
     setContentRevision((value) => value + 1);
     if (startupReady.current) scheduleLint(project.source, currentRevision);
   }, [scheduleLint]);
@@ -255,6 +273,9 @@ export default function Playground() {
     const currentRevision = ++revision.current;
     setContentRevision((value) => value + 1);
     setDiagnostics([]);
+    setStaleYaml(latestYaml.current);
+    setShowDiff(false);
+    setReply((previous) => previous ? { ...previous, ok: false, result: undefined, error: undefined, diagnostics: [] } : previous);
     setError("");
     setBusy(false);
     if (startupReady.current) scheduleLint(sourceRef.current, currentRevision);
@@ -274,6 +295,7 @@ export default function Playground() {
         if (yaml !== undefined) {
           setPreviousYaml(latestYaml.current);
           latestYaml.current = yaml;
+          setStaleYaml(undefined);
           setShowDiff(false);
         }
         setReply(result);
@@ -361,8 +383,8 @@ export default function Playground() {
   }
 
   async function copyOutput() {
-    const yaml = reply?.result?.yaml;
-    if (!yaml) return;
+    const yaml = staleYaml ?? reply?.result?.yaml;
+    if (yaml === undefined) return;
     try {
       await navigator.clipboard.writeText(yaml);
       setError("YAMLをコピーしました");
@@ -372,8 +394,8 @@ export default function Playground() {
   }
 
   function downloadOutput() {
-    const yaml = reply?.result?.yaml;
-    if (!yaml) return;
+    const yaml = staleYaml ?? reply?.result?.yaml;
+    if (yaml === undefined) return;
     const url = URL.createObjectURL(new Blob([yaml], { type: "application/yaml;charset=utf-8" }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -498,9 +520,9 @@ export default function Playground() {
             diagnostics={diagnostics}
             onRun={() => void run()}
             onFormat={() => void formatSource()}
-            onComplete={(path, position) => client.current?.complete(sourceForPath(path), path, position, projectFilesRef.current) ?? Promise.resolve([])}
-            onDefinition={(path, position) => client.current?.definition(sourceForPath(path), path, position, projectFilesRef.current) ?? Promise.resolve(null)}
-            onHover={(path, position) => client.current?.hover(sourceForPath(path), path, position, projectFilesRef.current) ?? Promise.resolve(null)}
+            onComplete={(path, position) => client.current?.complete(sourceForPath(path), path, position, languageServiceFiles()) ?? Promise.resolve([])}
+            onDefinition={(path, position) => client.current?.definition(sourceForPath(path), path, position, languageServiceFiles()) ?? Promise.resolve(null)}
+            onHover={(path, position) => client.current?.hover(sourceForPath(path), path, position, languageServiceFiles()) ?? Promise.resolve(null)}
             onNavigate={navigateToDefinition}
           />
         </Panel>
@@ -509,11 +531,11 @@ export default function Playground() {
           <div className="playground-result-panel">
             <div className="playground-result-toolbar">
               <span>YAML</span>
-              <button type="button" onClick={() => setShowDiff((value) => !value)} disabled={previousYaml === undefined || previousYaml === reply?.result?.yaml} aria-pressed={showDiff}>差分</button>
-              <button type="button" onClick={() => void copyOutput()} disabled={!reply?.result?.yaml}>コピー</button>
-              <button type="button" onClick={downloadOutput} disabled={!reply?.result?.yaml}>ダウンロード</button>
+              <button type="button" onClick={() => setShowDiff((value) => !value)} disabled={!reply?.ok || previousYaml === undefined || previousYaml === reply.result?.yaml} aria-pressed={showDiff}>差分</button>
+              <button type="button" onClick={() => void copyOutput()} disabled={staleYaml === undefined && reply?.result?.yaml === undefined}>コピー</button>
+              <button type="button" onClick={downloadOutput} disabled={staleYaml === undefined && reply?.result?.yaml === undefined}>ダウンロード</button>
             </div>
-            <PlaygroundResult reply={reply} previousYaml={previousYaml} showDiff={showDiff} onDiagnostic={goToDiagnostic} />
+            <PlaygroundResult reply={reply} staleYaml={staleYaml} previousYaml={previousYaml} showDiff={showDiff} onDiagnostic={goToDiagnostic} />
           </div>
         </Panel>
       </Group>

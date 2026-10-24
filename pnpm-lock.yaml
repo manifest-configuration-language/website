@@ -194,11 +194,11 @@ importers:
         specifier: 6.43.15
         version: 6.43.15
       '@manifest-configuration-language/browser':
-        specifier: 0.1.5
-        version: 0.1.5
+        specifier: 0.1.6
+        version: 0.1.6
       '@manifest-configuration-language/language':
-        specifier: 0.1.5
-        version: 0.1.5(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
+        specifier: 0.1.6
+        version: 0.1.6(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
       '@replit/codemirror-vim':
         specifier: 6.4.0
         version: 6.4.0(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/search@6.6.0)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
@@ -233,9 +233,6 @@ importers:
       astro:
         specifier: 7.2.10
         version: 7.2.10(@astrojs/markdown-remark@7.3.3)(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.3)(@types/node@24.19.2)(idb-keyval@6.3.0)(yaml@2.9.1)
-      tar:
-        specifier: 7.5.22
-        version: 7.5.22
       typescript:
         specifier: 6.0.2
         version: 6.0.2
@@ -827,10 +824,6 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@isaacs/fs-minipass@4.0.1':
-    resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
-    engines: {node: '>=18.0.0'}
-
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
 
@@ -843,12 +836,12 @@ packages:
   '@lezer/lr@1.4.11':
     resolution: {integrity: sha512-UwgZcl1R66H2hDzBrA7kWyYmX6s8p5TQ+e/t7CuvgCtBEPxbEPaHYHu+pJBvTvDotEJpuQkJjbXuHiw5Cixxgw==}
 
-  '@manifest-configuration-language/browser@0.1.5':
-    resolution: {integrity: sha512-FnsdSgBngpXoRYIqkXJcM4YJR4QbzVGPjpvx5aRWDV2pGqf4HbPGx/JPoMZxFEd6QFPIEDoKk/GRhEa2zFj67A==}
+  '@manifest-configuration-language/browser@0.1.6':
+    resolution: {integrity: sha512-WJz8dh6qg4oN/uzfeHkGF66hGXQ5643Jk6Voy+gzaysY1D0uAMU+vdhcfpYyz6GSCOzjbqT21cObUdDG8ZN2dw==}
     engines: {node: '>=20.19'}
 
-  '@manifest-configuration-language/language@0.1.5':
-    resolution: {integrity: sha512-A6v7GVRwsxAshZTuaX4oZXXAZS3dN9MjP6UeDjCTyPU6XeWQueV1C95b9WKd7V/T+xnQkakmvzTs9FUthGTBlw==}
+  '@manifest-configuration-language/language@0.1.6':
+    resolution: {integrity: sha512-18yLMWNSI2KWiBlLMKiEjQLdKIYx7EqKy7l6tirO7y75NkYDf558rXzSs83bz78B6eQT1n/F8NHGv5p9njbd/g==}
     peerDependencies:
       '@codemirror/autocomplete': '>=6 <7'
       '@codemirror/language': '>=6 <7'
@@ -1211,10 +1204,6 @@ packages:
   chokidar@5.0.0:
     resolution: {integrity: sha512-TQMmc3w+5AxjpL8iIiwebF73dRDF4fBIieAqGn9RGCWaEVwQ6Fb2cGe31Yns0RRIzii5goJ1Y7xbMwo1TxMplw==}
     engines: {node: '>= 20.19.0'}
-
-  chownr@3.0.0:
-    resolution: {integrity: sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==}
-    engines: {node: '>=18'}
 
   ci-info@4.4.0:
     resolution: {integrity: sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg==}
@@ -1835,14 +1824,6 @@ packages:
   micromark@4.0.3:
     resolution: {integrity: sha512-oGYfQzHSG5dOMovQcJ3fyTmZlWAWpi0XA0sJwJs+i6OT88o1+Jtw/8z0CmdowSLxGhhFK89rQ/oXph/wN02PNw==}
 
-  minipass@7.1.3:
-    resolution: {integrity: sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==}
-    engines: {node: '>=16 || 14 >=14.17'}
-
-  minizlib@3.1.0:
-    resolution: {integrity: sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==}
-    engines: {node: '>= 18'}
-
   mrmime@2.0.1:
     resolution: {integrity: sha512-Y3wQdFg2Va6etvQ5I82yUhGdsKrcYox6p7FfL1LbK2J4V01F9TGlepTIhnK24t7koZibmg82KGglhA1XK5IsLQ==}
     engines: {node: '>=10'}
@@ -2129,10 +2110,6 @@ packages:
     engines: {node: '>=16'}
     hasBin: true
 
-  tar@7.5.22:
-    resolution: {integrity: sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==}
-    engines: {node: '>=18'}
-
   tiny-inflate@1.0.3:
     resolution: {integrity: sha512-pkY1fj1cKHb2seWDy0B16HeWyczlJA9/WW3u3c4z/NiWDsO3DOU5D7nhTLE9CF0yXv/QZFY7sEJmj24dK+Rrqw==}
 
@@ -2351,10 +2328,6 @@ packages:
 
   xxhash-wasm@1.1.0:
     resolution: {integrity: sha512-147y/6YNh+tlp6nd/2pWq38i9h6mz/EuQ6njIrmW8D1BS5nCqs0P6DG+m6zTGnNz5I+uhZ0SHxBs9BsPrwcKDA==}
-
-  yallist@5.0.0:
-    resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
-    engines: {node: '>=18'}
 
   yaml@2.9.1:
     resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
@@ -2942,10 +2915,6 @@ snapshots:
   '@img/sharp-win32-x64@0.35.5':
     optional: true
 
-  '@isaacs/fs-minipass@4.0.1':
-    dependencies:
-      minipass: 7.1.3
-
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
   '@lezer/common@1.5.3': {}
@@ -2958,9 +2927,9 @@ snapshots:
     dependencies:
       '@lezer/common': 1.5.3
 
-  '@manifest-configuration-language/browser@0.1.5': {}
+  '@manifest-configuration-language/browser@0.1.6': {}
 
-  '@manifest-configuration-language/language@0.1.5(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
+  '@manifest-configuration-language/language@0.1.6(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
     dependencies:
       '@codemirror/autocomplete': 6.20.4
       '@codemirror/language': 6.13.1
@@ -3358,8 +3327,6 @@ snapshots:
   chokidar@5.0.0:
     dependencies:
       readdirp: 5.1.1
-
-  chownr@3.0.0: {}
 
   ci-info@4.4.0: {}
 
@@ -4419,12 +4386,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  minipass@7.1.3: {}
-
-  minizlib@3.1.0:
-    dependencies:
-      minipass: 7.1.3
-
   mrmime@2.0.1: {}
 
   ms@2.1.3: {}
@@ -4859,14 +4820,6 @@ snapshots:
       picocolors: 1.1.1
       sax: 1.6.1
 
-  tar@7.5.22:
-    dependencies:
-      '@isaacs/fs-minipass': 4.0.1
-      chownr: 3.0.0
-      minipass: 7.1.3
-      minizlib: 3.1.0
-      yallist: 5.0.0
-
   tiny-inflate@1.0.3: {}
 
   tinyclip@0.1.15: {}
@@ -5019,8 +4972,6 @@ snapshots:
     optional: true
 
   xxhash-wasm@1.1.0: {}
-
-  yallist@5.0.0: {}
 
   yaml@2.9.1: {}
 

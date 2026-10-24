@@ -3,7 +3,7 @@
   "extends": ["local>walnuts1018/renovate-config"],
   "packageRules": [
     {
-      "description": "Update the MCL browser and language packages together",
+      "description": "Update the MCL JavaScript packages together",
       "matchPackageNames": [
         "@manifest-configuration-language/browser",
         "@manifest-configuration-language/language"

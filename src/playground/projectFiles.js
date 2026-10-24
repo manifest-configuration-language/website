@@ -1,15 +1,6 @@
-import { projectLimits } from "./projectValidation.js";
+import { isValidProjectPath, projectLimits } from "./projectValidation.js";
 
-const maxProjectPathLength = 512;
-const maxProjectPathDepth = 64;
-
-export function isValidProjectPath(path) {
-  return path.length <= maxProjectPathLength &&
-    path.split("/").length <= maxProjectPathDepth &&
-    path.length > 0 && !path.startsWith("/") && !path.includes("\\") &&
-    !path.includes("\0") &&
-    path.split("/").every((part) => part !== "" && part !== "." && part !== "..");
-}
+export { isValidProjectPath };
 
 const textExtensions = new Set([
   "mcl",

@@ -6,12 +6,13 @@ import type { PlaygroundDiagnostic, PlaygroundReply } from "./types";
 
 type Props = {
   reply?: PlaygroundReply;
+  staleYaml?: string;
   previousYaml?: string;
   showDiff: boolean;
   onDiagnostic: (diagnostic: PlaygroundDiagnostic) => void;
 };
 
-export function PlaygroundResult({ reply, previousYaml, showDiff, onDiagnostic }: Props) {
+export function PlaygroundResult({ reply, staleYaml, previousYaml, showDiff, onDiagnostic }: Props) {
   const diffHost = useRef<HTMLDivElement>(null);
   const currentYaml = reply?.ok ? reply.result?.yaml : undefined;
   const canShowDiff = previousYaml !== undefined && currentYaml !== undefined && previousYaml !== currentYaml;
@@ -65,6 +66,14 @@ export function PlaygroundResult({ reply, previousYaml, showDiff, onDiagnostic }
             </li>
           ))}
         </ul>
+      )}
+      {staleYaml !== undefined && (
+        <section aria-label="前回の結果">
+          <p>前回の結果</p>
+          <pre className="playground-output" aria-label="前回のYAML結果">
+            <code>{staleYaml}</code>
+          </pre>
+        </section>
       )}
       {reply?.ok && (
         <pre className="playground-output" aria-label="レンダリング結果">

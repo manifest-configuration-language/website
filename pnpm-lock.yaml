@@ -200,11 +200,11 @@ importers:
         specifier: 6.43.15
         version: 6.43.15
       '@manifest-configuration-language/browser':
-        specifier: 0.3.2
-        version: 0.3.2
+        specifier: 0.3.6
+        version: 0.3.6
       '@manifest-configuration-language/language':
-        specifier: 0.3.2
-        version: 0.3.2(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
+        specifier: 0.3.6
+        version: 0.3.6(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
       '@replit/codemirror-vim':
         specifier: 6.4.0
         version: 6.4.0(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/search@6.6.0)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
@@ -924,12 +924,12 @@ packages:
   '@lezer/yaml@1.0.4':
     resolution: {integrity: sha512-2lrrHqxalACEbxIbsjhqGpSW8kWpUKuY6RHgnSAFZa6qK62wvnPxA8hGOwOoDbwHcOFs5M4o27mjGu+P7TvBmw==}
 
-  '@manifest-configuration-language/browser@0.3.2':
-    resolution: {integrity: sha512-4K7gxXt8rakhZSecngwFJSRfSWJcDmz9dasW8JjUCi7vQlM1ThGpuNE1gPXHIQSYCloD2MEhxdZ+92MkQ9EHZA==}
+  '@manifest-configuration-language/browser@0.3.6':
+    resolution: {integrity: sha512-y9fdo2DTKO/MdkQapmEdioubAn5Itc1nS/Htd3r0d2xqZgzkLpRcEaqb6hNxh22tDS2U3ElkV/bfcT7ZeYEtmw==}
     engines: {node: '>=20.19'}
 
-  '@manifest-configuration-language/language@0.3.2':
-    resolution: {integrity: sha512-JybhfhNzEf9ZjW5rquIOIy2BBjq/CCNGuhPdI8xO5Bic8Dcxgjk6zkM+qkLqVeGQrdR5Nc8RjJ6kT4n/49Sjgg==}
+  '@manifest-configuration-language/language@0.3.6':
+    resolution: {integrity: sha512-c0USS/Zn2yYFhO8BuGnhgJOWILtcs9q8N0MsCI8Ssh2qnCe4piqPvkYhjNIEdxvvfcEFdw2RyOCH2RpYBTVk3Q==}
     peerDependencies:
       '@codemirror/autocomplete': '>=6 <7'
       '@codemirror/language': '>=6 <7'
@@ -2540,6 +2540,10 @@ packages:
     resolution: {integrity: sha512-SKgVvDU5TNIxQ4r30U75BNLC6a+6GOEjngrk/ysM5+Zu3oJuk1SC5ApzIzY/7PjCEjoVPMWJ0zho/4QUiEB7TQ==}
     engines: {node: '>=20'}
 
+  p-queue@9.1.2:
+    resolution: {integrity: sha512-ktsDOALzTYTWWF1PbkNVg2rOt+HaOaMWJMUnt7T3qf5tvZ1L8dBW3tObzprBcXNMKkwj+yFSLqHso0x+UFcJXw==}
+    engines: {node: '>=20'}
+
   p-queue@9.3.5:
     resolution: {integrity: sha512-Lki/zhXFVmDhesBUn/yHRLW9Bte7mE7xoFHzTR8sIomV7a2z+LxYAPkGvdfidNiu4fKSfjtawixxSHcZci5QcQ==}
     engines: {node: '>=20'}
@@ -3916,9 +3920,11 @@ snapshots:
       '@lezer/highlight': 1.2.5
       '@lezer/lr': 1.4.11
 
-  '@manifest-configuration-language/browser@0.3.2': {}
+  '@manifest-configuration-language/browser@0.3.6':
+    dependencies:
+      p-queue: 9.1.2
 
-  '@manifest-configuration-language/language@0.3.2(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
+  '@manifest-configuration-language/language@0.3.6(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
     dependencies:
       '@codemirror/autocomplete': 6.20.4
       '@codemirror/language': 6.13.1
@@ -5858,6 +5864,11 @@ snapshots:
   p-limit@7.3.3:
     dependencies:
       yocto-queue: 1.2.2
+
+  p-queue@9.1.2:
+    dependencies:
+      eventemitter3: 5.0.4
+      p-timeout: 7.0.2
 
   p-queue@9.3.5:
     dependencies:

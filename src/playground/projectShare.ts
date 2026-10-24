@@ -4,7 +4,8 @@ import type { ProjectFile } from "./types";
 
 const maxSharedBytes = Math.min(maxProjectBytes, 32 * 1024 * 1024);
 const maxSharedFiles = maxProjectFiles - 1;
-const maxFragmentBytes = 2 * 1024 * 1024;
+const maxFragmentLength = 2 * 1024 * 1024;
+const projectFragmentPrefix = "project=";
 const maxSerializedBytes = Math.ceil((maxSharedBytes * 4) / 3) + 1024 * 1024;
 
 type SharedProject = { source: string; files: Record<string, ProjectFile>; activePath?: string };
@@ -81,19 +82,25 @@ function serialize(project: SharedProject): Uint8Array {
 
 export async function encodeSharedProject(project: SharedProject): Promise<string> {
   if (typeof CompressionStream === "undefined") throw new Error("Compression is unavailable");
-  const compressed = await transform(serialize(project), new CompressionStream("gzip"));
+  const serialized = serialize(project);
+  if (serialized.byteLength > maxSerializedBytes)
+    throw new Error("Project serialization exceeds the share size limit");
+  const compressed = await transform(serialized, new CompressionStream("gzip"));
   const encoded = encodeBase64Url(compressed);
-  if (encoded.length > maxFragmentBytes) throw new Error("Project is too large to share in a URL");
-  return `#project=${encoded}`;
+  const value = `${projectFragmentPrefix}${encoded}`;
+  const fragment = `#${value}`;
+  if (fragment.length > maxFragmentLength) throw new Error("Project URL fragment exceeds 2 MiB");
+  return fragment;
 }
 
 export async function decodeSharedProject(fragment: string): Promise<SharedProject | undefined> {
   try {
     if (typeof DecompressionStream === "undefined") throw new Error("Compression is unavailable");
+    const fragmentLength = fragment.length + (fragment.startsWith("#") ? 0 : 1);
+    if (fragmentLength > maxFragmentLength) throw new Error("Project URL fragment exceeds 2 MiB");
     const value = fragment.startsWith("#") ? fragment.slice(1) : fragment;
-    if (!value.startsWith("project=")) return undefined;
-    const encoded = value.slice("project=".length);
-    if (encoded.length > maxFragmentBytes) throw new Error("Shared project is too large");
+    if (!value.startsWith(projectFragmentPrefix)) return undefined;
+    const encoded = value.slice(projectFragmentPrefix.length);
     const compressed = decodeBase64Url(encoded);
     const stream = new DecompressionStream("gzip");
     const writer = stream.writable.getWriter();
@@ -171,7 +178,7 @@ export async function decodeSharedProject(fragment: string): Promise<SharedProje
   } catch (error) {
     if (
       error instanceof Error &&
-      /too large|too many files|Compression is unavailable/.test(error.message)
+      /too large|too many files|Compression is unavailable|URL fragment exceeds/.test(error.message)
     )
       throw error;
     throw new Error("Invalid shared project");

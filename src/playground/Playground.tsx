@@ -9,6 +9,7 @@ import {
   type SyntheticEvent,
 } from "react";
 import type { EditorView } from "@codemirror/view";
+import { selectNextOccurrence, selectSelectionMatches } from "@codemirror/search";
 import { createPlaygroundClient } from "./apiClient";
 import {
   MclEditor,
@@ -487,6 +488,24 @@ export default function Playground() {
   const commands = [
     { name: "実行", action: () => void run() },
     { name: "整形", action: () => void formatSource() },
+    {
+      name: "次の一致を選択",
+      action: () => {
+        const view = editor.current;
+        if (!view) return;
+        view.focus();
+        selectNextOccurrence(view);
+      },
+    },
+    {
+      name: "すべての一致を選択",
+      action: () => {
+        const view = editor.current;
+        if (!view) return;
+        view.focus();
+        selectSelectionMatches(view);
+      },
+    },
     { name: "サンプルを開く", action: () => setExamplesOpen(true) },
     ...(activePath.endsWith(".mcl")
       ? [{ name: "定義へ移動", action: () => void goToDefinitionAtCursor() }]
@@ -538,6 +557,8 @@ export default function Playground() {
   const commandShortcuts: Record<string, string> = {
     実行: "Ctrl/⌘ Enter",
     整形: "Shift+Alt+F",
+    次の一致を選択: "Ctrl/⌘ D",
+    すべての一致を選択: "Ctrl/⌘ ⇧ L",
     定義へ移動: "F12",
     参照箇所を検索: "Shift+F12",
     シンボル名を変更: "F2",
@@ -546,6 +567,8 @@ export default function Playground() {
   const commandKeywords: Record<string, string[]> = {
     実行: ["run", "render"],
     整形: ["format", "document"],
+    次の一致を選択: ["select next occurrence", "multi cursor", "ctrl d"],
+    すべての一致を選択: ["select all occurrences", "multi cursor", "ctrl shift l"],
     サンプルを開く: ["examples"],
     定義へ移動: ["definition", "f12"],
     YAMLの対応箇所へ移動: ["source map", "yaml"],

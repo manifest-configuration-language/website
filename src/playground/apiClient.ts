@@ -4,10 +4,17 @@ import {
   type MclProject,
   type ProjectFiles,
 } from "@manifest-configuration-language/browser";
-import type { PlaygroundClient, PlaygroundDiagnostic, ProjectFile } from "./types";
+import type {
+  PlaygroundClient,
+  PlaygroundDiagnostic,
+  ProjectFile,
+} from "./types";
 import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;
+type UpdatableMclProject = MclProject & {
+  update?: (files: ProjectFiles) => MclProject;
+};
 
 function toProjectFiles(
   source: string,
@@ -49,7 +56,7 @@ function toError(error: unknown): PlaygroundDiagnostic {
 export function createPlaygroundClient(): PlaygroundClient {
   const runtime = createMclRuntime({ operationTimeoutMs });
   const activeControllers = new Set<AbortController>();
-  let projectSession: MclProject | undefined;
+  let projectSession: UpdatableMclProject | undefined;
 
   function updateProject(
     source: string,
@@ -57,10 +64,11 @@ export function createPlaygroundClient(): PlaygroundClient {
     entrypoint = "main.mcl",
   ): MclProject {
     const snapshot = toProjectFiles(source, files, entrypoint);
-    projectSession = projectSession
+    const nextProject = projectSession?.update
       ? projectSession.update(snapshot)
       : runtime.openProject(snapshot);
-    return projectSession;
+    projectSession = nextProject;
+    return nextProject;
   }
 
   function beginRequest(): AbortController {

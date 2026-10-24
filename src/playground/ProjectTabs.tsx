@@ -74,7 +74,7 @@ export function ProjectTabs({
           ) : (
             <span title={node.path}>{node.name}</span>
           )}
-          {selectable && node.path !== "main.mcl" && (
+          {node.path !== "main.mcl" && (
             <span className="project-file-actions">
               <button
                 type="button"

@@ -4,11 +4,7 @@ import {
   type MclProject,
   type ProjectFiles,
 } from "@manifest-configuration-language/browser";
-import type {
-  PlaygroundClient,
-  PlaygroundDiagnostic,
-  ProjectFile,
-} from "./types";
+import type { PlaygroundClient, PlaygroundDiagnostic, ProjectFile } from "./types";
 import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;

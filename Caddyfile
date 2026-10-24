@@ -1,5 +1,8 @@
-:8080 {
+{
 	admin off
+}
+
+:8080 {
 	root * /srv
 	encode zstd gzip
 	file_server
@@ -18,7 +21,7 @@
 
 	@mutable {
 		path_regexp mutable \.(wasm|js)$
-		not @fingerprinted
+		not path_regexp fingerprint ^/_astro/.+[.-][A-Za-z0-9_-]{8,}\.(avif|css|gif|ico|jpe?g|js|png|svg|wasm|webp|woff2?)$
 	}
 	header @mutable Cache-Control no-cache
 

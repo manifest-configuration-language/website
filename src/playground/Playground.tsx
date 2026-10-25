@@ -27,6 +27,7 @@ import { createShortShare, loadShortShare } from "./projectShareApi";
 import { isValidProjectFileSet, isValidProjectPath, projectLimits } from "./projectValidation.js";
 import { PlaygroundResult } from "./PlaygroundResult";
 import { PlaygroundSettingsDialog } from "./PlaygroundSettingsDialog";
+import { PlaygroundEditorDialogs } from "./PlaygroundEditorDialogs";
 import { ProjectFileInput } from "./ProjectFileInput";
 import type {
   PlaygroundDefinitionLocation,
@@ -41,7 +42,7 @@ import { writeProjectArchive } from "./projectZip";
 import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
 import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
-import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
+import { type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
 import "./symbolRenamePreview.css";
 import {
@@ -420,9 +421,6 @@ export default function Playground() {
   );
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
   const panelGroup = useGroupRef();
-  const fileActionDialog = useRef<HTMLDialogElement>(null);
-  const symbolRenameDialog = useRef<HTMLDialogElement>(null);
-  const symbolReferencesDialog = useRef<HTMLDialogElement>(null);
   const startupReady = useRef(false);
   const [renderState, dispatchRender] = useReducer(renderStateReducer, initialRenderState);
   const reply = renderState.reply;
@@ -1047,27 +1045,6 @@ export default function Playground() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  useEffect(() => {
-    const dialog = fileActionDialog.current;
-    if (!dialog) return;
-    if (fileAction && !dialog.open) dialog.showModal();
-    else if (!fileAction && dialog.open) dialog.close();
-  }, [fileAction]);
-
-  useEffect(() => {
-    const dialog = symbolRenameDialog.current;
-    if (!dialog) return;
-    if (symbolRenameOpen && !dialog.open) dialog.showModal();
-    else if (!symbolRenameOpen && dialog.open) dialog.close();
-  }, [symbolRenameOpen]);
-
-  useEffect(() => {
-    const dialog = symbolReferencesDialog.current;
-    if (!dialog) return;
-    if (symbolReferencesOpen && !dialog.open) dialog.showModal();
-    else if (!symbolReferencesOpen && dialog.open) dialog.close();
-  }, [symbolReferencesOpen]);
 
   const onEditorReady = useCallback(
     (view: EditorView | undefined) => {
@@ -2148,159 +2125,41 @@ export default function Playground() {
         <span>{(projectSizeBytes / 1024 / 1024).toFixed(1)} MiB</span>
         <span className="playground-status-path">{activePath}</span>
       </footer>
-      <dialog
-        ref={fileActionDialog}
-        className="playground-file-action"
-        aria-labelledby="playground-file-action-title"
-        onCancel={() => setFileAction(undefined)}
-      >
-        {fileAction?.kind === "delete" ? (
-          <>
-            <h2 id="playground-file-action-title">ファイルの削除</h2>
-            <p>{fileAction.path}を削除しますか？</p>
-            {fileActionError && <p role="alert">{fileActionError}</p>}
-            <div className="playground-file-action-buttons">
-              <button type="button" onClick={() => setFileAction(undefined)}>
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className="playground-file-action-danger"
-                onClick={confirmDeleteFile}
-              >
-                削除
-              </button>
-            </div>
-          </>
-        ) : (
-          <form onSubmit={submitFileAction}>
-            <h2 id="playground-file-action-title">
-              {fileAction?.kind === "rename" ? "ファイル名の変更" : "新規ファイル"}
-            </h2>
-            <label>
-              <span>ファイルパス</span>
-              <input
-                autoFocus
-                value={filePathInput}
-                onChange={(event) => setFilePathInput(event.currentTarget.value)}
-                placeholder="values.yaml"
-                required
-                maxLength={512}
-              />
-            </label>
-            {fileActionError && <p role="alert">{fileActionError}</p>}
-            <div className="playground-file-action-buttons">
-              <button type="button" onClick={() => setFileAction(undefined)}>
-                キャンセル
-              </button>
-              <button type="submit">{fileAction?.kind === "rename" ? "変更" : "作成"}</button>
-            </div>
-          </form>
-        )}
-      </dialog>
-      <dialog
-        ref={symbolRenameDialog}
-        className="playground-file-action"
-        aria-labelledby="playground-symbol-rename-title"
-        onCancel={() => {
+      <PlaygroundEditorDialogs
+        fileAction={fileAction}
+        fileActionError={fileActionError}
+        filePathInput={filePathInput}
+        onFilePathInputChange={setFilePathInput}
+        onCloseFileAction={() => setFileAction(undefined)}
+        onSubmitFileAction={(event) => void submitFileAction(event)}
+        onConfirmDeleteFile={confirmDeleteFile}
+        symbolRenameOpen={symbolRenameOpen}
+        hasPendingRename={pendingSymbolRename !== undefined}
+        renamePreview={
+          pendingSymbolRename
+            ? renamePreviewEntries(pendingSymbolRename.edits, pendingSymbolRename.sources)
+            : undefined
+        }
+        symbolRenameError={symbolRenameError}
+        symbolRenameInput={symbolRenameInput}
+        onSymbolRenameInputChange={setSymbolRenameInput}
+        onCloseSymbolRename={() => {
           setSymbolRenameOpen(false);
           setPendingSymbolRename(undefined);
         }}
-      >
-        {pendingSymbolRename ? (
-          <section>
-            <h2 id="playground-symbol-rename-title">変更箇所</h2>
-            <ul className="playground-symbol-rename-preview">
-              {renamePreviewEntries(pendingSymbolRename.edits, pendingSymbolRename.sources)?.map(
-                (entry, index) => (
-                  <li key={`${entry.path}:${entry.line}:${index}`}>
-                    <span className="playground-symbol-rename-location">
-                      {entry.path}:{entry.line}
-                    </span>
-                    <div className="playground-symbol-rename-change">
-                      <del aria-label="変更前">{entry.before}</del>
-                      <ins aria-label="変更後">{entry.after}</ins>
-                    </div>
-                  </li>
-                ),
-              )}
-            </ul>
-            {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
-            <div className="playground-file-action-buttons">
-              <button
-                type="button"
-                onClick={() => {
-                  setPendingSymbolRename(undefined);
-                  setSymbolRenameError("");
-                }}
-              >
-                名前を再入力
-              </button>
-              <button
-                type="button"
-                disabled={busy || loadingProject}
-                onClick={() => void applySymbolRename()}
-              >
-                名前を変更
-              </button>
-            </div>
-          </section>
-        ) : (
-          <form onSubmit={(event) => void renameSymbol(event)}>
-            <h2 id="playground-symbol-rename-title">シンボル名の変更</h2>
-            <label>
-              <span>新しい名前</span>
-              <input
-                autoFocus
-                value={symbolRenameInput}
-                onChange={(event) => setSymbolRenameInput(event.currentTarget.value)}
-                required
-                maxLength={256}
-              />
-            </label>
-            {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
-            <div className="playground-file-action-buttons">
-              <button
-                type="button"
-                onClick={() => {
-                  setSymbolRenameOpen(false);
-                  setPendingSymbolRename(undefined);
-                }}
-              >
-                キャンセル
-              </button>
-              <button type="submit" disabled={busy || loadingProject}>
-                変更箇所を確認
-              </button>
-            </div>
-          </form>
-        )}
-      </dialog>
-      <dialog
-        ref={symbolReferencesDialog}
-        className="playground-quick-open"
-        aria-labelledby="playground-symbol-references-title"
-        onCancel={() => setSymbolReferencesOpen(false)}
-      >
-        <label id="playground-symbol-references-title">
-          <span>参照箇所</span>
-        </label>
-        {symbolReferencesError ? (
-          <p role="alert">{symbolReferencesError}</p>
-        ) : (
-          <QuickAccessList
-            label="参照を検索"
-            placeholder="ファイル名またはコードを検索"
-            emptyMessage="参照が見つかりません"
-            items={symbolReferenceItems}
-          />
-        )}
-        <div className="playground-file-action-buttons">
-          <button type="button" onClick={() => setSymbolReferencesOpen(false)}>
-            閉じる
-          </button>
-        </div>
-      </dialog>
+        onResetSymbolRename={() => {
+          setPendingSymbolRename(undefined);
+          setSymbolRenameError("");
+        }}
+        onApplySymbolRename={() => void applySymbolRename()}
+        onSubmitSymbolRename={(event) => void renameSymbol(event)}
+        busy={busy}
+        loadingProject={loadingProject}
+        symbolReferencesOpen={symbolReferencesOpen}
+        symbolReferencesError={symbolReferencesError}
+        symbolReferenceItems={symbolReferenceItems}
+        onCloseSymbolReferences={() => setSymbolReferencesOpen(false)}
+      />
       {editorError && (
         <p role="alert">
           {editorError}{" "}

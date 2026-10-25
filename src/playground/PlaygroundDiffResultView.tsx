@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { MergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { useTranslation } from "react-i18next";
 import { ResourceBrowser, type YamlResource } from "./PlaygroundYamlResultView";
 
 type Props = {
@@ -27,6 +28,7 @@ export function PlaygroundDiffResultView({
   onSelectResource,
   onResetResource,
 }: Props) {
+  const { t } = useTranslation();
   const diffHost = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -51,9 +53,15 @@ export function PlaygroundDiffResultView({
   }, [currentYaml, fontSize, previousYaml, selectedResource]);
 
   return (
-    <section className="playground-diff" aria-label="YAML差分">
+    <section className="playground-diff" aria-label={t("yamlDiff")}>
       <div className="playground-diff-labels">
-        <span>{selectedResource ? (selectedResource.previous ? "前回" : "追加") : "前回"}</span>
+        <span>
+          {selectedResource
+            ? selectedResource.previous
+              ? t("previousOutput")
+              : t("added")
+            : t("previousOutput")}
+        </span>
         <div className="playground-diff-resource-controls">
           <button
             type="button"
@@ -62,7 +70,7 @@ export function PlaygroundDiffResultView({
             onClick={onToggleResources}
             disabled={resources.length === 0}
           >
-            {selectedResource?.label ?? "全体"}
+            {selectedResource?.label ?? t("allResources")}
           </button>
           {selectedResource && (
             <button
@@ -70,11 +78,17 @@ export function PlaygroundDiffResultView({
               className="playground-diff-resource-reset"
               onClick={onResetResource}
             >
-              全体
+              {t("allResources")}
             </button>
           )}
         </div>
-        <span>{selectedResource ? (selectedResource.current ? "最新" : "削除") : "最新"}</span>
+        <span>
+          {selectedResource
+            ? selectedResource.current
+              ? t("latestOutput")
+              : t("deleted")
+            : t("latestOutput")}
+        </span>
       </div>
       <ResourceBrowser
         resources={resources}

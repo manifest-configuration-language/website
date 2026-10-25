@@ -181,6 +181,24 @@ export const resources = {
       documentLabel: "Document {{number}}",
       yamlDiff: "YAML diff",
       allResources: "All",
+      draftDiscardTitle: "Discard local draft changes?",
+      draftDiscardDescription: "This replaces the changes in this tab with the latest saved draft.",
+      draftDiscardCancel: "Keep editing",
+      draftDiscardConfirm: "Discard and reload",
+      exampleLoadError: "Could not load example: {{title}}",
+      exampleInvalidFormat: "The example has an invalid format: {{title}}",
+      sharedProjectTooLarge:
+        "The shared project exceeds the expanded size limit. Ask the sender to reduce its size.",
+      defaultProjectName: "Untitled project",
+      importedProjectName: "Imported project",
+      restoredProjectName: "Restored project",
+      sharedProjectName: "Shared project",
+      projectUnavailable: "Could not load project",
+      projectCopyName: "Copy of {{name}}",
+      zipExported: "ZIP exported",
+      yamlCopied: "YAML copied",
+      deleteProjectTitle: "Delete project?",
+      deleteProjectDescription: "Delete {{name}} and its local draft?",
     },
   },
   ja: {
@@ -361,6 +379,24 @@ export const resources = {
       documentLabel: "文書{{number}}",
       yamlDiff: "YAML差分",
       allResources: "全体",
+      draftDiscardTitle: "このタブの変更を破棄しますか？",
+      draftDiscardDescription: "このタブの内容を最新の保存済みドラフトで置き換えます。",
+      draftDiscardCancel: "編集を続ける",
+      draftDiscardConfirm: "破棄して再読み込み",
+      exampleLoadError: "サンプルを読み込めません: {{title}}",
+      exampleInvalidFormat: "サンプルの形式が正しくありません: {{title}}",
+      sharedProjectTooLarge:
+        "共有プロジェクトの展開サイズが上限を超えています。送信者に内容を小さくしてもらってください。",
+      defaultProjectName: "無題のプロジェクト",
+      importedProjectName: "インポートしたプロジェクト",
+      restoredProjectName: "復元したプロジェクト",
+      sharedProjectName: "共有プロジェクト",
+      projectUnavailable: "プロジェクトを読み込めません",
+      projectCopyName: "{{name}}のコピー",
+      zipExported: "ZIPを書き出しました",
+      yamlCopied: "YAMLをコピーしました",
+      deleteProjectTitle: "プロジェクトを削除しますか？",
+      deleteProjectDescription: "{{name}}とローカルドラフトを削除します。",
     },
   },
 } as const;
@@ -544,6 +580,23 @@ declare global {
       documentLabel: string;
       yamlDiff: string;
       allResources: string;
+      draftDiscardTitle: string;
+      draftDiscardDescription: string;
+      draftDiscardCancel: string;
+      draftDiscardConfirm: string;
+      exampleLoadError: string;
+      exampleInvalidFormat: string;
+      sharedProjectTooLarge: string;
+      defaultProjectName: string;
+      importedProjectName: string;
+      restoredProjectName: string;
+      sharedProjectName: string;
+      projectUnavailable: string;
+      projectCopyName: string;
+      zipExported: string;
+      yamlCopied: string;
+      deleteProjectTitle: string;
+      deleteProjectDescription: string;
     }
   }
 }

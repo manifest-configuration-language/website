@@ -37,6 +37,7 @@ import { type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
 import { PlaygroundShareDialog } from "./PlaygroundShareDialog";
 import { DraftConflictDialog } from "./DraftConflictDialog";
+import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
@@ -245,12 +246,15 @@ function renderStateReducer(state: RenderState, action: RenderAction): RenderSta
   }
 }
 
-async function loadExampleFiles(example: ExampleSpec): Promise<Record<string, string>> {
+async function loadExampleFiles(
+  example: ExampleSpec,
+  messages: { loadError: string; invalidFormat: string },
+): Promise<Record<string, string>> {
   const response = await fetch(example.asset, { cache: "force-cache" });
-  if (!response.ok) throw new Error(`サンプルを読み込めません: ${example.title}`);
+  if (!response.ok) throw new Error(messages.loadError);
   const value: unknown = await response.json();
   if (!value || typeof value !== "object" || !("files" in value))
-    throw new Error(`サンプルの形式が正しくありません: ${example.title}`);
+    throw new Error(messages.invalidFormat);
   const files = (value as { files: unknown }).files;
   if (
     !files ||
@@ -259,7 +263,7 @@ async function loadExampleFiles(example: ExampleSpec): Promise<Record<string, st
     !Object.hasOwn(files, "main.mcl") ||
     !Object.values(files).every((content) => typeof content === "string")
   ) {
-    throw new Error(`サンプルの形式が正しくありません: ${example.title}`);
+    throw new Error(messages.invalidFormat);
   }
   return files as Record<string, string>;
 }
@@ -277,10 +281,9 @@ function clearLegacyShareFragment() {
   history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
 }
 
-function sharedProjectError(cause: unknown): string {
+function sharedProjectError(cause: unknown, tooLargeMessage: string): string {
   const message = cause instanceof Error ? cause.message : String(cause);
-  if (message === "Shared project is too large")
-    return "共有プロジェクトの展開サイズが上限を超えています。送信者に内容を小さくしてもらってください。";
+  if (message === "Shared project is too large") return tooLargeMessage;
   return message;
 }
 
@@ -291,10 +294,10 @@ export default function Playground() {
   const renameFileImports = useCallback(
     (source: string, files: Record<string, ProjectFile>, oldPath: string, newPath: string) => {
       const activeClient = client.current;
-      if (!activeClient) return Promise.reject(new Error("WASMを初期化しています"));
+      if (!activeClient) return Promise.reject(new Error(t("wasmInitializing")));
       return activeClient.renameFileImports(source, files, oldPath, newPath);
     },
-    [],
+    [t],
   );
   const {
     project,
@@ -349,6 +352,7 @@ export default function Playground() {
   const [orientation, setOrientation] = useState<"horizontal" | "vertical">("horizontal");
   const [orientationOverridden, setOrientationOverridden] = useState(false);
   const [examplesOpen, setExamplesOpen] = useState(false);
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [openPaths, setOpenPaths] = useState(["main.mcl"]);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -386,9 +390,12 @@ export default function Playground() {
     markDraftsLoaded,
   } = usePlaygroundPersistence(project, reportPersistenceError);
   const activeDraftName =
-    drafts.find((draft) => draft.id === activeDraftId)?.name ?? "プロジェクト";
+    drafts.find((draft) => draft.id === activeDraftId)?.name ?? t("defaultProjectName");
   const draftConflict = conflictedDraftIds.includes(activeDraftId);
-  const handleShareError = useCallback((cause: unknown) => setError(sharedProjectError(cause)), []);
+  const handleShareError = useCallback(
+    (cause: unknown) => setError(sharedProjectError(cause, t("sharedProjectTooLarge"))),
+    [t],
+  );
   const { shareDialogOpen, sharing, openShareDialog, closeShareDialog, shareProject } =
     usePlaygroundSharing({
       activeDraftIdRef,
@@ -621,27 +628,27 @@ export default function Playground() {
     [t("commandFindReferences")]: "Shift+F12",
     [t("commandRenameSymbol")]: "F2",
     [t("commandOpenFile")]: "Ctrl/⌘ P",
-    ファイル一覧を切り替え: "Ctrl/⌘ ⇧ E",
-    問題を表示: "Ctrl/⌘ ⇧ M",
+    [t("commandToggleExplorer")]: "Ctrl/⌘ ⇧ E",
+    [t("commandShowProblems")]: "Ctrl/⌘ ⇧ M",
   };
   const commandKeywords: Record<string, string[]> = {
-    実行: ["run", "render"],
-    整形: ["format", "document"],
-    コメントを切り替え: ["toggle comment", "line comment", "ctrl slash"],
-    次の一致を選択: ["select next occurrence", "multi cursor", "ctrl d"],
-    すべての一致を選択: ["select all occurrences", "multi cursor", "ctrl shift l"],
-    サンプルを開く: ["examples"],
-    定義へ移動: ["definition", "f12"],
-    YAMLの対応箇所へ移動: ["source map", "yaml"],
-    参照箇所を検索: ["references", "shift f12"],
-    シンボル名を変更: ["rename", "f2"],
-    共有: ["share"],
-    ファイルを開く: ["quick open", "open file", "ctrl p"],
-    ファイル一覧を切り替え: ["explorer", "files", "ctrl shift e"],
-    ファイルを作成: ["new file", "create file"],
-    新しいプロジェクト: ["new project"],
-    出力を表示: ["output"],
-    問題を表示: ["problems", "diagnostics", "ctrl shift m"],
+    [t("commandRun")]: ["run", "render"],
+    [t("commandFormat")]: ["format", "document"],
+    [t("commandToggleComment")]: ["toggle comment", "line comment", "ctrl slash"],
+    [t("commandNextOccurrence")]: ["select next occurrence", "multi cursor", "ctrl d"],
+    [t("commandSelectMatches")]: ["select all occurrences", "multi cursor", "ctrl shift l"],
+    [t("commandOpenExamples")]: ["examples"],
+    [t("commandGoToDefinition")]: ["definition", "f12"],
+    [t("commandGoToYaml")]: ["source map", "yaml"],
+    [t("commandFindReferences")]: ["references", "shift f12"],
+    [t("commandRenameSymbol")]: ["rename", "f2"],
+    [t("commandShare")]: ["share"],
+    [t("commandOpenFile")]: ["quick open", "open file", "ctrl p"],
+    [t("commandToggleExplorer")]: ["explorer", "files", "ctrl shift e"],
+    [t("commandCreateFile")]: ["new file", "create file"],
+    [t("commandNewProject")]: ["new project"],
+    [t("commandShowOutput")]: ["output"],
+    [t("commandShowProblems")]: ["problems", "diagnostics", "ctrl shift m"],
   };
   const commandItems: QuickAccessItem[] = commands.map((command) => ({
     value: command.name,
@@ -743,7 +750,7 @@ export default function Playground() {
       textEditorStates.current.clear();
       if (options.newDraft !== false) {
         clearShareReferenceFromURL();
-        activateDraft(crypto.randomUUID(), options.name ?? "インポート");
+        activateDraft(crypto.randomUUID(), options.name ?? t("importedProjectName"));
       }
       dispatchRender({ type: "project-replaced" });
       setShowDiff(false);
@@ -770,6 +777,7 @@ export default function Playground() {
       replaceProjectState,
       saveDraftSnapshot,
       scheduleLint,
+      t,
     ],
   );
 
@@ -876,7 +884,7 @@ export default function Playground() {
             restored = legacy;
             activeId = crypto.randomUUID();
             await saveDraftSnapshot(activeId, legacy);
-            activateDraft(activeId, "復元したプロジェクト");
+            activateDraft(activeId, t("restoredProjectName"));
           }
         }
         if (!activeId) {
@@ -884,14 +892,14 @@ export default function Playground() {
         } else {
           await setActiveDraft(activeId);
           if (!draftsRef.current.some((draft) => draft.id === activeId))
-            updateDraftMetadata(activeId, "プロジェクト");
+            updateDraftMetadata(activeId, t("defaultProjectName"));
         }
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
       }
       if (!activeId) {
         activeId = crypto.randomUUID();
-        activateDraft(activeId, "プロジェクト");
+        activateDraft(activeId, t("defaultProjectName"));
       }
 
       const shortShareId = new URL(window.location.href).searchParams.get("s");
@@ -908,7 +916,7 @@ export default function Playground() {
             activeId = sessionDraftId;
             await setActiveDraft(activeId);
             if (!draftsRef.current.some((draft) => draft.id === activeId))
-              updateDraftMetadata(activeId, "共有プロジェクト");
+              updateDraftMetadata(activeId, t("sharedProjectName"));
           } else {
             const shared = parseSharedProjectPayload(
               await loadShortShare(
@@ -919,7 +927,7 @@ export default function Playground() {
             if (cancelled) return;
             restored = shared;
             activeId = crypto.randomUUID();
-            activateDraft(activeId, "共有プロジェクト");
+            activateDraft(activeId, t("sharedProjectName"));
             saveShortShareDraftID(shortShareId, activeId);
           }
         } else {
@@ -927,11 +935,11 @@ export default function Playground() {
           if (shared) {
             restored = shared;
             activeId = crypto.randomUUID();
-            activateDraft(activeId, "共有プロジェクト");
+            activateDraft(activeId, t("sharedProjectName"));
           }
         }
       } catch (cause) {
-        if (!cancelled) setError(sharedProjectError(cause));
+        if (!cancelled) setError(sharedProjectError(cause, t("sharedProjectTooLarge")));
       }
 
       if (!shortShareId && !window.location.hash.startsWith("#project=")) {
@@ -940,7 +948,10 @@ export default function Playground() {
         const example = examples.find((entry) => entry.slug === exampleSlug);
         if (example) {
           try {
-            const files = await loadExampleFiles(example);
+            const files = await loadExampleFiles(example, {
+              loadError: t("exampleLoadError", { title: example.title }),
+              invalidFormat: t("exampleInvalidFormat", { title: example.title }),
+            });
             const { ["main.mcl"]: source, ...otherFiles } = files;
             restored = {
               source,
@@ -962,7 +973,7 @@ export default function Playground() {
       }
       if (cancelled) return;
       if (!draftsRef.current.some((draft) => draft.id === activeId))
-        activateDraft(activeId, "プロジェクト");
+        activateDraft(activeId, t("defaultProjectName"));
       if (restored) {
         const applied = applyProject(restored, { newDraft: false });
         if (applied && hasLegacyFragment) clearLegacyShareFragment();
@@ -995,6 +1006,7 @@ export default function Playground() {
     projectRef,
     saveDraftSnapshot,
     setActiveDraft,
+    t,
     updateDraftMetadata,
   ]);
 
@@ -1232,7 +1244,10 @@ export default function Playground() {
 
     setLoadingProject(true);
     try {
-      const files = await loadExampleFiles(example);
+      const files = await loadExampleFiles(example, {
+        loadError: t("exampleLoadError", { title: example.title }),
+        invalidFormat: t("exampleInvalidFormat", { title: example.title }),
+      });
       const { ["main.mcl"]: source, ...otherFiles } = files;
       applyProject(
         {
@@ -1260,7 +1275,7 @@ export default function Playground() {
     try {
       await saveDraftSnapshot(activeDraftIdRef.current, projectRef.current);
       const saved: unknown = await loadDraft(id);
-      if (!isStoredProject(saved)) throw new Error("プロジェクトを読み込めません");
+      if (!isStoredProject(saved)) throw new Error(t("projectUnavailable"));
       clearDraftConflict(id);
       await setActiveDraft(id);
       clearShareReferenceFromURL();
@@ -1274,7 +1289,7 @@ export default function Playground() {
   async function reloadConflictedDraft() {
     try {
       const saved: unknown = await loadDraft(activeDraftId);
-      if (!isStoredProject(saved)) throw new Error("プロジェクトを読み込めません");
+      if (!isStoredProject(saved)) throw new Error(t("projectUnavailable"));
       applyProject(saved, { newDraft: false });
       clearDraftConflict(activeDraftId);
       setError("");
@@ -1284,15 +1299,19 @@ export default function Playground() {
   }
 
   function createDraft() {
-    applyProject({ source: initialSource, files: {} }, { name: "プロジェクト" });
+    applyProject({ source: initialSource, files: {} }, { name: t("defaultProjectName") });
   }
 
   function duplicateDraft() {
-    applyProject(projectRef.current, { name: `${activeDraftName}のコピー` });
+    applyProject(projectRef.current, { name: t("projectCopyName", { name: activeDraftName }) });
   }
 
-  async function deleteCurrentDraft() {
-    if (!activeDraftId || !window.confirm(`「${activeDraftName}」を削除しますか？`)) return;
+  function deleteCurrentDraft() {
+    if (activeDraftId) setDeleteProjectOpen(true);
+  }
+
+  async function confirmDeleteCurrentDraft() {
+    setDeleteProjectOpen(false);
     try {
       await saveDraftSnapshot(activeDraftId, projectRef.current);
       await deleteDraft(activeDraftId);
@@ -1300,16 +1319,17 @@ export default function Playground() {
       const [nextDraft] = draftsRef.current;
       if (nextDraft) {
         const saved: unknown = await loadDraft(nextDraft.id);
-        if (!isStoredProject(saved)) throw new Error("プロジェクトを読み込めません");
+        if (!isStoredProject(saved)) throw new Error(t("projectUnavailable"));
         clearDraftConflict(nextDraft.id);
         await setActiveDraft(nextDraft.id);
         applyProject(saved, { newDraft: false });
       } else {
         const nextId = crypto.randomUUID();
-        activateDraft(nextId, "プロジェクト");
+        activateDraft(nextId, t("defaultProjectName"));
         applyProject({ source: initialSource, files: {} }, { newDraft: false });
       }
     } catch (cause) {
+      if (cause instanceof DraftConflictError) return;
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   }
@@ -1321,7 +1341,7 @@ export default function Playground() {
         files: projectRef.current.files,
       });
       downloadBlob(archive, "mcl-project.zip");
-      setNotice("ZIPを書き出しました");
+      setNotice(t("zipExported"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -1332,7 +1352,7 @@ export default function Playground() {
     if (yaml === undefined) return;
     try {
       await navigator.clipboard.writeText(yaml);
-      setNotice("YAMLをコピーしました");
+      setNotice(t("yamlCopied"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -1539,11 +1559,17 @@ export default function Playground() {
           open={draftConflict}
           onFork={() =>
             applyProject(projectRef.current, {
-              name: `${activeDraftName}のコピー`,
+              name: t("projectCopyName", { name: activeDraftName }),
               skipCurrentSnapshot: true,
             })
           }
           onReload={() => void reloadConflictedDraft()}
+        />
+        <DeleteProjectDialog
+          open={deleteProjectOpen}
+          projectName={activeDraftName}
+          onClose={() => setDeleteProjectOpen(false)}
+          onDelete={() => void confirmDeleteCurrentDraft()}
         />
         {sourceMapCandidates.length > 1 && (
           <SourceMapCandidateDialog
@@ -1893,7 +1919,7 @@ export default function Playground() {
                 setEditorAttempt((attempt) => attempt + 1);
               }}
             >
-              再試行
+              {t("retry")}
             </button>
           </p>
         )}

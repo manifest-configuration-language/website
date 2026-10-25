@@ -6,6 +6,7 @@ import { foldGutter, foldKeymap } from "@codemirror/language";
 import { openSearchPanel, searchKeymap } from "@codemirror/search";
 import { keymap } from "@codemirror/view";
 import { parseAllDocuments } from "yaml";
+import { useTranslation } from "react-i18next";
 import type { PlaygroundDiagnostic, PlaygroundReply, PlaygroundSourceMap } from "./types";
 import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundYamlResultView, type YamlResource } from "./PlaygroundYamlResultView";
@@ -74,6 +75,7 @@ export function PlaygroundResult({
   onDiagnostic,
   onSourceCandidates,
 }: Props) {
+  const { t } = useTranslation();
   const outputHost = useRef<HTMLDivElement>(null);
   const outputEditor = useRef<EditorView | undefined>(undefined);
   const onSourceCandidatesRef = useRef(onSourceCandidates);
@@ -86,9 +88,18 @@ export function PlaygroundResult({
     () => (displayedYaml === undefined ? undefined : Text.of(displayedYaml.split("\n"))),
     [displayedYaml],
   );
-  const resources = useMemo(() => parseYamlResources(displayedYaml ?? ""), [displayedYaml]);
-  const previousResources = useMemo(() => parseYamlResources(previousYaml ?? ""), [previousYaml]);
-  const currentResources = useMemo(() => parseYamlResources(currentYaml ?? ""), [currentYaml]);
+  const resources = useMemo(
+    () => parseYamlResources(displayedYaml ?? "", (number) => t("documentLabel", { number })),
+    [displayedYaml, t],
+  );
+  const previousResources = useMemo(
+    () => parseYamlResources(previousYaml ?? "", (number) => t("documentLabel", { number })),
+    [previousYaml, t],
+  );
+  const currentResources = useMemo(
+    () => parseYamlResources(currentYaml ?? "", (number) => t("documentLabel", { number })),
+    [currentYaml, t],
+  );
   const diffResources = useMemo(
     () => mergeResourceLists(previousResources, currentResources),
     [currentResources, previousResources],
@@ -129,7 +140,7 @@ export function PlaygroundResult({
           EditorView.lineWrapping,
           EditorView.theme({ ".cm-content, .cm-gutters": { fontSize: `${fontSize}px` } }),
           keymap.of([...searchKeymap, ...foldKeymap]),
-          EditorView.contentAttributes.of({ "aria-label": "YAML結果" }),
+          EditorView.contentAttributes.of({ "aria-label": t("yamlOutput") }),
           sourceMapSelectionField,
           ...(sourceMap && sourceMapDocument
             ? [
@@ -197,6 +208,7 @@ export function PlaygroundResult({
     showProblems,
     showDiff,
     showReferences,
+    t,
   ]);
 
   useEffect(() => {
@@ -297,15 +309,15 @@ export function PlaygroundResult({
       {showReferences && (
         <section
           className="playground-reference-results playground-resource-browser"
-          aria-label="参照箇所"
+          aria-label={t("referencesLabel")}
         >
           {referenceError ? (
             <p role="alert">{referenceError}</p>
           ) : (
             <QuickAccessList
-              label="参照を検索"
-              placeholder="ファイル名またはコードを検索"
-              emptyMessage="参照が見つかりません"
+              label={t("searchReferences")}
+              placeholder={t("searchFilenameOrCode")}
+              emptyMessage={t("noReferencesMatch")}
               items={referenceItems}
             />
           )}
@@ -373,7 +385,7 @@ export function PlaygroundResult({
             <span className="playground-result-empty-icon" aria-hidden="true">
               ▷
             </span>
-            <span>実行結果はここに表示されます</span>
+            <span>{t("emptyOutput")}</span>
           </div>
         ))}
       {!showProblems && !showReferences && showDiff && canShowDiff && (
@@ -569,7 +581,10 @@ function positionOffset(document: Text, line: number, character: number): number
   return docLine.from + character;
 }
 
-function parseYamlResources(text: string): YamlResource[] {
+function parseYamlResources(
+  text: string,
+  fallbackDocumentLabel: (number: number) => string,
+): YamlResource[] {
   let documents;
   try {
     documents = parseAllDocuments(text, {
@@ -600,7 +615,7 @@ function parseYamlResources(text: string): YamlResource[] {
         ? typeof name === "string" && name.length > 0
           ? `${kind}/${name}`
           : kind
-        : `文書${index + 1}`;
+        : fallbackDocumentLabel(index + 1);
     const start = document.range?.[0] ?? 0;
     const end = document.range?.[1] ?? text.length;
     const rawYaml = text.slice(start, end);

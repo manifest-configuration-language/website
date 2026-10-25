@@ -16,7 +16,7 @@ import { useTranslation } from "react-i18next";
 import { playgroundLocale } from "./playgroundI18n";
 import { createPlaygroundClient } from "./apiClient";
 import { initialSource, type ApplyWorkspaceEdits } from "./MclEditor";
-import { decodeSharedProject, parseSharedProjectPayload } from "./projectShare";
+import { parseSharedProjectPayload } from "./projectShare";
 import { loadShortShare } from "./projectShareApi";
 import { projectSnapshotError, projectSnapshotErrorMessage } from "./projectValidation.js";
 import { PlaygroundResult } from "./PlaygroundResult";
@@ -269,16 +269,9 @@ async function loadExampleFiles(
 function clearShareReferenceFromURL() {
   const url = new URL(window.location.href);
   const isShortSharePath = /^\/playground\/s\/[A-Za-z0-9_-]{22}\/?$/.test(url.pathname);
-  if (!isShortSharePath && !url.hash.startsWith("#project=") && !url.searchParams.has("s")) return;
-  if (isShortSharePath) url.pathname = "/playground/";
-  if (url.hash.startsWith("#project=")) url.hash = "";
-  url.searchParams.delete("s");
+  if (!isShortSharePath) return;
+  url.pathname = "/playground/";
   history.replaceState(null, "", url);
-}
-
-function clearLegacyShareFragment() {
-  if (!window.location.hash.startsWith("#project=")) return;
-  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
 }
 
 function sharedProjectError(cause: unknown, tooLargeMessage: string): string {
@@ -386,7 +379,6 @@ export default function Playground() {
     loadActiveDraftId,
     loadDraft,
     deleteDraft,
-    loadLegacyProject,
     markDraftsLoaded,
   } = usePlaygroundPersistence(project, reportPersistenceError);
   const activeDraftName =
@@ -780,15 +772,6 @@ export default function Playground() {
             activeId = savedActiveId;
           }
         }
-        if (!restored) {
-          const legacy: unknown = await loadLegacyProject();
-          if (isStoredProject(legacy)) {
-            restored = legacy;
-            activeId = crypto.randomUUID();
-            await saveDraftSnapshot(activeId, legacy);
-            activateDraft(activeId, t("restoredProjectName"));
-          }
-        }
         if (!activeId) {
           activeId = crypto.randomUUID();
         } else {
@@ -805,10 +788,9 @@ export default function Playground() {
       }
 
       const currentURL = new URL(window.location.href);
-      const shortShareId =
-        currentURL.pathname.match(/^\/playground\/s\/([A-Za-z0-9_-]{22})\/?$/)?.[1] ??
-        currentURL.searchParams.get("s");
-      const hasLegacyFragment = window.location.hash.startsWith("#project=");
+      const shortShareId = currentURL.pathname.match(
+        /^\/playground\/s\/([A-Za-z0-9_-]{22})\/?$/,
+      )?.[1];
       try {
         if (shortShareId) {
           const sessionDraftId = loadShortShareDraftID(shortShareId);
@@ -836,19 +818,12 @@ export default function Playground() {
             activateDraft(activeId, t("sharedProjectName"));
             saveShortShareDraftID(shortShareId, activeId);
           }
-        } else {
-          const shared = await decodeSharedProject(window.location.hash);
-          if (shared) {
-            restored = shared;
-            activeId = crypto.randomUUID();
-            activateDraft(activeId, t("sharedProjectName"));
-          }
         }
       } catch (cause) {
         if (!cancelled) setError(sharedProjectError(cause, t("sharedProjectTooLarge")));
       }
 
-      if (!shortShareId && !window.location.hash.startsWith("#project=")) {
+      if (!shortShareId) {
         const url = new URL(window.location.href);
         const exampleSlug = url.searchParams.get("example");
         const example = examples.find((entry) => entry.slug === exampleSlug);
@@ -881,8 +856,7 @@ export default function Playground() {
       if (!draftsRef.current.some((draft) => draft.id === activeId))
         activateDraft(activeId, t("defaultProjectName"));
       if (restored) {
-        const applied = applyProject(restored, { newDraft: false });
-        if (applied && hasLegacyFragment) clearLegacyShareFragment();
+        applyProject(restored, { newDraft: false });
       } else {
         applyWorkspacePreference(projectRef.current.files, projectRef.current.activePath, false);
       }
@@ -907,7 +881,6 @@ export default function Playground() {
     loadActiveDraftId,
     loadDraft,
     loadDraftIndex,
-    loadLegacyProject,
     markDraftsLoaded,
     projectRef,
     saveDraftSnapshot,

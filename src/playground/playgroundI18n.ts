@@ -191,7 +191,6 @@ export const resources = {
         "The shared project exceeds the expanded size limit. Ask the sender to reduce its size.",
       defaultProjectName: "Untitled project",
       importedProjectName: "Imported project",
-      restoredProjectName: "Restored project",
       sharedProjectName: "Shared project",
       projectUnavailable: "Could not load project",
       projectCopyName: "Copy of {{name}}",
@@ -436,7 +435,6 @@ export const resources = {
         "共有プロジェクトの展開サイズが上限を超えています。送信者に内容を小さくしてもらってください。",
       defaultProjectName: "無題のプロジェクト",
       importedProjectName: "インポートしたプロジェクト",
-      restoredProjectName: "復元したプロジェクト",
       sharedProjectName: "共有プロジェクト",
       projectUnavailable: "プロジェクトを読み込めません",
       projectCopyName: "{{name}}のコピー",
@@ -683,7 +681,6 @@ declare global {
       sharedProjectTooLarge: string;
       defaultProjectName: string;
       importedProjectName: string;
-      restoredProjectName: string;
       sharedProjectName: string;
       projectUnavailable: string;
       projectCopyName: string;

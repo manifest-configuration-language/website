@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorSettings } from "./MclEditor";
 import { isValidProjectSnapshot } from "./projectValidation.js";
-import {
-  ensurePlaygroundStorageMigrated,
-  playgroundDatabase,
-  playgroundSettingKeys,
-} from "./playgroundDatabase";
+import { playgroundDatabase, playgroundSettingKeys } from "./playgroundDatabase";
 import type { ProjectFile } from "./types";
 
 export const defaultEditorSettings: EditorSettings = {
@@ -156,7 +152,6 @@ export function usePlaygroundPersistence(
       setDrafts(next);
       if (persist)
         void enqueueWrite(async () => {
-          await ensurePlaygroundStorageMigrated();
           await playgroundDatabase.transaction("rw", playgroundDatabase.drafts, async () => {
             const current = await playgroundDatabase.drafts.get(id);
             if (!current && expectedRevisions.current.has(id))
@@ -186,7 +181,6 @@ export function usePlaygroundPersistence(
       if (!draft) return;
       try {
         await enqueueWrite(async () => {
-          await ensurePlaygroundStorageMigrated();
           let nextRevision = 0;
           await playgroundDatabase.transaction(
             "rw",
@@ -241,7 +235,6 @@ export function usePlaygroundPersistence(
   const setActiveDraft = useCallback(async (id: string) => {
     activeDraftIdRef.current = id;
     setActiveDraftId(id);
-    await ensurePlaygroundStorageMigrated();
     await playgroundDatabase.settings.put({ key: playgroundSettingKeys.activeDraft, value: id });
   }, []);
 
@@ -254,7 +247,6 @@ export function usePlaygroundPersistence(
   );
 
   const loadDraftIndex = useCallback(async () => {
-    await ensurePlaygroundStorageMigrated();
     const savedIndex = (
       await playgroundDatabase.drafts.orderBy("updatedAt").reverse().toArray()
     ).map(({ id, name, updatedAt }) => ({ id, name, updatedAt }));
@@ -265,7 +257,6 @@ export function usePlaygroundPersistence(
   }, []);
 
   const loadActiveDraftId = useCallback(async () => {
-    await ensurePlaygroundStorageMigrated();
     const value: unknown = (
       await playgroundDatabase.settings.get(playgroundSettingKeys.activeDraft)
     )?.value;
@@ -273,7 +264,6 @@ export function usePlaygroundPersistence(
   }, []);
 
   const loadDraft = useCallback(async (id: string) => {
-    await ensurePlaygroundStorageMigrated();
     return playgroundDatabase.transaction(
       "r",
       playgroundDatabase.drafts,
@@ -292,7 +282,6 @@ export function usePlaygroundPersistence(
     async (id: string) => {
       try {
         await enqueueWrite(async () => {
-          await ensurePlaygroundStorageMigrated();
           await playgroundDatabase.transaction(
             "rw",
             playgroundDatabase.drafts,
@@ -320,18 +309,14 @@ export function usePlaygroundPersistence(
     },
     [enqueueWrite, markDraftConflict],
   );
-  const loadLegacyProject = useCallback(async () => {
-    await ensurePlaygroundStorageMigrated();
-    return (await playgroundDatabase.settings.get(playgroundSettingKeys.legacyProject))?.value;
-  }, []);
   const markDraftsLoaded = useCallback(() => setDraftsLoaded(true), []);
 
   loadDraftIndexRef.current = loadDraftIndex;
 
   useEffect(() => {
     let cancelled = false;
-    void ensurePlaygroundStorageMigrated()
-      .then(() => playgroundDatabase.settings.get(playgroundSettingKeys.editorSettings))
+    void playgroundDatabase.settings
+      .get(playgroundSettingKeys.editorSettings)
       .then((record) => record?.value)
       .then((saved: unknown) => {
         if (!cancelled && isEditorSettings(saved))
@@ -354,13 +339,11 @@ export function usePlaygroundPersistence(
 
   useEffect(() => {
     if (!editorSettingsLoaded) return;
-    void ensurePlaygroundStorageMigrated()
-      .then(() =>
-        playgroundDatabase.settings.put({
-          key: playgroundSettingKeys.editorSettings,
-          value: editorSettings,
-        }),
-      )
+    void playgroundDatabase.settings
+      .put({
+        key: playgroundSettingKeys.editorSettings,
+        value: editorSettings,
+      })
       .catch((cause: unknown) => onError(cause));
   }, [editorSettings, editorSettingsLoaded, onError]);
 
@@ -384,7 +367,6 @@ export function usePlaygroundPersistence(
     loadActiveDraftId,
     loadDraft,
     deleteDraft,
-    loadLegacyProject,
     markDraftsLoaded,
   };
 }

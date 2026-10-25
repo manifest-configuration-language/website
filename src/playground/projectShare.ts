@@ -8,9 +8,6 @@ import type { ProjectFile } from "./types";
 
 const maxSharedBytes = projectLimits.projectBytes;
 const maxSharedFiles = projectLimits.projectFiles - 1;
-const maxFragmentLength = 2 * 1024 * 1024;
-const projectFragmentPrefix = "project=";
-const maxSerializedBytes = Math.ceil((maxSharedBytes * 4) / 3) + 1024 * 1024;
 
 type SharedProject = { source: string; files: Record<string, ProjectFile>; activePath?: string };
 export type SharedProjectPayload = {
@@ -31,20 +28,6 @@ function decodeBase64Url(value: string): Uint8Array {
   return Uint8Array.fromBase64(value, { alphabet: "base64url", lastChunkHandling: "loose" });
 }
 
-async function transform(
-  bytes: Uint8Array,
-  stream: CompressionStream | DecompressionStream,
-): Promise<Uint8Array> {
-  const writer = stream.writable.getWriter();
-  const input = new Uint8Array(new ArrayBuffer(bytes.byteLength));
-  input.set(bytes);
-  const write = writer.write(input);
-  const close = writer.close();
-  const output = new Response(stream.readable).arrayBuffer();
-  await Promise.all([write, close]);
-  return new Uint8Array(await output);
-}
-
 export function createSharedProjectPayload(project: SharedProject): SharedProjectPayload {
   const snapshotError = projectSnapshotError(project);
   if (snapshotError) throw new Error(snapshotError);
@@ -63,17 +46,6 @@ export function createSharedProjectPayload(project: SharedProject): SharedProjec
     files: files as SharedProjectPayload["files"],
     ...(project.activePath === undefined ? {} : { activePath: project.activePath }),
   };
-}
-
-export async function encodeSharedProject(project: SharedProject): Promise<string> {
-  if (typeof CompressionStream === "undefined") throw new Error("Compression is unavailable");
-  const serialized = new TextEncoder().encode(JSON.stringify(createSharedProjectPayload(project)));
-  if (serialized.byteLength > maxSerializedBytes)
-    throw new Error("Project serialization exceeds the share size limit");
-  const compressed = await transform(serialized, new CompressionStream("gzip"));
-  const fragment = `#${projectFragmentPrefix}${encodeBase64Url(compressed)}`;
-  if (fragment.length > maxFragmentLength) throw new Error("Project URL fragment exceeds 2 MiB");
-  return fragment;
 }
 
 export function parseSharedProjectPayload(decoded: unknown): SharedProject {
@@ -136,51 +108,4 @@ export function parseSharedProjectPayload(decoded: unknown): SharedProject {
   const snapshotError = projectSnapshotError(project);
   if (snapshotError) throw new Error(snapshotError);
   return project;
-}
-
-export async function decodeSharedProject(fragment: string): Promise<SharedProject | undefined> {
-  try {
-    if (typeof DecompressionStream === "undefined") throw new Error("Compression is unavailable");
-    const value = fragment.startsWith("#") ? fragment.slice(1) : fragment;
-    if (!value.startsWith(projectFragmentPrefix)) return undefined;
-    const fragmentLength = fragment.length + (fragment.startsWith("#") ? 0 : 1);
-    if (fragmentLength > maxFragmentLength) throw new Error("Project URL fragment exceeds 2 MiB");
-    const encoded = value.slice(projectFragmentPrefix.length);
-    const compressed = decodeBase64Url(encoded);
-    const stream = new DecompressionStream("gzip");
-    const writer = stream.writable.getWriter();
-    const input = new Uint8Array(new ArrayBuffer(compressed.byteLength));
-    input.set(compressed);
-    const write = writer.write(input);
-    const close = writer.close();
-    const reader = stream.readable.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    while (true) {
-      const { done, value: chunk } = await reader.read();
-      if (done) break;
-      size += chunk.byteLength;
-      if (size > maxSerializedBytes) {
-        await reader.cancel();
-        throw new Error("Shared project is too large");
-      }
-      chunks.push(chunk);
-    }
-    await Promise.all([write, close]);
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    const decoded: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-    return parseSharedProjectPayload(decoded);
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      /too large|too many files|Compression is unavailable|URL fragment exceeds/.test(error.message)
-    )
-      throw error;
-    throw new Error("Invalid shared project");
-  }
 }

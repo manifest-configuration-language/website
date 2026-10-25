@@ -39,7 +39,6 @@
     "dexie": "4.4.7",
     "hono": "4.13.13",
     "i18next": "26.5.5",
-    "idb-keyval": "6.3.0",
     "ioredis": "6.0.0",
     "postgres": "3.4.9",
     "react": "19.3.1",

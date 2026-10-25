@@ -42,6 +42,7 @@ import { createPlaygroundCommandItems } from "./createPlaygroundCommandItems";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import { usePlaygroundLayout } from "./usePlaygroundLayout";
+import { usePlaygroundKeyboardShortcuts } from "./usePlaygroundKeyboardShortcuts";
 import { createSourcePositionStore } from "./sourcePositionStore";
 import "./symbolRenamePreview.css";
 import {
@@ -863,37 +864,14 @@ export default function Playground() {
     setSourceMapCandidates([]);
   }, [activePath, sourcePositionStore]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (document.querySelector('[aria-modal="true"]')) return;
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
-        return;
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "p") {
-        event.preventDefault();
-        setCommandPaletteOpen(true);
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "p") {
-        event.preventDefault();
-        setQuickOpen(true);
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "e") {
-        event.preventDefault();
-        setExplorerOpen((value) => !value);
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "m") {
-        event.preventDefault();
-        setMobileView("problems");
-        setShowProblems(true);
-        setShowDiff(false);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  usePlaygroundKeyboardShortcuts({
+    setCommandPaletteOpen,
+    setQuickOpen,
+    setExplorerOpen,
+    setMobileView,
+    setShowProblems,
+    setShowDiff,
+  });
 
   const onEditorReady = useCallback(
     (view: EditorView | undefined) => {

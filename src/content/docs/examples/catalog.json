@@ -1,176 +1,437 @@
 {
   "adapters/helm": {
-    "title": "Helm Chart",
-    "description": "ローカルのHelm ChartとvaluesからKubernetesマニフェストを生成します。",
+    "title": {
+      "ja": "Helm Chart",
+      "en": "Helm Chart"
+    },
+    "description": {
+      "ja": "ローカルのHelm ChartとvaluesからKubernetesマニフェストを生成します。",
+      "en": "Generate Kubernetes manifests from a local Helm Chart and values."
+    },
     "tags": ["Helm", "Chart", "Kubernetes"],
-    "difficulty": "応用"
+    "difficulty": {
+      "ja": "応用",
+      "en": "Advanced"
+    }
   },
   "adapters/kustomize": {
-    "title": "Kustomize",
-    "description": "Kustomizeのoverlayを評価し、環境ごとのマニフェストを生成します。",
+    "title": {
+      "ja": "Kustomize",
+      "en": "Kustomize"
+    },
+    "description": {
+      "ja": "Kustomizeのoverlayを評価し、環境ごとのマニフェストを生成します。",
+      "en": "Evaluate a Kustomize overlay and generate manifests for an environment."
+    },
     "tags": ["Kustomize", "overlay", "Kubernetes"],
-    "difficulty": "応用"
+    "difficulty": {
+      "ja": "応用",
+      "en": "Advanced"
+    }
   },
   "adapters/lifecycle": {
-    "title": "ライフサイクル",
-    "description": "データ変換と検証を組み合わせて、構成の処理手順を定義します。",
+    "title": {
+      "ja": "ライフサイクル",
+      "en": "Lifecycle"
+    },
+    "description": {
+      "ja": "データ変換と検証を組み合わせて、構成の処理手順を定義します。",
+      "en": "Combine data transformations and validation into a configuration pipeline."
+    },
     "tags": ["adapter", "validation", "pipeline"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "adapters/manifest": {
-    "title": "マニフェスト生成",
-    "description": "MCLの値からKubernetesリソースを組み立てて出力します。",
+    "title": {
+      "ja": "マニフェスト生成",
+      "en": "Manifest generation"
+    },
+    "description": {
+      "ja": "MCLの値からKubernetesリソースを組み立てて出力します。",
+      "en": "Build and emit Kubernetes resources from MCL values."
+    },
     "tags": ["Kubernetes", "manifest", "emit"],
-    "difficulty": "初級"
+    "difficulty": {
+      "ja": "初級",
+      "en": "Beginner"
+    }
   },
   "composition/merge-lists-by-key": {
-    "title": "キーによるリストのマージ",
-    "description": "指定したキーを使って、リストの要素を対応付けてマージします。",
+    "title": {
+      "ja": "キーによるリストのマージ",
+      "en": "Merge lists by key"
+    },
+    "description": {
+      "ja": "指定したキーを使って、リストの要素を対応付けてマージします。",
+      "en": "Match and merge list items using a selected key."
+    },
     "tags": ["list", "merge", "key"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "composition/recursive-merge": {
-    "title": "再帰マージ",
-    "description": "ネストした構成値を再帰的にマージし、共通設定をまとめます。",
+    "title": {
+      "ja": "再帰マージ",
+      "en": "Recursive merge"
+    },
+    "description": {
+      "ja": "ネストした構成値を再帰的にマージし、共通設定をまとめます。",
+      "en": "Recursively merge nested configuration values to combine shared settings."
+    },
     "tags": ["merge", "object", "composition"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "composition/without": {
-    "title": "キーの除外",
-    "description": "構成オブジェクトから不要なキーを取り除きます。",
+    "title": {
+      "ja": "キーの除外",
+      "en": "Exclude object keys"
+    },
+    "description": {
+      "ja": "構成オブジェクトから不要なキーを取り除きます。",
+      "en": "Remove unwanted keys from a configuration object."
+    },
     "tags": ["object", "filter", "composition"],
-    "difficulty": "初級"
+    "difficulty": {
+      "ja": "初級",
+      "en": "Beginner"
+    }
   },
   "language/basic": {
-    "title": "基本",
-    "description": "変数、オブジェクト、`emit`を使って最初のマニフェストを作ります。",
+    "title": {
+      "ja": "基本",
+      "en": "Basics"
+    },
+    "description": {
+      "ja": "変数、オブジェクト、`emit`を使って最初のマニフェストを作ります。",
+      "en": "Create your first manifest with variables, objects, and `emit`."
+    },
     "tags": ["beginner", "variable", "emit"],
-    "difficulty": "入門"
+    "difficulty": {
+      "ja": "入門",
+      "en": "Introductory"
+    }
   },
   "language/collection-operations": {
-    "title": "コレクション操作",
-    "description": "リストやオブジェクトに対する標準関数を使います。",
+    "title": {
+      "ja": "コレクション操作",
+      "en": "Collection operations"
+    },
+    "description": {
+      "ja": "リストやオブジェクトに対する標準関数を使います。",
+      "en": "Use standard functions with lists and objects."
+    },
     "tags": ["list", "object", "standard library"],
-    "difficulty": "初級"
+    "difficulty": {
+      "ja": "初級",
+      "en": "Beginner"
+    }
   },
   "language/collections": {
-    "title": "コレクション",
-    "description": "リストとオブジェクトを定義し、構成データを整理します。",
+    "title": {
+      "ja": "コレクション",
+      "en": "Collections"
+    },
+    "description": {
+      "ja": "リストとオブジェクトを定義し、構成データを整理します。",
+      "en": "Define lists and objects to organize configuration data."
+    },
     "tags": ["list", "object", "data"],
-    "difficulty": "入門"
+    "difficulty": {
+      "ja": "入門",
+      "en": "Introductory"
+    }
   },
   "language/comprehensions-and-aggregation": {
-    "title": "内包表記と集約",
-    "description": "内包表記で値を変換し、複数の値を集約します。",
+    "title": {
+      "ja": "内包表記と集約",
+      "en": "Comprehensions and aggregation"
+    },
+    "description": {
+      "ja": "内包表記で値を変換し、複数の値を集約します。",
+      "en": "Transform values with comprehensions and aggregate multiple values."
+    },
     "tags": ["comprehension", "aggregation", "list"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "language/functions-and-collections": {
-    "title": "関数とコレクション",
-    "description": "関数を使ってコレクションの値を組み立てます。",
+    "title": {
+      "ja": "関数とコレクション",
+      "en": "Functions and collections"
+    },
+    "description": {
+      "ja": "関数を使ってコレクションの値を組み立てます。",
+      "en": "Build collection values with functions."
+    },
     "tags": ["function", "list", "object"],
-    "difficulty": "初級"
+    "difficulty": {
+      "ja": "初級",
+      "en": "Beginner"
+    }
   },
   "language/multiline-strings": {
-    "title": "複数行文字列",
-    "description": "複数行文字列を使って、埋め込み設定やテキストを定義します。",
+    "title": {
+      "ja": "複数行文字列",
+      "en": "Multiline strings"
+    },
+    "description": {
+      "ja": "複数行文字列を使って、埋め込み設定やテキストを定義します。",
+      "en": "Define embedded settings and text with multiline strings."
+    },
     "tags": ["string", "template", "text"],
-    "difficulty": "初級"
+    "difficulty": {
+      "ja": "初級",
+      "en": "Beginner"
+    }
   },
   "language/optional-reference-and-fallback": {
-    "title": "省略可能な参照と既定値",
-    "description": "値がない場合の参照とフォールバック値を扱います。",
+    "title": {
+      "ja": "省略可能な参照と既定値",
+      "en": "Optional references and fallbacks"
+    },
+    "description": {
+      "ja": "値がない場合の参照とフォールバック値を扱います。",
+      "en": "Handle missing values with optional references and fallback values."
+    },
     "tags": ["optional", "reference", "fallback"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "language/short-circuit-and-membership": {
-    "title": "短絡評価とメンバー判定",
-    "description": "論理式の短絡評価と、コレクション内の値の判定を確認します。",
+    "title": {
+      "ja": "短絡評価とメンバー判定",
+      "en": "Short-circuiting and membership"
+    },
+    "description": {
+      "ja": "論理式の短絡評価と、コレクション内の値の判定を確認します。",
+      "en": "Explore short-circuit evaluation and membership checks."
+    },
     "tags": ["boolean", "membership", "expression"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "language/typed-functions": {
-    "title": "型付き関数",
-    "description": "引数と戻り値の型を指定した関数を定義します。",
+    "title": {
+      "ja": "型付き関数",
+      "en": "Typed functions"
+    },
+    "description": {
+      "ja": "引数と戻り値の型を指定した関数を定義します。",
+      "en": "Define functions with parameter and return types."
+    },
     "tags": ["function", "type", "signature"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "language/union-narrowing": {
-    "title": "Union型の絞り込み",
-    "description": "条件分岐でUnion型の値を判定し、安全に参照します。",
+    "title": {
+      "ja": "Union型の絞り込み",
+      "en": "Union narrowing"
+    },
+    "description": {
+      "ja": "条件分岐でUnion型の値を判定し、安全に参照します。",
+      "en": "Narrow union values in conditionals before accessing them."
+    },
     "tags": ["union", "type", "narrowing"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "language/values-and-expressions": {
-    "title": "値と式",
-    "description": "基本値と式を組み合わせて、構成データを表現します。",
+    "title": {
+      "ja": "値と式",
+      "en": "Values and expressions"
+    },
+    "description": {
+      "ja": "基本値と式を組み合わせて、構成データを表現します。",
+      "en": "Combine primitive values and expressions to describe configuration data."
+    },
     "tags": ["value", "expression", "beginner"],
-    "difficulty": "入門"
+    "difficulty": {
+      "ja": "入門",
+      "en": "Introductory"
+    }
   },
   "modules/imports": {
-    "title": "ファイルのimport",
-    "description": "複数のMCLファイルに定義を分け、相対パスでimportします。",
+    "title": {
+      "ja": "ファイルのimport",
+      "en": "File imports"
+    },
+    "description": {
+      "ja": "複数のMCLファイルに定義を分け、相対パスでimportします。",
+      "en": "Split definitions across MCL files and import them with relative paths."
+    },
     "tags": ["module", "import", "multi-file"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "projects/complete-application": {
-    "title": "アプリケーション構成",
-    "description": "複数のリソースと設定をまとめたアプリケーション構成を作ります。",
+    "title": {
+      "ja": "アプリケーション構成",
+      "en": "Application configuration"
+    },
+    "description": {
+      "ja": "複数のリソースと設定をまとめたアプリケーション構成を作ります。",
+      "en": "Build an application configuration from multiple resources and settings."
+    },
     "tags": ["project", "Kubernetes", "multi-file"],
-    "difficulty": "応用"
+    "difficulty": {
+      "ja": "応用",
+      "en": "Advanced"
+    }
   },
   "references/clone-node": {
-    "title": "Nodeの複製",
-    "description": "既存リソースを複製し、一部の値を変えて別のリソースを作ります。",
+    "title": {
+      "ja": "Nodeの複製",
+      "en": "Clone a node"
+    },
+    "description": {
+      "ja": "既存リソースを複製し、一部の値を変えて別のリソースを作ります。",
+      "en": "Create a resource from an existing one and change selected values."
+    },
     "tags": ["reference", "clone", "resource"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "references/deferred-resource-reference": {
-    "title": "遅延リソース参照",
-    "description": "後から解決されるリソース参照を使って依存関係を表します。",
+    "title": {
+      "ja": "遅延リソース参照",
+      "en": "Deferred resource references"
+    },
+    "description": {
+      "ja": "後から解決されるリソース参照を使って依存関係を表します。",
+      "en": "Express dependencies with resource references resolved later."
+    },
     "tags": ["reference", "deferred", "dependency"],
-    "difficulty": "応用"
+    "difficulty": {
+      "ja": "応用",
+      "en": "Advanced"
+    }
   },
   "references/nodes": {
-    "title": "Node参照",
-    "description": "Nodeの参照を使って、リソース間で値を共有します。",
+    "title": {
+      "ja": "Node参照",
+      "en": "Node references"
+    },
+    "description": {
+      "ja": "Nodeの参照を使って、リソース間で値を共有します。",
+      "en": "Share values between resources with node references."
+    },
     "tags": ["node", "reference", "resource"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "resources/configurations": {
-    "title": "ConfigMap",
-    "description": "アプリケーション用の設定値をConfigMapとして出力します。",
+    "title": {
+      "ja": "ConfigMap",
+      "en": "ConfigMap"
+    },
+    "description": {
+      "ja": "アプリケーション用の設定値をConfigMapとして出力します。",
+      "en": "Emit application settings as a ConfigMap."
+    },
     "tags": ["ConfigMap", "Kubernetes", "resource"],
-    "difficulty": "初級"
+    "difficulty": {
+      "ja": "初級",
+      "en": "Beginner"
+    }
   },
   "types/structures-and-unions": {
-    "title": "構造体とUnion型",
-    "description": "構造体とUnion型を定義し、値の形を表現します。",
+    "title": {
+      "ja": "構造体とUnion型",
+      "en": "Structs and union types"
+    },
+    "description": {
+      "ja": "構造体とUnion型を定義し、値の形を表現します。",
+      "en": "Define structs and union types to describe value shapes."
+    },
     "tags": ["type", "structure", "union"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "validation/bundle": {
-    "title": "バンドル検証",
-    "description": "複数のリソースに対する検証ルールをまとめて適用します。",
+    "title": {
+      "ja": "バンドル検証",
+      "en": "Validation bundles"
+    },
+    "description": {
+      "ja": "複数のリソースに対する検証ルールをまとめて適用します。",
+      "en": "Apply a shared set of validation rules to multiple resources."
+    },
     "tags": ["validation", "bundle", "rules"],
-    "difficulty": "応用"
+    "difficulty": {
+      "ja": "応用",
+      "en": "Advanced"
+    }
   },
   "validation/crd-validation": {
-    "title": "CRD検証",
-    "description": "カスタムリソース定義に沿って、リソースの値を検証します。",
+    "title": {
+      "ja": "CRD検証",
+      "en": "CRD validation"
+    },
+    "description": {
+      "ja": "カスタムリソース定義に沿って、リソースの値を検証します。",
+      "en": "Validate resource values against a custom resource definition."
+    },
     "tags": ["CRD", "schema", "Kubernetes"],
-    "difficulty": "応用"
+    "difficulty": {
+      "ja": "応用",
+      "en": "Advanced"
+    }
   },
   "validation/rules": {
-    "title": "検証ルール",
-    "description": "型と条件式を使って、構成値に独自の制約を設定します。",
+    "title": {
+      "ja": "検証ルール",
+      "en": "Validation rules"
+    },
+    "description": {
+      "ja": "型と条件式を使って、構成値に独自の制約を設定します。",
+      "en": "Add custom constraints to configuration values with types and conditions."
+    },
     "tags": ["validation", "type", "rule"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   },
   "validation/schema-validation": {
-    "title": "Schema検証",
-    "description": "Schemaで定義した形と制約に一致するか構成値を検証します。",
+    "title": {
+      "ja": "Schema検証",
+      "en": "Schema validation"
+    },
+    "description": {
+      "ja": "Schemaで定義した形と制約に一致するか構成値を検証します。",
+      "en": "Validate configuration values against a schema shape and its constraints."
+    },
     "tags": ["schema", "validation", "type"],
-    "difficulty": "中級"
+    "difficulty": {
+      "ja": "中級",
+      "en": "Intermediate"
+    }
   }
 }

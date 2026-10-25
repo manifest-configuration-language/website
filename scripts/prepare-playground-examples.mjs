@@ -9,17 +9,27 @@ const catalogPath = join(examplesRoot, "catalog.json");
 const output = join(websiteRoot, "src/playground/generatedExamples.json");
 const assetsRoot = join(websiteRoot, "public/playground-examples");
 const categories = new Map([
-  ["adapters", "Integrations"],
-  ["composition", "Composition"],
-  ["language", "Language"],
-  ["modules", "Modules"],
-  ["projects", "Projects"],
-  ["references", "References"],
-  ["resources", "Kubernetes"],
-  ["types", "Types"],
-  ["validation", "Validation"],
+  ["adapters", { en: "Integrations", ja: "連携" }],
+  ["composition", { en: "Composition", ja: "構成" }],
+  ["language", { en: "Language", ja: "言語" }],
+  ["modules", { en: "Modules", ja: "モジュール" }],
+  ["projects", { en: "Projects", ja: "プロジェクト" }],
+  ["references", { en: "References", ja: "参照" }],
+  ["resources", { en: "Kubernetes", ja: "Kubernetes" }],
+  ["types", { en: "Types", ja: "型" }],
+  ["validation", { en: "Validation", ja: "検証" }],
 ]);
-const difficulties = new Set(["入門", "初級", "中級", "応用"]);
+const locales = ["en", "ja"];
+const difficulties = new Set([
+  "Introductory",
+  "Beginner",
+  "Intermediate",
+  "Advanced",
+  "入門",
+  "初級",
+  "中級",
+  "応用",
+]);
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
 
@@ -31,14 +41,18 @@ function metadataFor(slug) {
   if (
     !metadata ||
     typeof metadata !== "object" ||
-    typeof metadata.title !== "string" ||
-    metadata.title.trim() === "" ||
-    typeof metadata.description !== "string" ||
-    metadata.description.trim() === "" ||
+    !locales.every(
+      (locale) =>
+        typeof metadata.title?.[locale] === "string" &&
+        metadata.title[locale].trim() !== "" &&
+        typeof metadata.description?.[locale] === "string" &&
+        metadata.description[locale].trim() !== "" &&
+        typeof metadata.difficulty?.[locale] === "string" &&
+        difficulties.has(metadata.difficulty[locale]),
+    ) ||
     !Array.isArray(metadata.tags) ||
     metadata.tags.length === 0 ||
-    !metadata.tags.every((tag) => typeof tag === "string" && tag.trim() !== "") ||
-    !difficulties.has(metadata.difficulty)
+    !metadata.tags.every((tag) => typeof tag === "string" && tag.trim() !== "")
   )
     throw new Error(`Example catalog entry is incomplete or invalid: ${slug}`);
 
@@ -115,16 +129,16 @@ const docs = [
   "---",
   "",
 ];
-for (const category of new Set(examples.map((example) => example.category))) {
+for (const category of new Set(examples.map((example) => example.category.ja))) {
   docs.push(`## ${category}`, "");
-  for (const example of examples.filter((item) => item.category === category)) {
+  for (const example of examples.filter((item) => item.category.ja === category)) {
     const tags = example.tags.map((tag) => `\`${tag}\``).join("、");
     docs.push(
-      `### ${example.title}`,
+      `### ${example.title.ja}`,
       "",
-      example.description,
+      example.description.ja,
       "",
-      `難易度は${example.difficulty}です。タグは${tags}です。`,
+      `難易度は${example.difficulty.ja}です。タグは${tags}です。`,
       "",
       `- [Playgroundで開く](/playground/?example=${encodeURIComponent(example.slug)})`,
       "",

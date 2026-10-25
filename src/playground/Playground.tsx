@@ -110,14 +110,16 @@ emit deployment
 `,
 };
 
+type ExampleLocale = "en" | "ja";
+type LocalizedExampleText = Record<ExampleLocale, string>;
 type ExampleSpec = {
-  category: string;
-  title: string;
+  category: LocalizedExampleText;
+  title: LocalizedExampleText;
   slug: string;
   asset: string;
-  description: string;
+  description: LocalizedExampleText;
   tags: string[];
-  difficulty: string;
+  difficulty: LocalizedExampleText;
   preview: string;
 };
 type FileAction = { kind: "create" } | { kind: "rename" | "delete"; path: string };
@@ -186,7 +188,7 @@ function renderStateReducer(state: RenderState, action: RenderAction): RenderSta
 }
 
 async function loadExampleFiles(
-  example: ExampleSpec,
+  example: Pick<ExampleSpec, "asset">,
   messages: { loadError: string; invalidFormat: string },
 ): Promise<Record<string, string>> {
   const response = await fetch(example.asset, { cache: "force-cache" });
@@ -222,8 +224,19 @@ function sharedProjectError(cause: unknown, tooLargeMessage: string): string {
 }
 
 export default function Playground() {
-  const { t } = useTranslation();
-  const examples = exampleCatalog as unknown as ExampleSpec[];
+  const { t, i18n } = useTranslation();
+  const exampleLocale: ExampleLocale = i18n.resolvedLanguage?.startsWith("en") ? "en" : "ja";
+  const examples = useMemo(
+    () =>
+      (exampleCatalog as unknown as ExampleSpec[]).map((example) => ({
+        ...example,
+        category: example.category[exampleLocale],
+        title: example.title[exampleLocale],
+        description: example.description[exampleLocale],
+        difficulty: example.difficulty[exampleLocale],
+      })),
+    [exampleLocale],
+  );
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
   const renameFileImports = useCallback(
     (source: string, files: Record<string, ProjectFile>, oldPath: string, newPath: string) => {

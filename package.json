@@ -9,7 +9,7 @@
     "prebuild": "node scripts/prepare-playground-examples.mjs && node scripts/fetch-mcl-reference.mjs",
     "build": "astro build && node scripts/compress-wasm.mjs",
     "migrate:playground-api": "node src/api/migrate.js",
-    "test:api": "node --test src/api",
+    "test:api": "node --test src/api/*.test.js",
     "test:persistence": "node --test src/playground/playgroundDatabase.test.mjs",
     "preview": "astro preview",
     "precheck": "node scripts/prepare-playground-examples.mjs",

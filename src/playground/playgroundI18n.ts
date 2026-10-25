@@ -85,6 +85,9 @@ export const resources = {
       deleteProject: "Delete project",
       formatSource: "Format source",
       fileTreeLabel: "Project files",
+      searchFiles: "Search files",
+      searchFilenameOrPath: "Search filenames or paths",
+      noFilesMatch: "No matching files",
       files: "Files",
       createFile: "Create file",
       renameFile: "Rename file",
@@ -349,6 +352,9 @@ export const resources = {
       deleteProject: "プロジェクトを削除",
       formatSource: "コードを整形",
       fileTreeLabel: "プロジェクトファイル",
+      searchFiles: "ファイルを検索",
+      searchFilenameOrPath: "ファイル名やパスを検索",
+      noFilesMatch: "一致するファイルはありません",
       files: "ファイル",
       createFile: "ファイルを作成",
       renameFile: "名前を変更",
@@ -618,6 +624,9 @@ declare global {
       deleteProject: string;
       formatSource: string;
       fileTreeLabel: string;
+      searchFiles: string;
+      searchFilenameOrPath: string;
+      noFilesMatch: string;
       files: string;
       createFile: string;
       renameFile: string;

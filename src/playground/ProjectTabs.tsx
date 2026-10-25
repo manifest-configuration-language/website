@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
-import { Button } from "react-aria-components";
+import { Button, Input, SearchField } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import type { ProjectFile } from "./types";
 import "./ProjectTabs.css";
@@ -79,7 +79,12 @@ export function ProjectTabs({
   disabled = false,
 }: Props) {
   const { t } = useTranslation();
-  const nodes = useMemo(() => createFileTree(paths, files), [paths, files]);
+  const [search, setSearch] = useState("");
+  const visiblePaths = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase();
+    return query ? paths.filter((path) => path.toLocaleLowerCase().includes(query)) : paths;
+  }, [paths, search]);
+  const nodes = useMemo(() => createFileTree(visiblePaths, files), [visiblePaths, files]);
   const expandedItems = useMemo(
     () => [...nodes.values()].filter((node) => !node.file).map((node) => node.path || rootItemId),
     [nodes],
@@ -111,10 +116,11 @@ export function ProjectTabs({
     tree.rebuildTree();
     const folders = new Set(expandedItems);
     for (const folder of folders) {
-      if (!previousFolders.current.has(folder)) tree.getItemInstance(folder).expand();
+      if (search.trim() || !previousFolders.current.has(folder))
+        tree.getItemInstance(folder).expand();
     }
     previousFolders.current = folders;
-  }, [tree, nodes, expandedItems]);
+  }, [tree, nodes, expandedItems, search]);
 
   return (
     <nav className="project-explorer" aria-label={t("fileTreeLabel")}>
@@ -124,7 +130,20 @@ export function ProjectTabs({
           + {t("files")}
         </Button>
       </div>
+      <SearchField
+        aria-label={t("searchFiles")}
+        className="project-explorer-search"
+        value={search}
+        onChange={setSearch}
+      >
+        <Input placeholder={t("searchFilenameOrPath")} />
+      </SearchField>
       <div {...tree.getContainerProps(t("fileTreeLabel"))} className="project-explorer-tree">
+        {tree.getItems().length === 0 && (
+          <p className="project-explorer-empty" role="status">
+            {t("noFilesMatch")}
+          </p>
+        )}
         {tree.getItems().map((item) => {
           const node = item.getItemData();
           const canSelect = node.file && node.selectable;

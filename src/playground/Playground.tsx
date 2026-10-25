@@ -19,12 +19,14 @@ import { initialSource, type ApplyWorkspaceEdits } from "./MclEditor";
 import { parseSharedProjectPayload } from "./projectShare";
 import { loadShortShare } from "./projectShareApi";
 import { projectSnapshotError, projectSnapshotErrorMessage } from "./projectValidation.js";
+import { clearShareReferenceFromURL } from "./usePlaygroundProjectActions";
+import { loadExampleFiles, usePlaygroundProjectActions } from "./usePlaygroundProjectActions";
+import type { ExampleCatalogEntry } from "./usePlaygroundProjectActions";
 import { PlaygroundResult } from "./PlaygroundResult";
 import type { SourceMapLocationCandidate } from "./PlaygroundResult";
 import { WorkspaceOutputPane } from "./WorkspaceOutputPane";
 import { PlaygroundEditorDialogs } from "./PlaygroundEditorDialogs";
 import type { PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
-import { writeProjectArchive } from "./projectZip";
 import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
 import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
@@ -111,17 +113,6 @@ emit deployment
 };
 
 type ExampleLocale = "en" | "ja";
-type LocalizedExampleText = Record<ExampleLocale, string>;
-type ExampleSpec = {
-  category: LocalizedExampleText;
-  title: LocalizedExampleText;
-  slug: string;
-  asset: string;
-  description: LocalizedExampleText;
-  tags: string[];
-  difficulty: LocalizedExampleText;
-  preview: string;
-};
 type FileAction = { kind: "create" } | { kind: "rename" | "delete"; path: string };
 type RenderState = {
   reply?: PlaygroundReply;
@@ -187,36 +178,6 @@ function renderStateReducer(state: RenderState, action: RenderAction): RenderSta
   }
 }
 
-async function loadExampleFiles(
-  example: Pick<ExampleSpec, "asset">,
-  messages: { loadError: string; invalidFormat: string },
-): Promise<Record<string, string>> {
-  const response = await fetch(example.asset, { cache: "force-cache" });
-  if (!response.ok) throw new Error(messages.loadError);
-  const value: unknown = await response.json();
-  if (!value || typeof value !== "object" || !("files" in value))
-    throw new Error(messages.invalidFormat);
-  const files = (value as { files: unknown }).files;
-  if (
-    !files ||
-    typeof files !== "object" ||
-    Array.isArray(files) ||
-    !Object.hasOwn(files, "main.mcl") ||
-    !Object.values(files).every((content) => typeof content === "string")
-  ) {
-    throw new Error(messages.invalidFormat);
-  }
-  return files as Record<string, string>;
-}
-
-function clearShareReferenceFromURL() {
-  const url = new URL(window.location.href);
-  const isShortSharePath = /^\/playground\/s\/[A-Za-z0-9_-]{22}\/?$/.test(url.pathname);
-  if (!isShortSharePath) return;
-  url.pathname = "/playground/";
-  history.replaceState(null, "", url);
-}
-
 function sharedProjectError(cause: unknown, tooLargeMessage: string): string {
   const message = cause instanceof Error ? cause.message : String(cause);
   if (message === "Shared project is too large") return tooLargeMessage;
@@ -228,7 +189,7 @@ export default function Playground() {
   const exampleLocale: ExampleLocale = i18n.resolvedLanguage?.startsWith("en") ? "en" : "ja";
   const examples = useMemo(
     () =>
-      (exampleCatalog as unknown as ExampleSpec[]).map((example) => ({
+      (exampleCatalog as unknown as ExampleCatalogEntry[]).map((example) => ({
         ...example,
         category: example.category[exampleLocale],
         title: example.title[exampleLocale],
@@ -489,34 +450,6 @@ export default function Playground() {
       },
     };
   });
-  const commandItems = createPlaygroundCommandItems(t, {
-    editor,
-    activePath,
-    hasSourceMap: Boolean(currentSourceMap),
-    run: () => void run(),
-    format: () => void formatSource(),
-    openExamples: () => setExamplesOpen(true),
-    toggleExplorer: () => setExplorerOpen((value) => !value),
-    goToDefinition: () => void goToDefinitionAtCursor(),
-    goToYaml: navigateToYaml,
-    findReferences: openSymbolReferences,
-    renameSymbol: openSymbolRename,
-    share: openShareDialog,
-    openFile: () => setQuickOpen(true),
-    createFile: () => {
-      setFileActionError("");
-      setFilePathInput("");
-      setFileAction({ kind: "create" });
-    },
-    newProject: createDraft,
-    showOutput: () => setMobileView("output"),
-    showProblems: () => {
-      setMobileView("problems");
-      setShowProblems(true);
-      setShowDiff(false);
-    },
-    closePalette: () => setCommandPaletteOpen(false),
-  });
   const quickOpenItems: QuickAccessItem[] = quickPaths.map((path) => ({
     value: path,
     label: path,
@@ -624,6 +557,72 @@ export default function Playground() {
       t,
     ],
   );
+
+  const {
+    confirmDeleteCurrentDraft,
+    createDraft,
+    deleteCurrentDraft,
+    duplicateDraft,
+    exportProject,
+    loadProject,
+    openDraft,
+    reloadConflictedDraft,
+    selectSample,
+  } = usePlaygroundProjectActions({
+    activeDraftName,
+    applyProject,
+    client,
+    examples,
+    initialSource,
+    persistence: {
+      activeDraftId,
+      activeDraftIdRef,
+      activateDraft,
+      clearDraftConflict,
+      deleteDraft,
+      draftsRef,
+      loadDraft,
+      saveDraftSnapshot,
+      setActiveDraft,
+    },
+    projectRef,
+    samples,
+    downloadBlob,
+    setDeleteProjectOpen,
+    setError,
+    setExamplesOpen,
+    setLoadingProject,
+    setNotice,
+  });
+
+  const commandItems = createPlaygroundCommandItems(t, {
+    editor,
+    activePath,
+    hasSourceMap: Boolean(currentSourceMap),
+    run: () => void run(),
+    format: () => void formatSource(),
+    openExamples: () => setExamplesOpen(true),
+    toggleExplorer: () => setExplorerOpen((value) => !value),
+    goToDefinition: () => void goToDefinitionAtCursor(),
+    goToYaml: navigateToYaml,
+    findReferences: openSymbolReferences,
+    renameSymbol: openSymbolRename,
+    share: openShareDialog,
+    openFile: () => setQuickOpen(true),
+    createFile: () => {
+      setFileActionError("");
+      setFilePathInput("");
+      setFileAction({ kind: "create" });
+    },
+    newProject: createDraft,
+    showOutput: () => setMobileView("output"),
+    showProblems: () => {
+      setMobileView("problems");
+      setShowProblems(true);
+      setShowDiff(false);
+    },
+    closePalette: () => setCommandPaletteOpen(false),
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -1023,132 +1022,6 @@ export default function Playground() {
       if (startupReady.current) runAction.current();
     } catch (cause) {
       if (cause instanceof DraftConflictError) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
-  async function loadProject(files: File[]) {
-    if (!client.current) throw new Error("Playground is not ready");
-    return await client.current.loadProject(files);
-  }
-
-  async function selectSample(selected: string) {
-    const builtin = samples[selected as keyof typeof samples];
-    if (builtin !== undefined) {
-      applyProject(
-        { source: builtin, files: {} },
-        { name: selected === "configMap" ? "ConfigMap" : "Deployment" },
-      );
-      setExamplesOpen(false);
-      return;
-    }
-    const example = examples.find((entry) => entry.slug === selected);
-    if (!example) return;
-
-    setLoadingProject(true);
-    try {
-      const files = await loadExampleFiles(example, {
-        loadError: t("exampleLoadError", { title: example.title }),
-        invalidFormat: t("exampleInvalidFormat", { title: example.title }),
-      });
-      const { ["main.mcl"]: source, ...otherFiles } = files;
-      applyProject(
-        {
-          source,
-          files: Object.fromEntries(
-            Object.entries(otherFiles).map(([path, content]) => [
-              path,
-              { encoding: "utf8", content },
-            ]),
-          ),
-        },
-        { name: example.title },
-      );
-    } catch (cause) {
-      if (cause instanceof DraftConflictError) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setLoadingProject(false);
-      setExamplesOpen(false);
-    }
-  }
-
-  async function openDraft(id: string) {
-    if (id === activeDraftIdRef.current) return;
-    try {
-      await saveDraftSnapshot(activeDraftIdRef.current, projectRef.current);
-      const saved: unknown = await loadDraft(id);
-      if (!isStoredProject(saved)) throw new Error(t("projectUnavailable"));
-      clearDraftConflict(id);
-      await setActiveDraft(id);
-      clearShareReferenceFromURL();
-      applyProject(saved, { newDraft: false });
-    } catch (cause) {
-      if (cause instanceof DraftConflictError) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
-  async function reloadConflictedDraft() {
-    try {
-      const saved: unknown = await loadDraft(activeDraftId);
-      if (!isStoredProject(saved)) throw new Error(t("projectUnavailable"));
-      applyProject(saved, { newDraft: false });
-      clearDraftConflict(activeDraftId);
-      setError("");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
-  function createDraft() {
-    applyProject({ source: initialSource, files: {} }, { name: t("defaultProjectName") });
-  }
-
-  function duplicateDraft() {
-    applyProject(projectRef.current, { name: t("projectCopyName", { name: activeDraftName }) });
-  }
-
-  function deleteCurrentDraft() {
-    if (activeDraftId) setDeleteProjectOpen(true);
-  }
-
-  async function confirmDeleteCurrentDraft() {
-    setDeleteProjectOpen(false);
-    try {
-      await saveDraftSnapshot(activeDraftId, projectRef.current);
-      await deleteDraft(activeDraftId);
-      clearShareReferenceFromURL();
-      const [nextDraft] = draftsRef.current;
-      if (nextDraft) {
-        const saved: unknown = await loadDraft(nextDraft.id);
-        if (!isStoredProject(saved)) throw new Error(t("projectUnavailable"));
-        clearDraftConflict(nextDraft.id);
-        await setActiveDraft(nextDraft.id);
-        applyProject(saved, { newDraft: false });
-      } else {
-        const nextId = crypto.randomUUID();
-        activateDraft(nextId, t("defaultProjectName"));
-        applyProject({ source: initialSource, files: {} }, { newDraft: false });
-      }
-    } catch (cause) {
-      if (cause instanceof DraftConflictError) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
-  async function exportProject() {
-    try {
-      const archive = await writeProjectArchive(
-        {
-          source: projectRef.current.source,
-          files: projectRef.current.files,
-        },
-        t,
-      );
-      downloadBlob(archive, "mcl-project.zip");
-      setNotice(t("zipExported"));
-    } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   }

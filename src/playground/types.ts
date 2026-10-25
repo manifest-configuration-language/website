@@ -31,7 +31,9 @@ export type PlaygroundCompletionItem = BrowserCompletionItem;
 export type PlaygroundCompletionPosition = BrowserCompletionPosition;
 
 export type PlaygroundDefinitionLocation = BrowserDefinitionLocation;
-export type PlaygroundHover = BrowserHoverInfo;
+export type PlaygroundHover = BrowserHoverInfo & {
+  standardLibrary?: { module: string; name: string };
+};
 
 export type PlaygroundSourceMap = BrowserSourceMap;
 export type PlaygroundRenameEdit = BrowserRenameEdit;

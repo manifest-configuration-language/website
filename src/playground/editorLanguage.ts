@@ -173,6 +173,17 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
                 const dom = document.createElement("div");
                 dom.className = "cm-tooltip-hover";
                 dom.textContent = hover.contents;
+                if (
+                  hover.standardLibrary?.module.startsWith("std:") &&
+                  hover.standardLibrary.name.length > 0
+                ) {
+                  const link = document.createElement("a");
+                  link.href = "/reference/stdlib-functions/";
+                  link.target = "_blank";
+                  link.rel = "noopener noreferrer";
+                  link.textContent = "標準関数リファレンス";
+                  dom.append(document.createElement("br"), link);
+                }
                 return { dom };
               },
             };

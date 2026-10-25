@@ -163,8 +163,10 @@ function toEditorDiagnostics(
   diagnostics: PlaygroundDiagnostic[],
   path: string,
   view: EditorView,
+  actionName: (kind: string) => string | undefined,
 ): Diagnostic[] {
   const doc = view.state.doc;
+  const sourceSnapshot = doc.toString();
   const position = (lineNumber: number, column: number) => {
     const line = doc.line(Math.max(1, Math.min(lineNumber, doc.lines)));
     return Math.min(line.to, line.from + Math.max(0, column - 1));
@@ -186,11 +188,34 @@ function toEditorDiagnostics(
             : diagnostic.severity.toLowerCase() === "hint"
               ? "hint"
               : "error";
+      const actions = diagnostic.actions?.flatMap((action) => {
+        const name = actionName(action.kind);
+        if (!name) return [];
+        const edits = action.edits
+          .filter((edit) => edit.path === path)
+          .map((edit) => ({
+            from: position(edit.range.start.line + 1, edit.range.start.character + 1),
+            to: position(edit.range.end.line + 1, edit.range.end.character + 1),
+            insert: edit.newText,
+          }))
+          .sort((left, right) => left.from - right.from);
+        if (edits.length !== action.edits.length || edits.length === 0) return [];
+        return [
+          {
+            name,
+            apply(currentView: EditorView) {
+              if (currentView.state.doc.toString() !== sourceSnapshot) return;
+              currentView.dispatch({ changes: edits });
+            },
+          },
+        ];
+      });
       return {
         from,
         to,
         severity,
         message: diagnostic.code ? `${diagnostic.code}: ${diagnostic.message}` : diagnostic.message,
+        ...(actions?.length ? { actions } : {}),
       };
     });
 }
@@ -638,8 +663,15 @@ export function MclEditor({
   useEffect(() => {
     const view = viewRef.current;
     if (view)
-      view.dispatch(setDiagnostics(view.state, toEditorDiagnostics(diagnostics, path, view)));
-  }, [diagnostics, path]);
+      view.dispatch(
+        setDiagnostics(
+          view.state,
+          toEditorDiagnostics(diagnostics, path, view, (kind) =>
+            kind === "removeUnreachableDefinition" ? t("removeUnreachableDefinition") : undefined,
+          ),
+        ),
+      );
+  }, [diagnostics, path, t]);
 
   const languageLabel = path.endsWith(".mcl")
     ? "MCL"

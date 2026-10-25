@@ -101,6 +101,7 @@ export const resources = {
       shortcutInvalid: "That shortcut cannot be used",
       shortcutDuplicate: "That shortcut is already assigned",
       shortcutReset: "Reset shortcuts",
+      removeUnreachableDefinition: "Remove unreachable definition",
       examplesTitle: "Examples",
       close: "Close",
       searchExamples: "Search examples",
@@ -357,6 +358,7 @@ export const resources = {
       shortcutInvalid: "このキーの組み合わせは使用できません",
       shortcutDuplicate: "このショートカットはすでに割り当てられています",
       shortcutReset: "初期設定に戻す",
+      removeUnreachableDefinition: "到達不能な定義を削除",
       examplesTitle: "サンプル",
       close: "閉じる",
       searchExamples: "サンプルを検索",
@@ -619,6 +621,7 @@ declare global {
       shortcutInvalid: string;
       shortcutDuplicate: string;
       shortcutReset: string;
+      removeUnreachableDefinition: string;
       examplesTitle: string;
       close: string;
       searchExamples: string;

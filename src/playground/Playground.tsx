@@ -9,6 +9,7 @@ import { playgroundLocale } from "./playgroundI18n";
 import { initialSource, type ApplyWorkspaceEdits } from "./MclEditor";
 import { projectSnapshotError, projectSnapshotErrorMessage } from "./projectValidation.js";
 import { usePlaygroundBootstrap } from "./usePlaygroundBootstrap";
+import { usePlaygroundClient } from "./usePlaygroundClient";
 import {
   clearShareReferenceFromURL,
   usePlaygroundProjectActions,
@@ -591,11 +592,18 @@ export default function Playground() {
     closePalette: () => setCommandPaletteOpen(false),
   });
 
-  usePlaygroundBootstrap({
+  const { runInitialProjectIfReady } = usePlaygroundClient({
     client,
-    editor,
-    runAction,
     startupReady,
+    runAction,
+    setWasmStatus,
+    setError,
+  });
+
+  usePlaygroundBootstrap({
+    editor,
+    startupReady,
+    runInitialProjectIfReady,
     project: projectRef,
     activeDraftIdRef,
     draftsRef,
@@ -612,7 +620,6 @@ export default function Playground() {
     applyWorkspacePreference,
     saveDraftSnapshot,
     setPendingInitialImport,
-    setWasmStatus,
     setError,
   });
 

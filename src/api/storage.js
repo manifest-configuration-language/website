@@ -8,7 +8,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
-import Redis from "ioredis";
+import { Cluster } from "ioredis";
 import postgres from "postgres";
 import { maximumRequestBytes } from "./snapshot.js";
 import { verifyDatabaseMigrations } from "./migrate.js";
@@ -42,10 +42,16 @@ export async function createShareStorage() {
     idle_timeout: 30,
     prepare: false,
   });
-  const redis = new Redis(required("VALKEY_URL"), {
+  const valkeyURL = new URL(required("VALKEY_URL"));
+  if (valkeyURL.protocol !== "redis:" || !valkeyURL.hostname)
+    throw new Error("VALKEY_URL must point to a Redis Cluster endpoint");
+  const redis = new Cluster([{ host: valkeyURL.hostname, port: Number(valkeyURL.port || 6379) }], {
     lazyConnect: true,
-    maxRetriesPerRequest: 1,
     enableOfflineQueue: false,
+    redisOptions: { maxRetriesPerRequest: 1 },
+  });
+  redis.on("error", () => {
+    process.stderr.write("Valkey connection failed.\n");
   });
   const s3 = new S3Client({
     endpoint: required("S3_ENDPOINT"),

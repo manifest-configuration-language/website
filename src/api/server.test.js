@@ -25,6 +25,50 @@ function createStorage() {
 const headers = { "content-type": "application/json" };
 
 describe("Playground share API", () => {
+  it("keeps rate-limit keys stable across fixed-window boundaries", async (testContext) => {
+    const storage = createStorage();
+    const requestLimits = [];
+    const uploadLimits = [];
+    let now = 3_599_999;
+    testContext.mock.method(Date, "now", () => now);
+    storage.allowRequest = async (...args) => {
+      requestLimits.push(args);
+      return true;
+    };
+    storage.allowUploadBytes = async (...args) => {
+      uploadLimits.push(args);
+      return true;
+    };
+    const app = createApp(storage, { rateLimitSecret: "test-secret" });
+    const snapshot = { version: 1, source: "", files: {} };
+    const requestHeaders = { ...headers, "cf-connecting-ip": "192.0.2.1" };
+
+    for (const timestamp of [3_599_999, 3_600_000]) {
+      now = timestamp;
+      const response = await app.request("/api/playground/snippets", {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify(snapshot),
+      });
+      assert.equal(response.status, 201);
+    }
+    for (const timestamp of [86_399_999, 86_400_000]) {
+      now = timestamp;
+      const response = await app.request("/api/playground/snippets/not-a-share-id", {
+        headers: requestHeaders,
+      });
+      assert.equal(response.status, 404);
+    }
+
+    const postLimits = requestLimits.filter(([, limit]) => limit === 6);
+    const getLimits = requestLimits.filter(([, limit]) => limit === 120);
+    assert.equal(postLimits[0][0], postLimits[1][0]);
+    assert.deepEqual(postLimits[0].slice(1), [6, 60 * 60]);
+    assert.equal(getLimits[0][0], getLimits[1][0]);
+    assert.deepEqual(getLimits[0].slice(1), [120, 60]);
+    assert.equal(uploadLimits[0][0], uploadLimits[1][0]);
+  });
+
   it("creates an immutable short link for a multi-file project and returns its snapshot", async () => {
     const storage = createStorage();
     const app = createApp(storage, { rateLimitSecret: "test-secret" });

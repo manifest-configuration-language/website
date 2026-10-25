@@ -19,8 +19,8 @@ function clientAddress(context) {
   );
 }
 
-function rateKey(secret, address, action, period) {
-  return `mcl-playground:${action}:${createHmac("sha256", secret).update(address).digest("hex")}:${period}`;
+function rateKey(secret, address, action) {
+  return `mcl-playground:${action}:${createHmac("sha256", secret).update(address).digest("hex")}`;
 }
 
 function statusFor(error) {
@@ -51,10 +51,9 @@ export function createApp(storage, options = {}) {
     try {
       if (!context.req.header("content-type")?.toLowerCase().includes("application/json"))
         throw new HTTPException(415, { message: "JSON is required" });
-      const now = Date.now();
       const address = clientAddress(context);
-      const postKey = rateKey(secret, address, "post", Math.floor(now / 3_600_000));
-      if (!(await storage.allowRequest(postKey, 6, 2 * 60 * 60)))
+      const postKey = rateKey(secret, address, "post");
+      if (!(await storage.allowRequest(postKey, 6, 60 * 60)))
         throw new HTTPException(429, { message: "Rate limit exceeded" });
       let body;
       try {
@@ -68,7 +67,7 @@ export function createApp(storage, options = {}) {
       } catch {
         throw new HTTPException(400, { message: "Invalid shared project" });
       }
-      const dailyKey = rateKey(secret, address, "bytes", Math.floor(now / 86_400_000));
+      const dailyKey = rateKey(secret, address, "bytes");
       if (!(await storage.allowUploadBytes(dailyKey, validated.contentBytes)))
         throw new HTTPException(429, { message: "Daily upload limit exceeded" });
       return context.json(
@@ -88,10 +87,9 @@ export function createApp(storage, options = {}) {
     if (activeReads >= 4) throw new HTTPException(503, { message: "Read queue is full" });
     activeReads += 1;
     try {
-      const now = Date.now();
       const address = clientAddress(context);
-      const key = rateKey(secret, address, "get", Math.floor(now / 60_000));
-      if (!(await storage.allowRequest(key, 120, 120)))
+      const key = rateKey(secret, address, "get");
+      if (!(await storage.allowRequest(key, 120, 60)))
         throw new HTTPException(429, { message: "Rate limit exceeded" });
       const id = context.req.param("id");
       if (!shareIDPattern.test(id)) throw new HTTPException(404, { message: "Not found" });

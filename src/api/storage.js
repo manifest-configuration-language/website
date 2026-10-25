@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { gunzip, gzip } from "node:zlib";
 import { promisify } from "node:util";
 import {
@@ -17,10 +17,37 @@ const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
 const maxStoredBytes = Number(process.env.SHARE_STORAGE_MAX_BYTES ?? 10 * 1024 ** 3);
 const storageLockKey = 741_203_808;
-const requestLimitScript =
-  "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n<=tonumber(ARGV[2]) and 1 or 0";
-const uploadBytesScript =
-  "local n=tonumber(redis.call('GET',KEYS[1]) or '0'); local a=tonumber(ARGV[1]); if n+a>tonumber(ARGV[2]) then return 0 end; local t=redis.call('INCRBY',KEYS[1],a); if n==0 then redis.call('EXPIRE',KEYS[1],ARGV[3]) end; return t";
+const requestLimitScript = `
+  redis.replicate_commands()
+  local time = redis.call('TIME')
+  local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+  local window = tonumber(ARGV[1])
+  local limit = tonumber(ARGV[2])
+  redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - window)
+  if redis.call('ZCARD', KEYS[1]) >= limit then return 0 end
+  redis.call('ZADD', KEYS[1], now, ARGV[3])
+  redis.call('PEXPIRE', KEYS[1], window)
+  return 1
+`;
+const uploadBytesScript = `
+  redis.replicate_commands()
+  local time = redis.call('TIME')
+  local now = tonumber(time[1]) * 1000 + math.floor(tonumber(time[2]) / 1000)
+  local window = tonumber(ARGV[1])
+  local bytes = tonumber(ARGV[2])
+  local limit = tonumber(ARGV[3])
+  redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', now - window)
+  local entries = redis.call('ZRANGE', KEYS[1], 0, -1)
+  local used = 0
+  for _, entry in ipairs(entries) do
+    local amount = string.match(entry, ':(%d+)$')
+    if amount then used = used + tonumber(amount) end
+  end
+  if used + bytes > limit then return 0 end
+  redis.call('ZADD', KEYS[1], now, ARGV[4] .. ':' .. bytes)
+  redis.call('PEXPIRE', KEYS[1], window)
+  return 1
+`;
 const corruptShare = () => new Error("Share object is corrupt");
 
 export async function decodeShareObject({ compressed, storedBytes, contentBytes, contentSha256 }) {
@@ -115,14 +142,46 @@ export async function createShareStorage() {
   await s3.send(new HeadBucketCommand({ Bucket: bucket }));
 
   async function allowRequest(key, limit, windowSeconds) {
-    return Number(await redis.eval(requestLimitScript, 1, key, windowSeconds, limit)) === 1;
+    if (
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      !Number.isSafeInteger(windowSeconds) ||
+      windowSeconds < 1
+    )
+      throw new Error("Request limit and window must be positive integers");
+    const windowMilliseconds = windowSeconds * 1000;
+    if (!Number.isSafeInteger(windowMilliseconds))
+      throw new Error("Request limit window is too large");
+    return (
+      Number(
+        await redis.eval(
+          requestLimitScript,
+          1,
+          key,
+          windowMilliseconds,
+          limit,
+          randomBytes(16).toString("hex"),
+        ),
+      ) === 1
+    );
   }
 
   async function allowUploadBytes(key, bytes) {
-    const total = Number(
-      await redis.eval(uploadBytesScript, 1, key, bytes, dailyUploadLimit, 86_400),
+    if (!Number.isSafeInteger(bytes) || bytes < 0)
+      throw new Error("Upload byte count must be a non-negative integer");
+    return (
+      Number(
+        await redis.eval(
+          uploadBytesScript,
+          1,
+          key,
+          86_400_000,
+          bytes,
+          dailyUploadLimit,
+          randomBytes(16).toString("hex"),
+        ),
+      ) === 1
     );
-    return Number.isSafeInteger(total) && total >= bytes;
   }
 
   async function createShare({ id, serialized, contentBytes }) {
@@ -158,10 +217,21 @@ export async function createShareStorage() {
       );
       await database`UPDATE playground_snippets SET status = 'ready' WHERE id = ${id}`;
     } catch (error) {
-      await s3
-        .send(new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }))
-        .catch(() => undefined);
-      await database`DELETE FROM playground_snippets WHERE id = ${id}`;
+      let pending = false;
+      try {
+        await database`UPDATE playground_snippets SET status = 'pending' WHERE id = ${id}`;
+        pending = true;
+      } catch {
+        // Keep the object and row when the database cannot record the cleanup state.
+      }
+      if (pending) {
+        try {
+          await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: objectKey }));
+          await database`DELETE FROM playground_snippets WHERE id = ${id}`;
+        } catch {
+          // The periodic collector retries deletion while the pending row remains.
+        }
+      }
       throw error;
     }
     return { id, expiresAt: expiresAt.toISOString() };

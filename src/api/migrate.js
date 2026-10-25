@@ -20,7 +20,7 @@ async function loadMigrations() {
   );
 }
 
-function verifyAppliedMigrations(migrations, applied) {
+export function verifyAppliedMigrations(migrations, applied) {
   const byVersion = new Map(applied.map((entry) => [entry.version, entry.checksum.trim()]));
   for (const migration of migrations) {
     const checksum = byVersion.get(migration.version);

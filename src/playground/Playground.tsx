@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 import { Button, I18nProvider } from "react-aria-components";
-import type { RuntimeStatus } from "@manifest-configuration-language/browser";
 import { useTranslation } from "react-i18next";
 import { playgroundLocale } from "./playgroundI18n";
 import { initialSource, type ApplyWorkspaceEdits } from "./MclEditor";
@@ -16,10 +15,10 @@ import {
 import type { ExampleCatalogEntry } from "./usePlaygroundProjectActions";
 import type { SourceMapLocationCandidate } from "./PlaygroundResult";
 import { PlaygroundEditorDialogs } from "./PlaygroundEditorDialogs";
-import type { PlaygroundClient, PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
+import type { PlaygroundClient, PlaygroundDiagnostic, ProjectFile } from "./types";
 import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
-import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
+import { usePlaygroundExecution } from "./usePlaygroundExecution";
 import { renamePreviewEntries, usePlaygroundLanguageActions } from "./usePlaygroundLanguageActions";
 import { type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
@@ -79,51 +78,6 @@ emit deployment
 };
 
 type ExampleLocale = "en" | "ja";
-type RenderState = {
-  reply?: PlaygroundReply;
-  latestSuccess?: PlaygroundReply;
-  previousYaml?: string;
-  stale: boolean;
-};
-type RenderAction =
-  | { type: "source-changed" }
-  | { type: "project-replaced" }
-  | { type: "started" }
-  | { type: "succeeded"; reply: PlaygroundReply }
-  | { type: "failed"; reply: PlaygroundReply };
-
-const initialRenderState: RenderState = { stale: false };
-function renderStateReducer(state: RenderState, action: RenderAction): RenderState {
-  switch (action.type) {
-    case "source-changed":
-      return {
-        ...state,
-        reply: state.reply?.ok === false ? state.latestSuccess : state.reply,
-        stale: state.latestSuccess?.result?.yaml !== undefined,
-      };
-    case "project-replaced":
-      return initialRenderState;
-    case "started":
-      return {
-        ...state,
-        reply: undefined,
-        stale: state.latestSuccess?.result?.yaml !== undefined,
-      };
-    case "succeeded":
-      return {
-        reply: action.reply,
-        latestSuccess: action.reply,
-        previousYaml: state.latestSuccess?.result?.yaml,
-        stale: false,
-      };
-    case "failed":
-      return {
-        ...state,
-        reply: action.reply,
-        stale: state.latestSuccess?.result?.yaml !== undefined,
-      };
-  }
-}
 
 function sharedProjectError(cause: unknown, tooLargeMessage: string): string {
   const message = cause instanceof Error ? cause.message : String(cause);
@@ -169,17 +123,8 @@ export default function Playground() {
   const mclEditorStates = useRef(new Map<string, EditorState>());
   const textEditorStates = useRef(new Map<string, EditorState>());
   const workspaceEditApplier = useRef<ApplyWorkspaceEdits | undefined>(undefined);
-  const revision = useRef(0);
-  const projectContentRevision = useRef(0);
-  const renderedContentRevision = useRef<number | undefined>(undefined);
-  const runAction = useRef<() => void>(() => {});
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
   const startupReady = useRef(false);
-  const [renderState, dispatchRender] = useReducer(renderStateReducer, initialRenderState);
-  const sourceChangeDispatched = useRef(false);
-  const reply = renderState.reply;
-  const staleYaml = renderState.stale ? renderState.latestSuccess?.result?.yaml : undefined;
-  const previousYaml = renderState.previousYaml;
   const {
     applyWorkspacePreference,
     defaultPanelLayout,
@@ -219,7 +164,6 @@ export default function Playground() {
   const projectSizeBytes = project.totalBytes;
   const activePath = project.activePath;
   const [projectGeneration, setProjectGeneration] = useState(0);
-  const [wasmStatus, setWasmStatus] = useState<RuntimeStatus | "waiting">("waiting");
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
@@ -258,6 +202,40 @@ export default function Playground() {
   const activeDraftName =
     drafts.find((draft) => draft.id === activeDraftId)?.name ?? t("defaultProjectName");
   const draftConflict = conflictedDraftIds.includes(activeDraftId);
+  const execution = usePlaygroundExecution({
+    client,
+    editor,
+    project: projectRef,
+    startupReady,
+    activePath,
+    loadingProject,
+    draftConflict,
+    setBusy,
+    setError,
+    setDiagnostics,
+    setShowProblems,
+    setShowDiff,
+    setMobileView,
+  });
+  const {
+    cancel,
+    formatSource,
+    notifyInitialContentChanged,
+    notifyProjectReplaced,
+    notifySourceChanged,
+    previousYaml,
+    projectContentRevision,
+    renderedContentRevision,
+    renderPending,
+    reply,
+    retryWasm,
+    revision,
+    run,
+    runAction,
+    setWasmStatus,
+    staleYaml,
+    wasmStatus,
+  } = execution;
   const handleShareError = useCallback(
     (cause: unknown) => setError(sharedProjectError(cause, t("sharedProjectTooLarge"))),
     [t],
@@ -270,24 +248,6 @@ export default function Playground() {
       onNotice: setNotice,
       onError: handleShareError,
     });
-
-  const handleLintResult = useCallback((result: PlaygroundReply) => {
-    const currentDiagnostics = result.ok
-      ? (result.diagnostics ?? [])
-      : result.error
-        ? [result.error]
-        : [];
-    setDiagnostics(currentDiagnostics);
-  }, []);
-  const handleWasmReady = useCallback(() => setWasmStatus("ready"), []);
-  const runtime = usePlaygroundRuntime({
-    client,
-    project: projectRef,
-    revision,
-    onLint: handleLintResult,
-    onWasmReady: handleWasmReady,
-  });
-  const { isRendering, renderPending, run: runWasm, scheduleLint } = runtime;
 
   const editablePaths = useMemo(
     () => [
@@ -417,17 +377,7 @@ export default function Playground() {
         : "";
 
   async function finishProjectMutation() {
-    const currentRevision = ++revision.current;
-    projectContentRevision.current += 1;
-    setDiagnostics((current) => (current.length > 0 ? [] : current));
-    if (!sourceChangeDispatched.current) {
-      sourceChangeDispatched.current = true;
-      dispatchRender({ type: "source-changed" });
-    }
-    setShowDiff(false);
-    setBusy(false);
-    if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
-
+    notifySourceChanged();
     clearShareReferenceFromURL();
   }
 
@@ -500,10 +450,7 @@ export default function Playground() {
         clearShareReferenceFromURL();
         activateDraft(crypto.randomUUID(), options.name ?? t("importedProjectName"));
       }
-      dispatchRender({ type: "project-replaced" });
-      sourceChangeDispatched.current = false;
-      setShowDiff(false);
-      projectContentRevision.current += 1;
+      notifyProjectReplaced();
       applyWorkspacePreference(project.files, nextPath, options.newDraft !== false);
       void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
         (cause: unknown) => {
@@ -512,20 +459,16 @@ export default function Playground() {
         },
       );
       setProjectGeneration((value) => value + 1);
-      setBusy(false);
       setError("");
-      const currentRevision = ++revision.current;
-      setDiagnostics([]);
-      if (startupReady.current) scheduleLint(project.source, currentRevision);
       return true;
     },
     [
       activateDraft,
       applyWorkspacePreference,
+      notifyProjectReplaced,
       projectRef,
       replaceProjectState,
       saveDraftSnapshot,
-      scheduleLint,
       t,
     ],
   );
@@ -667,8 +610,7 @@ export default function Playground() {
             },
           });
         } else {
-          projectContentRevision.current += 1;
-          revision.current += 1;
+          notifyInitialContentChanged();
         }
       }
       const diagnostic = pendingNavigation.current;
@@ -677,7 +619,7 @@ export default function Playground() {
         goToEditorPosition(diagnostic);
       }
     },
-    [projectRef, setFileContent],
+    [notifyInitialContentChanged, projectRef, setFileContent],
   );
 
   const onEditorError = useCallback((cause: Error) => {
@@ -691,135 +633,13 @@ export default function Playground() {
         setError(result.error);
         return false;
       }
-      projectContentRevision.current += 1;
       clearShareReferenceFromURL();
-      const currentRevision = ++revision.current;
-      setDiagnostics((current) => (current.length > 0 ? [] : current));
-      if (!sourceChangeDispatched.current) {
-        sourceChangeDispatched.current = true;
-        dispatchRender({ type: "source-changed" });
-      }
-      setShowDiff(false);
+      notifySourceChanged();
       setError("");
-      setBusy(false);
-      if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
       return true;
     },
-    [activeDraftIdRef, projectRef, scheduleLint, setFileContent],
+    [notifySourceChanged, projectRef, setFileContent],
   );
-
-  async function run(focusOutput = true, priority: "interactive" | "background" = "interactive") {
-    if (!editor.current || !client.current || loadingProject || isRendering()) return;
-    const currentRevision = ++revision.current;
-    const request = runWasm(projectRef.current.source, currentRevision, priority);
-    if (!request) return;
-    setBusy(true);
-    setError("");
-    sourceChangeDispatched.current = false;
-    dispatchRender({ type: "started" });
-    setShowDiff(false);
-    try {
-      const result = await request;
-      if (currentRevision !== revision.current) return;
-      setDiagnostics(result.diagnostics ?? (result.error ? [result.error] : []));
-      if (result.ok) {
-        renderedContentRevision.current = projectContentRevision.current;
-        setShowProblems(false);
-        if (focusOutput) setMobileView("output");
-        setShowDiff(false);
-        dispatchRender({ type: "succeeded", reply: { ...result, diagnostics: undefined } });
-        sourceChangeDispatched.current = false;
-      } else {
-        setMobileView("problems");
-        setShowProblems(true);
-        dispatchRender({ type: "failed", reply: { ...result, diagnostics: undefined } });
-        sourceChangeDispatched.current = false;
-        if (result.error) setError(`${result.error.code}: ${result.error.message}`);
-      }
-    } catch (cause) {
-      if (currentRevision === revision.current)
-        setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      if (currentRevision === revision.current) setBusy(false);
-    }
-  }
-
-  runAction.current = () => void run(false, "background");
-
-  async function formatSource() {
-    if (
-      draftConflict ||
-      !editor.current ||
-      !client.current ||
-      loadingProject ||
-      !projectRef.current.activePath.endsWith(".mcl")
-    )
-      return;
-    const view = editor.current;
-    const currentRevision = ++revision.current;
-    setBusy(true);
-    setError("");
-    try {
-      const result = await client.current.format(view.state.doc.toString(), currentRevision);
-      if (currentRevision !== revision.current) return;
-      if (!result.ok) {
-        if (result.error) setError(`${result.error.code}: ${result.error.message}`);
-        return;
-      }
-      const formatted = result.result?.source;
-      if (projectRef.current.activePath !== activePath || formatted === undefined) return;
-      const original = view.state.doc.toString();
-      if (formatted === original) return;
-      let prefix = 0;
-      while (
-        prefix < original.length &&
-        prefix < formatted.length &&
-        original[prefix] === formatted[prefix]
-      )
-        prefix += 1;
-      let suffix = 0;
-      while (
-        suffix < original.length - prefix &&
-        suffix < formatted.length - prefix &&
-        original[original.length - suffix - 1] === formatted[formatted.length - suffix - 1]
-      )
-        suffix += 1;
-      view.dispatch({
-        changes: {
-          from: prefix,
-          to: original.length - suffix,
-          insert: formatted.slice(prefix, formatted.length - suffix),
-        },
-      });
-    } catch (cause) {
-      if (currentRevision === revision.current)
-        setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      if (currentRevision === revision.current) setBusy(false);
-    }
-  }
-
-  function cancel() {
-    revision.current += 1;
-    client.current?.cancel();
-    setBusy(false);
-    setError("");
-  }
-
-  async function retryWasm() {
-    const activeClient = client.current;
-    if (!activeClient) return;
-    setError("");
-    setWasmStatus("waiting");
-    try {
-      await activeClient.warmUp("interactive");
-      setWasmStatus("ready");
-      if (startupReady.current) runAction.current();
-    } catch (cause) {
-      if (cause instanceof DraftConflictError) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
 
   async function copyOutput() {
     const yaml = staleYaml ?? reply?.result?.yaml;

@@ -10,6 +10,7 @@
     "build": "astro build && node scripts/compress-wasm.mjs",
     "migrate:playground-api": "node src/api/migrate.js",
     "test:api": "node --test src/api",
+    "test:persistence": "node --test src/playground/playgroundDatabase.test.mjs",
     "preview": "astro preview",
     "precheck": "node scripts/prepare-playground-examples.mjs",
     "check": "astro check",
@@ -57,6 +58,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "astro": "7.2.10",
+    "fake-indexeddb": "6.2.6",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
     "typescript": "6.0.2"

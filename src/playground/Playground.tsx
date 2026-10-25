@@ -26,9 +26,7 @@ import { projectSnapshotError, projectSnapshotErrorMessage } from "./projectVali
 import { PlaygroundResult } from "./PlaygroundResult";
 import type { SourceMapLocationCandidate } from "./PlaygroundResult";
 import { WorkspaceOutputPane } from "./WorkspaceOutputPane";
-import { PlaygroundSettingsDialog } from "./PlaygroundSettingsDialog";
 import { PlaygroundEditorDialogs } from "./PlaygroundEditorDialogs";
-import { ProjectFileInput } from "./ProjectFileInput";
 import type { PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
 import { writeProjectArchive } from "./projectZip";
 import exampleCatalog from "./generatedExamples.json";
@@ -39,7 +37,7 @@ import { type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
 import { PlaygroundShareDialog } from "./PlaygroundShareDialog";
 import { DraftConflictDialog } from "./DraftConflictDialog";
-import { ProjectName } from "./ProjectName";
+import { WorkspaceHeader } from "./WorkspaceHeader";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import "./symbolRenamePreview.css";
@@ -1459,145 +1457,37 @@ export default function Playground() {
         aria-label={t("workspaceLabel")}
         aria-busy={loadingProject}
       >
-        <header className="playground-header">
-          <div className="playground-brand">
-            <a href="/" aria-label={t("docsHome")}>
-              MCL
-            </a>
-            <span aria-hidden="true" className="playground-brand-separator">
-              /
-            </span>
-            <span>Playground</span>
-            <span aria-hidden="true" className="playground-brand-separator">
-              /
-            </span>
-            <ProjectName
-              name={activeDraftName}
-              disabled={!draftsLoaded || !activeDraftId || draftConflict}
-              onSave={(name) => updateDraftMetadata(activeDraftId, name)}
-            />
-          </div>
-          <div className="playground-toolbar">
-            <div className="playground-primary-actions" role="group" aria-label={t("editActions")}>
-              {busy || renderPending ? (
-                <button type="button" onClick={cancel}>
-                  {t("stop")}
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="playground-run-button"
-                    onClick={() => void run()}
-                    disabled={!draftsLoaded || loadingProject || Boolean(editorError)}
-                    aria-keyshortcuts="Control+Enter Meta+Enter"
-                  >
-                    {t("run")}
-                    <kbd>Ctrl/⌘ Enter</kbd>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={formatSource}
-                    aria-keyshortcuts="Shift+Alt+F"
-                    disabled={
-                      !draftsLoaded ||
-                      loadingProject ||
-                      draftConflict ||
-                      Boolean(editorError) ||
-                      !activePath.endsWith(".mcl")
-                    }
-                  >
-                    {t("formatSource")}
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={openShareDialog}
-                disabled={!draftsLoaded || busy || loadingProject || draftConflict}
-              >
-                {t("share")}
-              </button>
-              <button
-                type="button"
-                onClick={() => setExamplesOpen(true)}
-                disabled={!draftsLoaded || busy || loadingProject}
-                aria-haspopup="dialog"
-              >
-                {t("openExamples")}
-              </button>
-            </div>
-            <div className="playground-secondary-actions">
-              <button
-                className="playground-command-button"
-                type="button"
-                onClick={() => setCommandPaletteOpen(true)}
-                aria-keyshortcuts="Control+Shift+P Meta+Shift+P"
-              >
-                {t("commandSearch")}
-                <kbd>Ctrl/⌘ ⇧ P</kbd>
-              </button>
-              <details className="playground-more">
-                <summary>{t("projectMenu")}</summary>
-                <div className="playground-more-menu">
-                  <label className="playground-project-picker">
-                    <span>{t("openProject")}</span>
-                    <select
-                      aria-label={t("openProject")}
-                      value={activeDraftId}
-                      disabled={!draftsLoaded || busy || loadingProject}
-                      onChange={(event) => void openDraft(event.currentTarget.value)}
-                    >
-                      {drafts.map((draft) => (
-                        <option key={draft.id} value={draft.id}>
-                          {draft.name === "作業" ? t("unnamedProject") : draft.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="playground-project-actions">
-                    <button
-                      type="button"
-                      onClick={createDraft}
-                      disabled={!draftsLoaded || busy || loadingProject}
-                    >
-                      {t("commandNewProject")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={duplicateDraft}
-                      disabled={!draftsLoaded || busy || loadingProject}
-                    >
-                      {t("duplicateProject")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void deleteCurrentDraft()}
-                      disabled={!draftsLoaded || busy || loadingProject}
-                    >
-                      {t("deleteProject")}
-                    </button>
-                  </div>
-                  <ProjectFileInput
-                    fileCount={Object.keys(projectFiles).length + 1}
-                    projectSize={projectSizeBytes}
-                    onLoad={loadProject}
-                    onLoaded={applyProject}
-                    onError={setError}
-                    onLoading={setLoadingProject}
-                    onExport={exportProject}
-                    disabled={!draftsLoaded || busy || loadingProject || Boolean(editorError)}
-                  />
-                  <a href="/playground/capabilities/">{t("projectCapabilities")}</a>
-                </div>
-              </details>
-              <PlaygroundSettingsDialog
-                settings={editorSettings}
-                onChange={(settings) => setEditorSettings(settings)}
-              />
-            </div>
-          </div>
-        </header>
+        <WorkspaceHeader
+          name={activeDraftName}
+          draftId={activeDraftId}
+          drafts={drafts}
+          draftsLoaded={draftsLoaded}
+          busy={busy}
+          renderPending={renderPending}
+          loadingProject={loadingProject}
+          editorError={editorError}
+          activePath={activePath}
+          fileCount={Object.keys(projectFiles).length + 1}
+          projectSize={projectSizeBytes}
+          settings={editorSettings}
+          onSaveName={(name) => updateDraftMetadata(activeDraftId, name)}
+          onCancel={cancel}
+          onRun={() => void run()}
+          onFormat={() => void formatSource()}
+          onShare={openShareDialog}
+          onOpenExamples={() => setExamplesOpen(true)}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          onOpenDraft={(id) => void openDraft(id)}
+          onCreateDraft={createDraft}
+          onDuplicateDraft={duplicateDraft}
+          onDeleteDraft={() => void deleteCurrentDraft()}
+          onLoadProject={loadProject}
+          onProjectLoaded={(project) => applyProject(project)}
+          onFileError={setError}
+          onLoadingProjectChange={setLoadingProject}
+          onExportProject={exportProject}
+          onSettingsChange={setEditorSettings}
+        />
         <PlaygroundQuickAccessDialogs
           examplesOpen={examplesOpen}
           onCloseExamples={() => setExamplesOpen(false)}

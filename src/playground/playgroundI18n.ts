@@ -173,6 +173,14 @@ export const resources = {
       draftConflictFork: "Keep these changes in a new draft",
       draftConflictReload: "Load the latest draft",
       saveConflict: "Changes need review",
+      referencesLabel: "References",
+      searchReferences: "Search references",
+      searchFilenameOrCode: "Search filenames or code",
+      noReferencesMatch: "No matching references",
+      emptyOutput: "Run the project to see its output",
+      documentLabel: "Document {{number}}",
+      yamlDiff: "YAML diff",
+      allResources: "All",
     },
   },
   ja: {
@@ -345,6 +353,14 @@ export const resources = {
       draftConflictFork: "変更を新しいドラフトに残す",
       draftConflictReload: "最新のドラフトを読み込む",
       saveConflict: "変更の確認が必要です",
+      referencesLabel: "参照箇所",
+      searchReferences: "参照を検索",
+      searchFilenameOrCode: "ファイル名またはコードを検索",
+      noReferencesMatch: "参照が見つかりません",
+      emptyOutput: "実行すると結果が表示されます",
+      documentLabel: "文書{{number}}",
+      yamlDiff: "YAML差分",
+      allResources: "全体",
     },
   },
 } as const;
@@ -520,6 +536,14 @@ declare global {
       draftConflictFork: string;
       draftConflictReload: string;
       saveConflict: string;
+      referencesLabel: string;
+      searchReferences: string;
+      searchFilenameOrCode: string;
+      noReferencesMatch: string;
+      emptyOutput: string;
+      documentLabel: string;
+      yamlDiff: string;
+      allResources: string;
     }
   }
 }

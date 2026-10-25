@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { EditorState, RangeSetBuilder, StateEffect, StateField, Text } from "@codemirror/state";
 import { Decoration, EditorView, hoverTooltip, type DecorationSet } from "@codemirror/view";
 import { yaml } from "@codemirror/lang-yaml";
@@ -11,6 +11,7 @@ import type { PlaygroundDiagnostic, PlaygroundReply, PlaygroundSourceMap } from 
 import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundYamlResultView, type YamlResource } from "./PlaygroundYamlResultView";
 import { PlaygroundDiffResultView } from "./PlaygroundDiffResultView";
+import type { SourcePositionStore } from "./sourcePositionStore";
 import "./sourceMapSelection.css";
 
 const setSourceMapSelection = StateEffect.define<DecorationSet>();
@@ -50,7 +51,7 @@ type Props = {
   referenceItems: QuickAccessItem[];
   referenceError: string;
   targetOutputPosition?: { line: number; character: number; requestId: number };
-  sourcePosition?: { path: string; line: number; character: number };
+  sourcePositionStore: SourcePositionStore;
   onDiagnostic: (diagnostic: PlaygroundDiagnostic) => void;
   onSourceCandidates: (candidates: SourceMapLocationCandidate[]) => void;
 };
@@ -71,11 +72,16 @@ export function PlaygroundResult({
   referenceItems,
   referenceError,
   targetOutputPosition,
-  sourcePosition,
+  sourcePositionStore,
   onDiagnostic,
   onSourceCandidates,
 }: Props) {
   const { t } = useTranslation();
+  const sourcePosition = useSyncExternalStore(
+    sourcePositionStore.subscribe,
+    sourcePositionStore.getSnapshot,
+    sourcePositionStore.getSnapshot,
+  );
   const outputHost = useRef<HTMLDivElement>(null);
   const outputEditor = useRef<EditorView | undefined>(undefined);
   const onSourceCandidatesRef = useRef(onSourceCandidates);

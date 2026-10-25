@@ -40,6 +40,7 @@ import { createPlaygroundCommandItems } from "./createPlaygroundCommandItems";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import { usePlaygroundLayout } from "./usePlaygroundLayout";
+import { createSourcePositionStore } from "./sourcePositionStore";
 import "./symbolRenamePreview.css";
 import {
   DraftConflictError,
@@ -233,8 +234,8 @@ export default function Playground() {
     [t],
   );
   const {
-    project,
     projectRef,
+    subscribe: subscribeToProject,
     replace: replaceProjectState,
     setFileContent,
     select: selectProjectFile,
@@ -242,6 +243,7 @@ export default function Playground() {
     renameFile: renameProjectFile,
     deleteFile: deleteProjectFile,
   } = usePlaygroundProject(initialSource, renameFileImports);
+  const project = projectRef.current;
   const editor = useRef<EditorView | undefined>(undefined);
   const mclEditorStates = useRef(new Map<string, EditorState>());
   const textEditorStates = useRef(new Map<string, EditorState>());
@@ -254,6 +256,7 @@ export default function Playground() {
   const startupReady = useRef(false);
   const runtimeMeasurementSequence = useRef(0);
   const [renderState, dispatchRender] = useReducer(renderStateReducer, initialRenderState);
+  const sourceChangeDispatched = useRef(false);
   const reply = renderState.reply;
   const staleYaml = renderState.stale ? renderState.latestSuccess?.result?.yaml : undefined;
   const previousYaml = renderState.previousYaml;
@@ -277,9 +280,7 @@ export default function Playground() {
   const [targetOutputPosition, setTargetOutputPosition] = useState<
     { line: number; character: number; requestId: number } | undefined
   >();
-  const [sourcePosition, setSourcePosition] = useState<
-    { path: string; line: number; character: number } | undefined
-  >();
+  const sourcePositionStore = useRef(createSourcePositionStore()).current;
   const [sourceMapCandidates, setSourceMapCandidates] = useState<SourceMapLocationCandidate[]>([]);
   const [diagnostics, setDiagnostics] = useState<PlaygroundDiagnostic[]>([]);
   const [error, setError] = useState("");
@@ -328,7 +329,7 @@ export default function Playground() {
     loadDraft,
     deleteDraft,
     markDraftsLoaded,
-  } = usePlaygroundPersistence(project, reportPersistenceError);
+  } = usePlaygroundPersistence(projectRef, subscribeToProject, reportPersistenceError);
   const activeDraftName =
     drafts.find((draft) => draft.id === activeDraftId)?.name ?? t("defaultProjectName");
   const draftConflict = conflictedDraftIds.includes(activeDraftId);
@@ -426,8 +427,9 @@ export default function Playground() {
     resetSymbolRename,
   } = languageActions;
   const handleEditorSelectionChange = useCallback(
-    (path: string, line: number, character: number) => setSourcePosition({ path, line, character }),
-    [],
+    (path: string, line: number, character: number) =>
+      sourcePositionStore.set({ path, line, character }),
+    [sourcePositionStore],
   );
   const handleSourceCandidates = useCallback(
     (candidates: SourceMapLocationCandidate[]) => {
@@ -520,8 +522,11 @@ export default function Playground() {
   async function finishProjectMutation() {
     const currentRevision = ++revision.current;
     projectContentRevision.current += 1;
-    setDiagnostics([]);
-    dispatchRender({ type: "source-changed" });
+    setDiagnostics((current) => (current.length > 0 ? [] : current));
+    if (!sourceChangeDispatched.current) {
+      sourceChangeDispatched.current = true;
+      dispatchRender({ type: "source-changed" });
+    }
     setShowDiff(false);
     setBusy(false);
     if (startupReady.current) scheduleLint(projectRef.current.source, currentRevision);
@@ -578,6 +583,7 @@ export default function Playground() {
         activateDraft(crypto.randomUUID(), options.name ?? t("importedProjectName"));
       }
       dispatchRender({ type: "project-replaced" });
+      sourceChangeDispatched.current = false;
       setShowDiff(false);
       projectContentRevision.current += 1;
       applyWorkspacePreference(project.files, nextPath, options.newDraft !== false);
@@ -798,9 +804,9 @@ export default function Playground() {
   }, [editorSettings.theme]);
 
   useEffect(() => {
-    if (!activePath.endsWith(".mcl")) setSourcePosition(undefined);
+    if (!activePath.endsWith(".mcl")) sourcePositionStore.set(undefined);
     setSourceMapCandidates([]);
-  }, [activePath]);
+  }, [activePath, sourcePositionStore]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -880,10 +886,12 @@ export default function Playground() {
       }
       projectContentRevision.current += 1;
       clearShareReferenceFromURL();
-      setRecentPaths((previous) => [path, ...previous.filter((entry) => entry !== path)]);
       const currentRevision = ++revision.current;
-      setDiagnostics([]);
-      dispatchRender({ type: "source-changed" });
+      setDiagnostics((current) => (current.length > 0 ? [] : current));
+      if (!sourceChangeDispatched.current) {
+        sourceChangeDispatched.current = true;
+        dispatchRender({ type: "source-changed" });
+      }
       setShowDiff(false);
       setError("");
       setBusy(false);
@@ -900,6 +908,7 @@ export default function Playground() {
     if (!request) return;
     setBusy(true);
     setError("");
+    sourceChangeDispatched.current = false;
     dispatchRender({ type: "started" });
     setShowDiff(false);
     try {
@@ -912,10 +921,12 @@ export default function Playground() {
         if (focusOutput) setMobileView("output");
         setShowDiff(false);
         dispatchRender({ type: "succeeded", reply: { ...result, diagnostics: undefined } });
+        sourceChangeDispatched.current = false;
       } else {
         setMobileView("problems");
         setShowProblems(true);
         dispatchRender({ type: "failed", reply: { ...result, diagnostics: undefined } });
+        sourceChangeDispatched.current = false;
         if (result.error) setError(`${result.error.code}: ${result.error.message}`);
       }
     } catch (cause) {
@@ -1537,7 +1548,7 @@ export default function Playground() {
                 referenceError={symbolReferencesError}
                 targetOutputPosition={targetOutputPosition}
                 onDiagnostic={goToDiagnostic}
-                sourcePosition={sourcePosition}
+                sourcePositionStore={sourcePositionStore}
                 onSourceCandidates={handleSourceCandidates}
               />
               {showProblems && draftsLoaded && diagnostics.length === 0 && (

@@ -18,6 +18,8 @@ export type StoredProject = {
   files: Record<string, ProjectFile>;
   activePath?: string;
 };
+type ProjectRef = { current: StoredProject };
+type SubscribeToProject = (listener: () => void) => () => void;
 export type DraftSaveStatus = "saving" | "saved" | "error" | "conflict";
 export type DraftMetadata = { id: string; name: string; updatedAt: number };
 
@@ -70,7 +72,8 @@ function isEditorSettings(value: unknown): value is Omit<EditorSettings, "fontSi
 }
 
 export function usePlaygroundPersistence(
-  project: StoredProject,
+  projectRef: ProjectRef,
+  subscribeToProject: SubscribeToProject,
   onError: (error: unknown) => void,
 ) {
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(defaultEditorSettings);
@@ -226,11 +229,30 @@ export function usePlaygroundPersistence(
     if (!draftsLoaded || !activeDraftId || conflictedDraftIds.includes(activeDraftId)) return;
     ++saveSequence.current;
     setSaveStatus("saving");
-    const timer = setTimeout(() => {
-      void saveDraftSnapshot(activeDraftId, project).catch((cause: unknown) => onError(cause));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [activeDraftId, conflictedDraftIds, draftsLoaded, onError, project, saveDraftSnapshot]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const save = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void saveDraftSnapshot(activeDraftId, projectRef.current).catch((cause: unknown) =>
+          onError(cause),
+        );
+      }, 300);
+    };
+    const unsubscribe = subscribeToProject(save);
+    save();
+    return () => {
+      unsubscribe();
+      if (timer !== undefined) clearTimeout(timer);
+    };
+  }, [
+    activeDraftId,
+    conflictedDraftIds,
+    draftsLoaded,
+    onError,
+    projectRef,
+    saveDraftSnapshot,
+    subscribeToProject,
+  ]);
 
   const setActiveDraft = useCallback(async (id: string) => {
     activeDraftIdRef.current = id;

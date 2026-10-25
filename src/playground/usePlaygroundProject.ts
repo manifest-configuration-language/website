@@ -140,23 +140,36 @@ function freezeProjectFiles(files: Record<string, ProjectFile>) {
 
 export function usePlaygroundProject(initialSource: string, renameFileImports: RenameFileImports) {
   const { t } = useTranslation();
-  const [project, setProject] = useState<PlaygroundProject>(() => {
-    const files = Object.freeze(Object.create(null)) as Record<string, ProjectFile>;
-    const sizes = projectFileSizes(initialSource, files);
-    return Object.freeze({
-      source: initialSource,
-      files,
-      activePath: "main.mcl",
-      revision: 0,
-      fileSizes: Object.freeze(sizes.fileSizes),
-      totalBytes: sizes.totalBytes,
-    });
-  });
-  const projectRef = useRef(project);
+  const [, setProjectVersion] = useState(0);
+  const subscribers = useRef(new Set<() => void>());
+  const projectRef = useRef<PlaygroundProject>(
+    (() => {
+      const files = Object.freeze(Object.create(null)) as Record<string, ProjectFile>;
+      const sizes = projectFileSizes(initialSource, files);
+      return Object.freeze({
+        source: initialSource,
+        files,
+        activePath: "main.mcl",
+        revision: 0,
+        fileSizes: Object.freeze(sizes.fileSizes),
+        totalBytes: sizes.totalBytes,
+      });
+    })(),
+  );
+
+  const subscribe = useCallback((listener: () => void) => {
+    subscribers.current.add(listener);
+    return () => subscribers.current.delete(listener);
+  }, []);
+
+  const notifySubscribers = useCallback(() => {
+    for (const subscriber of subscribers.current) subscriber();
+  }, []);
 
   const commit = useCallback(
     (
       change: Partial<Pick<PlaygroundProject, "source" | "files" | "activePath">>,
+      updateReact = true,
     ): ProjectMutation => {
       const current = projectRef.current;
       if (
@@ -176,7 +189,8 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
           revision: current.revision + 1,
         });
         projectRef.current = next;
-        setProject(next);
+        setProjectVersion((version) => version + 1);
+        notifySubscribers();
         return { ok: true, project: next };
       }
       const source = change.source ?? current.source;
@@ -206,10 +220,11 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
       const validationError = projectSnapshotError(next, fileSizes);
       if (validationError) return { ok: false, error: projectErrorMessage(validationError, t) };
       projectRef.current = next;
-      setProject(next);
+      if (updateReact) setProjectVersion((version) => version + 1);
+      notifySubscribers();
       return { ok: true, project: next };
     },
-    [t],
+    [notifySubscribers, t],
   );
 
   const replace = useCallback(
@@ -224,13 +239,13 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
       const current = projectRef.current;
       if (path !== "main.mcl" && current.files[path]?.encoding !== "utf8")
         return { ok: false, error: t("projectFileNotEditable") };
-      if (path === "main.mcl") return commit({ source: content });
+      if (path === "main.mcl") return commit({ source: content }, false);
       const files = Object.assign(Object.create(null), current.files) as Record<
         string,
         ProjectFile
       >;
       files[path] = { encoding: "utf8", content };
-      return commit({ files });
+      return commit({ files }, false);
     },
     [commit, t],
   );
@@ -365,8 +380,9 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
   );
 
   return {
-    project,
+    project: projectRef.current,
     projectRef,
+    subscribe,
     replace,
     setFileContent,
     setFiles,

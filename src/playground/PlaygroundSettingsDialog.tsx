@@ -1,5 +1,14 @@
+import { useState } from "react";
+import { Button } from "react-aria-components";
 import type { EditorSettings } from "./MclEditor";
 import { useTranslation } from "react-i18next";
+import {
+  captureShortcut,
+  defaultPlaygroundShortcuts,
+  formatShortcut,
+  shortcutActionIDs,
+} from "./keyboardShortcuts";
+import type { ShortcutActionID } from "./keyboardShortcuts";
 
 type Props = {
   settings: EditorSettings;
@@ -8,6 +17,40 @@ type Props = {
 
 export function PlaygroundSettingsDialog({ settings, onChange }: Props) {
   const { t } = useTranslation();
+  const [recording, setRecording] = useState<ShortcutActionID>();
+  const [shortcutError, setShortcutError] = useState("");
+  const shortcutLabels: Record<ShortcutActionID, string> = {
+    commandPalette: t("shortcutCommandPalette"),
+    quickOpen: t("shortcutQuickOpen"),
+    toggleExplorer: t("shortcutToggleExplorer"),
+    showProblems: t("shortcutShowProblems"),
+  };
+
+  function capture(action: ShortcutActionID, event: React.KeyboardEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape") {
+      setRecording(undefined);
+      setShortcutError("");
+      return;
+    }
+    const shortcut = captureShortcut(event.nativeEvent);
+    if (!shortcut) {
+      setShortcutError(t("shortcutInvalid"));
+      return;
+    }
+    const conflict = shortcutActionIDs.some(
+      (otherAction) => otherAction !== action && settings.shortcuts[otherAction] === shortcut,
+    );
+    if (conflict) {
+      setShortcutError(t("shortcutDuplicate"));
+      return;
+    }
+    onChange({ ...settings, shortcuts: { ...settings.shortcuts, [action]: shortcut } });
+    setRecording(undefined);
+    setShortcutError("");
+  }
+
   return (
     <details className="playground-more playground-settings">
       <summary>{t("settings")}</summary>
@@ -83,6 +126,37 @@ export function PlaygroundSettingsDialog({ settings, onChange }: Props) {
           />
           {t("vim")}
         </label>
+        <section className="playground-shortcuts" aria-label={t("shortcuts")}>
+          <h3>{t("shortcuts")}</h3>
+          {shortcutActionIDs.map((action) => (
+            <div className="playground-shortcut-setting" key={action}>
+              <span>{shortcutLabels[action]}</span>
+              <Button
+                onPress={() => {
+                  setRecording(action);
+                  setShortcutError("");
+                }}
+                onKeyDown={(event) => recording === action && capture(action, event)}
+                aria-label={`${shortcutLabels[action]}: ${recording === action ? t("shortcutPressKey") : formatShortcut(settings.shortcuts[action])}`}
+                aria-pressed={recording === action}
+              >
+                {recording === action
+                  ? t("shortcutPressKey")
+                  : formatShortcut(settings.shortcuts[action])}
+              </Button>
+            </div>
+          ))}
+          {shortcutError && <p role="alert">{shortcutError}</p>}
+          <Button
+            onPress={() => {
+              onChange({ ...settings, shortcuts: defaultPlaygroundShortcuts });
+              setRecording(undefined);
+              setShortcutError("");
+            }}
+          >
+            {t("shortcutReset")}
+          </Button>
+        </section>
       </div>
     </details>
   );

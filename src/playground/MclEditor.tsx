@@ -39,6 +39,7 @@ import type {
   PlaygroundHover,
   PlaygroundRenameEdit,
 } from "./types";
+import type { PlaygroundShortcuts } from "./keyboardShortcuts";
 import { createEditorLanguageServices } from "./editorLanguage";
 import "./playgroundPanels.css";
 
@@ -81,6 +82,7 @@ export type EditorSettings = {
   lineWrapping: boolean;
   lineNumbers: boolean;
   vim: boolean;
+  shortcuts: PlaygroundShortcuts;
 };
 
 export const initialSource = `let appName = "catalog"

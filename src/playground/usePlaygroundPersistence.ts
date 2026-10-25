@@ -3,6 +3,7 @@ import type { EditorSettings } from "./MclEditor";
 import { isValidProjectSnapshot } from "./projectValidation.js";
 import { playgroundDatabase, playgroundSettingKeys } from "./playgroundDatabase";
 import type { ProjectFile } from "./types";
+import { defaultPlaygroundShortcuts, isPlaygroundShortcuts } from "./keyboardShortcuts";
 
 export const defaultEditorSettings: EditorSettings = {
   theme: "system",
@@ -11,6 +12,7 @@ export const defaultEditorSettings: EditorSettings = {
   lineWrapping: false,
   lineNumbers: true,
   vim: false,
+  shortcuts: defaultPlaygroundShortcuts,
 };
 
 export type StoredProject = {
@@ -51,9 +53,13 @@ export function isStoredProject(value: unknown): value is StoredProject {
   return isValidProjectSnapshot(value);
 }
 
-function isEditorSettings(value: unknown): value is Omit<EditorSettings, "fontSize" | "theme"> & {
+function isEditorSettings(value: unknown): value is Omit<
+  EditorSettings,
+  "fontSize" | "theme" | "shortcuts"
+> & {
   fontSize?: EditorSettings["fontSize"];
   theme?: EditorSettings["theme"];
+  shortcuts?: EditorSettings["shortcuts"];
 } {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Record<string, unknown>;
@@ -65,6 +71,7 @@ function isEditorSettings(value: unknown): value is Omit<EditorSettings, "fontSi
     (candidate.tabSize === 2 || candidate.tabSize === 4) &&
     (candidate.fontSize === undefined ||
       [12, 14, 16, 18, 20].includes(candidate.fontSize as number)) &&
+    (candidate.shortcuts === undefined || isPlaygroundShortcuts(candidate.shortcuts)) &&
     typeof candidate.lineWrapping === "boolean" &&
     typeof candidate.lineNumbers === "boolean" &&
     typeof candidate.vim === "boolean"
@@ -346,6 +353,7 @@ export function usePlaygroundPersistence(
             ...saved,
             theme: saved.theme ?? defaultEditorSettings.theme,
             fontSize: saved.fontSize ?? defaultEditorSettings.fontSize,
+            shortcuts: saved.shortcuts ?? defaultEditorSettings.shortcuts,
           });
       })
       .catch((cause: unknown) => {

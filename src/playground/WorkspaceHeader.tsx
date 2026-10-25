@@ -6,6 +6,7 @@ import { PlaygroundSettingsDialog } from "./PlaygroundSettingsDialog";
 import { ProjectName } from "./ProjectName";
 import type { DraftMetadata } from "./usePlaygroundPersistence";
 import type { LoadedProject } from "./types";
+import { formatAriaShortcut, formatShortcut } from "./keyboardShortcuts";
 
 type Props = {
   name: string;
@@ -131,10 +132,10 @@ export function WorkspaceHeader({
           <Button
             className="playground-command-button"
             onPress={onOpenCommandPalette}
-            aria-keyshortcuts="Control+Shift+P Meta+Shift+P"
+            aria-keyshortcuts={formatAriaShortcut(settings.shortcuts.commandPalette)}
           >
             {t("commandSearch")}
-            <kbd>Ctrl/⌘ ⇧ P</kbd>
+            <kbd>{formatShortcut(settings.shortcuts.commandPalette)}</kbd>
           </Button>
           <details className="playground-more">
             <summary>{t("projectMenu")}</summary>

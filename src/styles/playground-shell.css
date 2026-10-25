@@ -264,6 +264,41 @@ body:has(.playground-app) .right-sidebar-container {
   accent-color: var(--sl-color-accent);
 }
 
+.playground-app .playground-shortcuts {
+  display: grid;
+  gap: 0.45rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-app .playground-shortcuts h3 {
+  margin: 0;
+  color: var(--sl-color-gray-2);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.playground-app .playground-shortcut-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  font-size: 0.8rem;
+}
+
+.playground-app .playground-shortcut-setting button {
+  min-width: 7.5rem;
+  min-height: 2.2rem;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.playground-app .playground-shortcuts [role="alert"] {
+  margin: 0;
+  color: var(--sl-color-red);
+  font-size: 0.78rem;
+}
+
 .playground-app .playground-project-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;

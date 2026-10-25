@@ -571,6 +571,7 @@ export default function Playground() {
     editor,
     activePath,
     hasSourceMap: Boolean(currentSourceMap),
+    shortcuts: editorSettings.shortcuts,
     run: () => void run(),
     format: () => void formatSource(),
     openExamples: () => setExamplesOpen(true),
@@ -637,6 +638,7 @@ export default function Playground() {
   }, [activePath, sourcePositionStore]);
 
   usePlaygroundKeyboardShortcuts({
+    shortcuts: editorSettings.shortcuts,
     setCommandPaletteOpen,
     setQuickOpen,
     setExplorerOpen,

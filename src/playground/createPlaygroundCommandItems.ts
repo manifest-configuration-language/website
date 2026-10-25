@@ -3,6 +3,8 @@ import { selectNextOccurrence, selectSelectionMatches } from "@codemirror/search
 import type { EditorView } from "@codemirror/view";
 import type { TFunction } from "i18next";
 import type { QuickAccessItem } from "./QuickAccessList";
+import type { PlaygroundShortcuts } from "./keyboardShortcuts";
+import { formatShortcut } from "./keyboardShortcuts";
 
 type PlaygroundCommandActions = {
   editor: { current: EditorView | undefined };
@@ -23,6 +25,7 @@ type PlaygroundCommandActions = {
   showOutput: () => void;
   showProblems: () => void;
   closePalette: () => void;
+  shortcuts: PlaygroundShortcuts;
 };
 
 export function createPlaygroundCommandItems(
@@ -76,11 +79,12 @@ export function createPlaygroundCommandItems(
       "ctrl shift l",
     ]),
     add("commandOpenExamples", actions.openExamples, undefined, ["examples"]),
-    add("commandToggleExplorer", actions.toggleExplorer, "Ctrl/⌘ ⇧ E", [
-      "explorer",
-      "files",
-      "ctrl shift e",
-    ]),
+    add(
+      "commandToggleExplorer",
+      actions.toggleExplorer,
+      formatShortcut(actions.shortcuts.toggleExplorer),
+      ["explorer", "files", "ctrl shift e"],
+    ),
     ...(mclFile
       ? [
           add("commandGoToDefinition", actions.goToDefinition, "F12", ["definition", "f12"]),
@@ -95,14 +99,18 @@ export function createPlaygroundCommandItems(
         ]
       : []),
     add("commandShare", actions.share, undefined, ["share"]),
-    add("commandOpenFile", actions.openFile, "Ctrl/⌘ P", ["quick open", "open file", "ctrl p"]),
+    add("commandOpenFile", actions.openFile, formatShortcut(actions.shortcuts.quickOpen), [
+      "quick open",
+      "open file",
+    ]),
     add("commandCreateFile", actions.createFile, undefined, ["new file", "create file"]),
     add("commandNewProject", actions.newProject, undefined, ["new project"]),
     add("commandShowOutput", actions.showOutput, undefined, ["output"]),
-    add("commandShowProblems", actions.showProblems, "Ctrl/⌘ ⇧ M", [
-      "problems",
-      "diagnostics",
-      "ctrl shift m",
-    ]),
+    add(
+      "commandShowProblems",
+      actions.showProblems,
+      formatShortcut(actions.shortcuts.showProblems),
+      ["problems", "diagnostics", "ctrl shift m"],
+    ),
   ];
 }

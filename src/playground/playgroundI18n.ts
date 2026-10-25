@@ -92,6 +92,15 @@ export const resources = {
       lineWrapping: "Line wrapping",
       lineNumbers: "Line numbers",
       vim: "Vim mode",
+      shortcuts: "Keyboard shortcuts",
+      shortcutCommandPalette: "Command search",
+      shortcutQuickOpen: "Open file",
+      shortcutToggleExplorer: "Toggle file explorer",
+      shortcutShowProblems: "Show problems",
+      shortcutPressKey: "Press a shortcut",
+      shortcutInvalid: "That shortcut cannot be used",
+      shortcutDuplicate: "That shortcut is already assigned",
+      shortcutReset: "Reset shortcuts",
       examplesTitle: "Examples",
       close: "Close",
       searchExamples: "Search examples",
@@ -339,6 +348,15 @@ export const resources = {
       lineWrapping: "折り返し",
       lineNumbers: "行番号",
       vim: "Vim",
+      shortcuts: "キーボードショートカット",
+      shortcutCommandPalette: "コマンド検索",
+      shortcutQuickOpen: "ファイルを開く",
+      shortcutToggleExplorer: "ファイル一覧の表示切替",
+      shortcutShowProblems: "問題を表示",
+      shortcutPressKey: "キーを押してください",
+      shortcutInvalid: "このキーの組み合わせは使用できません",
+      shortcutDuplicate: "このショートカットはすでに割り当てられています",
+      shortcutReset: "初期設定に戻す",
       examplesTitle: "サンプル",
       close: "閉じる",
       searchExamples: "サンプルを検索",
@@ -592,6 +610,15 @@ declare global {
       lineWrapping: string;
       lineNumbers: string;
       vim: string;
+      shortcuts: string;
+      shortcutCommandPalette: string;
+      shortcutQuickOpen: string;
+      shortcutToggleExplorer: string;
+      shortcutShowProblems: string;
+      shortcutPressKey: string;
+      shortcutInvalid: string;
+      shortcutDuplicate: string;
+      shortcutReset: string;
       examplesTitle: string;
       close: string;
       searchExamples: string;

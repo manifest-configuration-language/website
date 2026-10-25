@@ -1,4 +1,4 @@
-import { Group, Panel, Separator, useGroupRef, type Layout } from "react-resizable-panels";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import {
   useCallback,
   useEffect,
@@ -39,6 +39,7 @@ import { WorkspaceEditorPane } from "./WorkspaceEditorPane";
 import { createPlaygroundCommandItems } from "./createPlaygroundCommandItems";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
+import { usePlaygroundLayout } from "./usePlaygroundLayout";
 import "./symbolRenamePreview.css";
 import {
   DraftConflictError,
@@ -47,8 +48,6 @@ import {
 } from "./usePlaygroundPersistence";
 import type { StoredProject } from "./usePlaygroundPersistence";
 
-const layoutPreferenceKey = "mcl-playground-layout-v1";
-const defaultPanelLayout: Layout = { editor: 60, output: 40 };
 const runtimeMeasurementPrefix = "mcl.playground.";
 const runtimeMeasurementLimit = 100;
 
@@ -78,65 +77,6 @@ function recordRuntimeMeasurement(
     .sort((left, right) => left.startTime - right.startTime);
   for (const entry of entries.slice(0, Math.max(0, entries.length - runtimeMeasurementLimit)))
     performance.clearMeasures(entry.name);
-}
-
-type LayoutPreference = {
-  orientation: "horizontal" | "vertical";
-  layout: Layout;
-  openPaths?: string[];
-  outputView?: "yaml" | "resources" | "problems" | "diff";
-};
-
-function readLayoutPreference(): LayoutPreference | undefined {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(layoutPreferenceKey) ?? "null");
-    if (!value || typeof value !== "object") return undefined;
-    const preference = value as Record<string, unknown>;
-    if (preference.orientation !== "horizontal" && preference.orientation !== "vertical")
-      return undefined;
-    if (!preference.layout || typeof preference.layout !== "object") return undefined;
-    const layout = preference.layout as Record<string, unknown>;
-    if (
-      typeof layout.editor !== "number" ||
-      typeof layout.output !== "number" ||
-      !Number.isFinite(layout.editor) ||
-      !Number.isFinite(layout.output) ||
-      layout.editor <= 0 ||
-      layout.output <= 0 ||
-      Math.abs(layout.editor + layout.output - 100) > 0.01
-    )
-      return undefined;
-
-    const openPaths = Array.isArray(preference.openPaths)
-      ? preference.openPaths.filter((path): path is string => typeof path === "string")
-      : undefined;
-    const outputView =
-      preference.outputView === "yaml" ||
-      preference.outputView === "resources" ||
-      preference.outputView === "problems" ||
-      preference.outputView === "diff"
-        ? preference.outputView
-        : undefined;
-
-    return {
-      orientation: preference.orientation,
-      layout: { editor: layout.editor, output: layout.output },
-      ...(openPaths ? { openPaths } : {}),
-      ...(outputView ? { outputView } : {}),
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function saveLayoutPreference(preference: Partial<LayoutPreference>) {
-  try {
-    const stored = JSON.parse(localStorage.getItem(layoutPreferenceKey) ?? "null");
-    const current = stored && typeof stored === "object" ? stored : {};
-    localStorage.setItem(layoutPreferenceKey, JSON.stringify({ ...current, ...preference }));
-  } catch {
-    // Layout preferences are optional when browser storage is unavailable.
-  }
 }
 
 const samples = {
@@ -311,18 +251,29 @@ export default function Playground() {
   const renderedContentRevision = useRef<number | undefined>(undefined);
   const runAction = useRef<() => void>(() => {});
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
-  const panelGroup = useGroupRef();
-  const workspace = useRef<HTMLElement | null>(null);
   const startupReady = useRef(false);
   const runtimeMeasurementSequence = useRef(0);
   const [renderState, dispatchRender] = useReducer(renderStateReducer, initialRenderState);
   const reply = renderState.reply;
   const staleYaml = renderState.stale ? renderState.latestSuccess?.result?.yaml : undefined;
   const previousYaml = renderState.previousYaml;
-  const [showDiff, setShowDiff] = useState(false);
-  const [showProblems, setShowProblems] = useState(false);
-  const [showResources, setShowResources] = useState(false);
-  const workspacePreferenceLoaded = useRef(false);
+  const {
+    applyWorkspacePreference,
+    defaultPanelLayout,
+    openPaths,
+    orientation,
+    panelGroup,
+    savePreference,
+    setOpenPaths,
+    setShowDiff,
+    setShowProblems,
+    setShowResources,
+    showDiff,
+    showProblems,
+    showResources,
+    toggleOrientation,
+    workspace,
+  } = usePlaygroundLayout();
   const [targetOutputPosition, setTargetOutputPosition] = useState<
     { line: number; character: number; requestId: number } | undefined
   >();
@@ -342,12 +293,9 @@ export default function Playground() {
   const activePath = project.activePath;
   const [projectGeneration, setProjectGeneration] = useState(0);
   const [wasmStatus, setWasmStatus] = useState<RuntimeStatus | "waiting">("waiting");
-  const [orientation, setOrientation] = useState<"horizontal" | "vertical">("horizontal");
-  const [orientationOverridden, setOrientationOverridden] = useState(false);
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
-  const [openPaths, setOpenPaths] = useState(["main.mcl"]);
   const [quickOpen, setQuickOpen] = useState(false);
   const [recentPaths, setRecentPaths] = useState(["main.mcl"]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -590,23 +538,6 @@ export default function Playground() {
     return files;
   }
 
-  const applyWorkspacePreference = useCallback(
-    (files: Record<string, ProjectFile>, activePath: string, fresh: boolean) => {
-      const preference = fresh ? undefined : readLayoutPreference();
-      const availablePaths = new Set(["main.mcl", ...Object.keys(files)]);
-      const openPaths = preference?.openPaths?.filter(
-        (path) =>
-          availablePaths.has(path) && (path === "main.mcl" || files[path]?.encoding === "utf8"),
-      );
-      setOpenPaths(openPaths?.length ? [...new Set([activePath, ...openPaths])] : [activePath]);
-      setShowProblems(!fresh && preference?.outputView === "problems");
-      setShowResources(!fresh && preference?.outputView === "resources");
-      setShowDiff(false);
-      workspacePreferenceLoaded.current = true;
-    },
-    [],
-  );
-
   const applyProject = useCallback(
     (
       project: StoredProject,
@@ -674,37 +605,6 @@ export default function Playground() {
       t,
     ],
   );
-
-  useEffect(() => {
-    if (!workspacePreferenceLoaded.current) return;
-    const outputView = showDiff
-      ? "diff"
-      : showProblems
-        ? "problems"
-        : showResources
-          ? "resources"
-          : "yaml";
-    saveLayoutPreference({ openPaths, outputView });
-  }, [openPaths, showDiff, showProblems, showResources]);
-
-  useEffect(() => {
-    const preference = readLayoutPreference();
-    if (!preference) return;
-    setOrientationOverridden(true);
-    setOrientation(preference.orientation);
-    panelGroup.current?.setLayout(preference.layout);
-  }, []);
-
-  useEffect(() => {
-    const element = workspace.current;
-    if (!element || orientationOverridden) return;
-    const observer = new ResizeObserver(([entry]) => {
-      const width = entry?.contentRect.width ?? element.clientWidth;
-      setOrientation(width >= 1100 ? "horizontal" : "vertical");
-    });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [orientationOverridden]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1543,7 +1443,7 @@ export default function Playground() {
           groupRef={panelGroup}
           defaultLayout={defaultPanelLayout}
           onLayoutChanged={(layout, meta) => {
-            if (meta.isUserInteraction) saveLayoutPreference({ orientation, layout });
+            if (meta.isUserInteraction) savePreference({ orientation, layout });
           }}
           orientation={orientation}
           data-mobile-view={mobileView}
@@ -1618,15 +1518,7 @@ export default function Playground() {
               onCopyOutput={() => void copyOutput()}
               onDownloadOutput={downloadOutput}
               orientation={orientation}
-              onToggleOrientation={() => {
-                const nextOrientation = orientation === "vertical" ? "horizontal" : "vertical";
-                setOrientationOverridden(true);
-                setOrientation(nextOrientation);
-                saveLayoutPreference({
-                  orientation: nextOrientation,
-                  layout: panelGroup.current?.getLayout() ?? defaultPanelLayout,
-                });
-              }}
+              onToggleOrientation={toggleOrientation}
             >
               <PlaygroundResult
                 reply={reply}
@@ -1638,7 +1530,7 @@ export default function Playground() {
                 showDiff={showDiff}
                 showProblems={showProblems}
                 showResources={showResources}
-                onToggleResources={() => setShowResources((shown) => !shown)}
+                onToggleResources={() => setShowResources(!showResources)}
                 onShowResourcesChange={setShowResources}
                 showReferences={symbolReferencesOpen}
                 referenceItems={symbolReferenceItems}

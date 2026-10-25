@@ -1,0 +1,1 @@
+CREATE INDEX playground_snippets_expiry_idx ON playground_snippets (expires_at)

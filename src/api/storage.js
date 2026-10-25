@@ -11,6 +11,7 @@ import {
 import Redis from "ioredis";
 import postgres from "postgres";
 import { maximumRequestBytes } from "./snapshot.js";
+import { verifyDatabaseMigrations } from "./migrate.js";
 
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);
@@ -64,22 +65,9 @@ export async function createShareStorage() {
   if (!Number.isSafeInteger(dailyUploadLimit) || dailyUploadLimit <= 0)
     throw new Error("SHARE_DAILY_UPLOAD_BYTES must be a positive integer");
 
+  await verifyDatabaseMigrations(database);
   await redis.connect();
   await s3.send(new HeadBucketCommand({ Bucket: bucket }));
-  await database`
-    CREATE TABLE IF NOT EXISTS playground_snippets (
-      id text PRIMARY KEY,
-      object_key text NOT NULL UNIQUE,
-      created_at timestamptz NOT NULL DEFAULT now(),
-      expires_at timestamptz NOT NULL,
-      content_bytes bigint NOT NULL CHECK (content_bytes >= 0),
-      stored_bytes bigint NOT NULL CHECK (stored_bytes >= 0),
-      content_sha256 char(64) NOT NULL,
-      runtime_version text NOT NULL,
-      status text NOT NULL DEFAULT 'ready' CHECK (status IN ('pending', 'ready'))
-    )
-  `;
-  await database`CREATE INDEX IF NOT EXISTS playground_snippets_expiry_idx ON playground_snippets (expires_at)`;
 
   async function allowRequest(key, limit, windowSeconds) {
     return Number(await redis.eval(requestLimitScript, 1, key, windowSeconds, limit)) === 1;

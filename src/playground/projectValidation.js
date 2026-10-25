@@ -79,22 +79,22 @@ export function projectSnapshotError(snapshot, knownFileSizes) {
   return undefined;
 }
 
-export function projectSnapshotErrorMessage(error) {
+export function projectSnapshotErrorMessage(error, t) {
   if (error === "Source exceeds the size limit")
-    return `MCLソースの上限は${projectLimits.sourceBytes / 1024} KiBです`;
+    return t("sourceSizeLimit", { size: projectLimits.sourceBytes / 1024 });
   if (error === "Project file exceeds the size limit")
-    return `各ファイルの上限は${projectLimits.projectFileBytes / (1024 * 1024)} MiBです`;
+    return t("projectFileSizeLimit", {
+      size: projectLimits.projectFileBytes / (1024 * 1024),
+    });
   if (error === "Project exceeds the size limit")
-    return `プロジェクトの上限は${projectLimits.projectBytes / (1024 * 1024)} MiBです`;
+    return t("projectSizeLimit", { size: projectLimits.projectBytes / (1024 * 1024) });
   if (error === "Project has too many files")
-    return `プロジェクトのファイル数は${projectLimits.projectFiles}件までです`;
-  if (error === "Invalid active project path") return "選択中のファイルが使用できません";
-  if (error === "Invalid project size metadata")
-    return "プロジェクトのサイズ情報が正しくありません";
-  if (error === "Project contains an invalid file path") return "使用できないファイルパスです";
-  if (error === "Project file paths overlap files and directories")
-    return "ファイルとディレクトリのパスが重複しています";
-  return "プロジェクトを更新できません";
+    return t("projectTooManyFiles", { count: projectLimits.projectFiles });
+  if (error === "Invalid active project path") return t("projectActivePathInvalid");
+  if (error === "Invalid project size metadata") return t("projectSizeMetadataInvalid");
+  if (error === "Project contains an invalid file path") return t("projectPathsInvalid");
+  if (error === "Project file paths overlap files and directories") return t("projectPathsOverlap");
+  return t("projectUpdateFailed");
 }
 
 export function isValidProjectSnapshot(snapshot) {

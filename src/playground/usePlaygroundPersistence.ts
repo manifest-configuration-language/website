@@ -125,9 +125,16 @@ export function usePlaygroundPersistence(
     const draftChannel = new BroadcastChannel("mcl-playground-drafts-v1");
     channel.current = draftChannel;
     draftChannel.addEventListener("message", (event: MessageEvent<unknown>) => {
-      const message = event.data as { type?: unknown; draftId?: unknown; revision?: unknown };
+      const message = event.data as {
+        type?: unknown;
+        draftId?: unknown;
+        revision?: unknown;
+      };
       if (
-        message?.type !== "draft-saved" ||
+        (message?.type !== "draft-created" &&
+          message?.type !== "draft-saved" &&
+          message?.type !== "draft-updated" &&
+          message?.type !== "draft-deleted") ||
         typeof message.draftId !== "string" ||
         typeof message.revision !== "number" ||
         !Number.isSafeInteger(message.revision) ||
@@ -141,6 +148,8 @@ export function usePlaygroundPersistence(
         message.revision > expected
       )
         markDraftConflict(message.draftId);
+      if (message.type === "draft-deleted")
+        expectedRevisions.current.set(message.draftId, message.revision);
       void loadDraftIndexRef.current?.().catch(onError);
     });
     return () => {
@@ -162,19 +171,39 @@ export function usePlaygroundPersistence(
       setDrafts(next);
       if (persist)
         void enqueueWrite(async () => {
-          await playgroundDatabase.transaction("rw", playgroundDatabase.drafts, async () => {
-            const current = await playgroundDatabase.drafts.get(id);
-            if (!current && expectedRevisions.current.has(id))
-              throw new DraftConflictError(id, expectedRevisions.current.get(id) ?? 0, undefined);
-            await playgroundDatabase.drafts.put({
-              id,
-              name: nextDraft.name,
-              updatedAt: nextDraft.updatedAt,
-              revision: current?.revision ?? expectedRevisions.current.get(id) ?? 0,
-            });
+          const nextRevision = await playgroundDatabase.transaction(
+            "rw",
+            playgroundDatabase.drafts,
+            async () => {
+              const current = await playgroundDatabase.drafts.get(id);
+              const hasExpectedRevision = expectedRevisions.current.has(id);
+              const expectedRevision = expectedRevisions.current.get(id) ?? 0;
+              if (
+                (current && (!hasExpectedRevision || current.revision !== expectedRevision)) ||
+                (!current && hasExpectedRevision)
+              )
+                throw new DraftConflictError(id, expectedRevision, current?.revision);
+              const revision = expectedRevision + 1;
+              await playgroundDatabase.drafts.put({
+                id,
+                name: nextDraft.name,
+                updatedAt: nextDraft.updatedAt,
+                revision,
+              });
+              return { revision, created: !current };
+            },
+          );
+          expectedRevisions.current.set(id, nextRevision.revision);
+          channel.current?.postMessage({
+            type: nextRevision.created ? "draft-created" : "draft-updated",
+            draftId: id,
+            revision: nextRevision.revision,
           });
         }).catch((cause: unknown) => {
-          if (cause instanceof DraftConflictError) markDraftConflict(id);
+          if (cause instanceof DraftConflictError) {
+            markDraftConflict(id);
+            void loadDraftIndexRef.current?.().catch(onError);
+          }
           onError(cause);
         });
       return next;
@@ -311,32 +340,43 @@ export function usePlaygroundPersistence(
     async (id: string) => {
       try {
         await enqueueWrite(async () => {
-          await playgroundDatabase.transaction(
+          const deletedRevision = await playgroundDatabase.transaction(
             "rw",
             playgroundDatabase.drafts,
             playgroundDatabase.projects,
             async () => {
               const current = await playgroundDatabase.drafts.get(id);
+              const hasExpectedRevision = expectedRevisions.current.has(id);
               const expectedRevision = expectedRevisions.current.get(id) ?? 0;
               if (
-                (current?.revision ?? 0) !== expectedRevision ||
-                (!current && expectedRevisions.current.has(id))
+                (current && (!hasExpectedRevision || current.revision !== expectedRevision)) ||
+                (!current && hasExpectedRevision)
               )
                 throw new DraftConflictError(id, expectedRevision, current?.revision);
               await playgroundDatabase.drafts.delete(id);
               await playgroundDatabase.projects.delete(id);
+              return expectedRevision + 1;
             },
           );
+          expectedRevisions.current.set(id, deletedRevision);
+          channel.current?.postMessage({
+            type: "draft-deleted",
+            draftId: id,
+            revision: deletedRevision,
+          });
         });
       } catch (cause) {
-        if (cause instanceof DraftConflictError) markDraftConflict(id);
+        if (cause instanceof DraftConflictError) {
+          markDraftConflict(id);
+          void loadDraftIndexRef.current?.().catch(onError);
+        }
         throw cause;
       }
       const next = draftsRef.current.filter((draft) => draft.id !== id);
       draftsRef.current = next;
       setDrafts(next);
     },
-    [enqueueWrite, markDraftConflict],
+    [enqueueWrite, markDraftConflict, onError],
   );
   const markDraftsLoaded = useCallback(() => setDraftsLoaded(true), []);
 

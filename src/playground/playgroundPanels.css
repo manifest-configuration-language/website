@@ -391,7 +391,7 @@
   font-weight: 700;
 }
 
-@media (max-width: 48rem) {
+@container playground-app (max-width: 699px) {
   .playground-code-surface,
   .playground-result-content {
     border-radius: 0.4rem;

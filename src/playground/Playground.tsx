@@ -188,8 +188,10 @@ export default function Playground() {
     defaultPanelLayout,
     openPaths,
     orientation,
+    outputCollapsed,
+    outputPanel,
     panelGroup,
-    savePreference,
+    savePanelLayout,
     setOpenPaths,
     setShowDiff,
     setShowProblems,
@@ -198,6 +200,7 @@ export default function Playground() {
     showProblems,
     showResources,
     toggleOrientation,
+    toggleOutputPanel,
     workspace,
   } = usePlaygroundLayout();
   const [targetOutputPosition, setTargetOutputPosition] = useState<
@@ -478,7 +481,7 @@ export default function Playground() {
         activePath: nextPath,
       });
       if (validationError) {
-        setError(projectSnapshotErrorMessage(validationError));
+        setError(projectSnapshotErrorMessage(validationError, t));
         return false;
       }
       if (options.newDraft !== false && !options.skipCurrentSnapshot) {
@@ -1059,12 +1062,21 @@ export default function Playground() {
             {t("problemsCount", { count: diagnostics.length })}
           </Button>
         </nav>
+        <div className="playground-output-collapse-control">
+          <Button
+            aria-controls="output"
+            aria-expanded={!outputCollapsed}
+            onPress={toggleOutputPanel}
+          >
+            {outputCollapsed ? t("showOutput") : t("hideOutput")}
+          </Button>
+        </div>
         <Group
           className="playground-panels"
           groupRef={panelGroup}
           defaultLayout={defaultPanelLayout}
           onLayoutChanged={(layout, meta) => {
-            if (meta.isUserInteraction) savePreference({ orientation, layout });
+            if (meta.isUserInteraction) savePanelLayout(layout);
           }}
           orientation={orientation}
           data-mobile-view={mobileView}
@@ -1101,7 +1113,15 @@ export default function Playground() {
             />
           </Panel>
           <Separator className="playground-resize-handle" aria-label={t("resizePanels")} />
-          <Panel id="output" className="playground-output-panel" defaultSize="40" minSize="25">
+          <Panel
+            id="output"
+            className="playground-output-panel"
+            panelRef={outputPanel}
+            defaultSize="40"
+            minSize="25"
+            collapsedSize={0}
+            collapsible
+          >
             <WorkspaceOutputPane
               showProblems={showProblems}
               showResources={showResources}
@@ -1205,11 +1225,7 @@ export default function Playground() {
                   error: t("wasmError"),
                 }[wasmStatus]}
           </span>
-          {wasmStatus === "error" && (
-            <button type="button" onClick={() => void retryWasm()}>
-              {t("retry")}
-            </button>
-          )}
+          {wasmStatus === "error" && <Button onPress={() => void retryWasm()}>{t("retry")}</Button>}
           <span>{t("problemsCount", { count: diagnostics.length })}</span>
           {pendingInitialImport && (
             <Button onPress={() => void openDraft(pendingInitialImport.id)}>

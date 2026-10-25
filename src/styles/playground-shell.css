@@ -36,6 +36,7 @@
   width: 100%;
   box-sizing: border-box;
   isolation: isolate;
+  container: playground-app / inline-size;
 }
 
 .sl-container:has(.playground-app) {
@@ -612,7 +613,9 @@ body:has(.playground-app) .right-sidebar-container {
     height: calc(100dvh - var(--sl-nav-height, 4rem) - 0.5rem);
     min-height: 0;
   }
+}
 
+@container playground-app (max-width: 699px) {
   .playground-app > astro-island {
     height: auto;
     flex: 1 1 0;
@@ -678,8 +681,8 @@ body:has(.playground-app) .right-sidebar-container {
 
   .playground-app .playground-more-menu {
     inset-inline-end: 0;
-    width: min(24rem, calc(100vw - 1rem));
-    max-width: calc(100vw - 1rem);
+    width: min(24rem, calc(100cqi - 1rem));
+    max-width: calc(100cqi - 1rem);
     min-width: 0;
     box-sizing: border-box;
   }

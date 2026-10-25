@@ -40,6 +40,8 @@ export const resources = {
       openFiles: "Open files",
       results: "Results",
       resizePanels: "Resize editor and results",
+      showOutput: "Expand results",
+      hideOutput: "Collapse results",
       arrangeSideBySide: "Arrange side by side",
       arrangeStacked: "Stack panels",
       arrangeHorizontal: "Side by side",
@@ -299,6 +301,8 @@ export const resources = {
       openFiles: "開いているファイル",
       results: "結果表示",
       resizePanels: "エディターと結果の配置を変更",
+      showOutput: "結果を展開",
+      hideOutput: "結果を折りたたむ",
       arrangeSideBySide: "左右に並べる",
       arrangeStacked: "上下に並べる",
       arrangeHorizontal: "左右",
@@ -560,6 +564,8 @@ declare global {
       openFiles: string;
       results: string;
       resizePanels: string;
+      showOutput: string;
+      hideOutput: string;
       arrangeSideBySide: string;
       arrangeStacked: string;
       arrangeHorizontal: string;

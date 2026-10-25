@@ -192,6 +192,7 @@ export const resources = {
       defaultProjectName: "Untitled project",
       importedProjectName: "Imported project",
       sharedProjectName: "Shared project",
+      openImportedProject: "Open imported project: {{name}}",
       projectUnavailable: "Could not load project",
       projectCopyName: "Copy of {{name}}",
       zipExported: "ZIP exported",
@@ -436,6 +437,7 @@ export const resources = {
       defaultProjectName: "無題のプロジェクト",
       importedProjectName: "インポートしたプロジェクト",
       sharedProjectName: "共有プロジェクト",
+      openImportedProject: "読み込んだプロジェクト「{{name}}」を開く",
       projectUnavailable: "プロジェクトを読み込めません",
       projectCopyName: "{{name}}のコピー",
       zipExported: "ZIPを書き出しました",
@@ -682,6 +684,7 @@ declare global {
       defaultProjectName: string;
       importedProjectName: string;
       sharedProjectName: string;
+      openImportedProject: string;
       projectUnavailable: string;
       projectCopyName: string;
       zipExported: string;

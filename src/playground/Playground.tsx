@@ -259,6 +259,9 @@ export default function Playground() {
   const [diagnostics, setDiagnostics] = useState<PlaygroundDiagnostic[]>([]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [pendingInitialImport, setPendingInitialImport] = useState<
+    { id: string; name: string } | undefined
+  >();
   const [editorError, setEditorError] = useState("");
   const [editorAttempt, setEditorAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -304,6 +307,9 @@ export default function Playground() {
     deleteDraft,
     markDraftsLoaded,
   } = usePlaygroundPersistence(projectRef, subscribeToProject, reportPersistenceError);
+  useEffect(() => {
+    if (pendingInitialImport?.id === activeDraftId) setPendingInitialImport(undefined);
+  }, [activeDraftId, pendingInitialImport]);
   const activeDraftName =
     drafts.find((draft) => draft.id === activeDraftId)?.name ?? t("defaultProjectName");
   const draftConflict = conflictedDraftIds.includes(activeDraftId);
@@ -709,67 +715,6 @@ export default function Playground() {
       const shortShareId = currentURL.pathname.match(
         /^\/playground\/s\/([A-Za-z0-9_-]{22})\/?$/,
       )?.[1];
-      try {
-        if (shortShareId) {
-          const sessionDraftId = loadShortShareDraftID(shortShareId);
-          const sessionDraft: unknown = sessionDraftId
-            ? await loadDraft(sessionDraftId)
-            : undefined;
-          if (cancelled) return;
-          if (sessionDraftId && isStoredProject(sessionDraft)) {
-            restored = sessionDraft;
-            activeId = sessionDraftId;
-            await setActiveDraft(activeId);
-            if (!draftsRef.current.some((draft) => draft.id === activeId))
-              updateDraftMetadata(activeId, t("sharedProjectName"));
-          } else {
-            const shared = parseSharedProjectPayload(
-              await loadShortShare(
-                shortShareId,
-                t,
-                AbortSignal.any([startupController.signal, AbortSignal.timeout(15_000)]),
-              ),
-            );
-            if (cancelled) return;
-            restored = shared;
-            activeId = crypto.randomUUID();
-            activateDraft(activeId, t("sharedProjectName"));
-            saveShortShareDraftID(shortShareId, activeId);
-          }
-        }
-      } catch (cause) {
-        if (!cancelled) setError(sharedProjectError(cause, t("sharedProjectTooLarge")));
-      }
-
-      if (!shortShareId) {
-        const url = new URL(window.location.href);
-        const exampleSlug = url.searchParams.get("example");
-        const example = examples.find((entry) => entry.slug === exampleSlug);
-        if (example) {
-          try {
-            const files = await loadExampleFiles(example, {
-              loadError: t("exampleLoadError", { title: example.title }),
-              invalidFormat: t("exampleInvalidFormat", { title: example.title }),
-            });
-            const { ["main.mcl"]: source, ...otherFiles } = files;
-            restored = {
-              source,
-              files: Object.fromEntries(
-                Object.entries(otherFiles).map(([path, content]) => [
-                  path,
-                  { encoding: "utf8", content },
-                ]),
-              ),
-            };
-            activeId = crypto.randomUUID();
-            activateDraft(activeId, example.title);
-            url.searchParams.delete("example");
-            history.replaceState(null, "", url);
-          } catch (cause) {
-            if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
-          }
-        }
-      }
       if (cancelled) return;
       if (!draftsRef.current.some((draft) => draft.id === activeId))
         activateDraft(activeId, t("defaultProjectName"));
@@ -783,6 +728,103 @@ export default function Playground() {
       if (editor.current) editor.current.contentDOM.contentEditable = "true";
       markDraftsLoaded();
       runInitialProject();
+
+      const baseRevision = projectRef.current.revision;
+      const baseDraftId = activeDraftIdRef.current;
+      void (async () => {
+        try {
+          let imported: StoredProject | undefined;
+          let importedDraftId: string | undefined;
+          let importedName = "";
+          let exampleSlug: string | undefined;
+
+          if (shortShareId) {
+            importedName = t("sharedProjectName");
+            const sessionDraftId = loadShortShareDraftID(shortShareId);
+            const sessionDraft: unknown = sessionDraftId
+              ? await loadDraft(sessionDraftId)
+              : undefined;
+            if (cancelled) return;
+            if (sessionDraftId && isStoredProject(sessionDraft)) {
+              imported = sessionDraft;
+              importedDraftId = sessionDraftId;
+            } else {
+              imported = parseSharedProjectPayload(
+                await loadShortShare(
+                  shortShareId,
+                  t,
+                  AbortSignal.any([startupController.signal, AbortSignal.timeout(15_000)]),
+                ),
+              );
+            }
+          } else {
+            const url = new URL(window.location.href);
+            exampleSlug = url.searchParams.get("example") ?? undefined;
+            const example = examples.find((entry) => entry.slug === exampleSlug);
+            if (example) {
+              importedName = example.title;
+              const files = await loadExampleFiles(example, {
+                loadError: t("exampleLoadError", { title: example.title }),
+                invalidFormat: t("exampleInvalidFormat", { title: example.title }),
+              });
+              const { ["main.mcl"]: source, ...otherFiles } = files;
+              imported = {
+                source,
+                files: Object.fromEntries(
+                  Object.entries(otherFiles).map(([path, content]) => [
+                    path,
+                    { encoding: "utf8", content },
+                  ]),
+                ),
+              };
+            }
+          }
+
+          if (cancelled || !imported) return;
+          const projectChanged =
+            projectRef.current.revision !== baseRevision ||
+            activeDraftIdRef.current !== baseDraftId;
+
+          if (!projectChanged) {
+            const targetDraftId = importedDraftId ?? crypto.randomUUID();
+            activateDraft(targetDraftId, importedName);
+            if (importedDraftId && !draftsRef.current.some((draft) => draft.id === targetDraftId))
+              updateDraftMetadata(targetDraftId, importedName);
+            if (!applyProject(imported, { newDraft: false })) return;
+            if (shortShareId) {
+              await saveDraftSnapshot(targetDraftId, projectRef.current);
+              saveShortShareDraftID(shortShareId, targetDraftId);
+            }
+          } else if (importedDraftId) {
+            if (importedDraftId === activeDraftIdRef.current) return;
+            if (!draftsRef.current.some((draft) => draft.id === importedDraftId))
+              updateDraftMetadata(importedDraftId, importedName);
+            setPendingInitialImport({ id: importedDraftId, name: importedName });
+          } else {
+            const draftId = crypto.randomUUID();
+            updateDraftMetadata(draftId, importedName);
+            await saveDraftSnapshot(draftId, imported);
+            if (cancelled) return;
+            if (shortShareId) saveShortShareDraftID(shortShareId, draftId);
+            setPendingInitialImport({ id: draftId, name: importedName });
+          }
+
+          if (exampleSlug) {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("example");
+            history.replaceState(null, "", url);
+          }
+        } catch (cause) {
+          if (cancelled) return;
+          setError(
+            shortShareId
+              ? sharedProjectError(cause, t("sharedProjectTooLarge"))
+              : cause instanceof Error
+                ? cause.message
+                : String(cause),
+          );
+        }
+      })();
     })();
 
     return () => {
@@ -793,6 +835,7 @@ export default function Playground() {
     };
   }, [
     activateDraft,
+    activeDraftIdRef,
     applyWorkspacePreference,
     applyProject,
     examples,
@@ -1479,6 +1522,11 @@ export default function Playground() {
             </button>
           )}
           <span>{t("problemsCount", { count: diagnostics.length })}</span>
+          {pendingInitialImport && (
+            <button type="button" onClick={() => void openDraft(pendingInitialImport.id)}>
+              {t("openImportedProject", { name: pendingInitialImport.name })}
+            </button>
+          )}
           <span>{t("filesCount", { count: Object.keys(projectFiles).length + 1 })}</span>
           <span>{(projectSizeBytes / 1024 / 1024).toFixed(1)} MiB</span>
           <span className="playground-status-path">{activePath}</span>

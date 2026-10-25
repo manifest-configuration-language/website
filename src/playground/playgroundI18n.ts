@@ -199,6 +199,52 @@ export const resources = {
       yamlCopied: "YAML copied",
       deleteProjectTitle: "Delete project?",
       deleteProjectDescription: "Delete {{name}} and its local draft?",
+      projectFileUnavailable: "No selectable file is available",
+      projectFileNotEditable: "No editable file is available",
+      projectFilePathInvalid: "The file path is invalid",
+      projectFileLimit: "A project can contain up to {{count}} files",
+      projectRenameStale: "The project changed. Rename the file again.",
+      projectImportTargetMissing: "Import edit target not found: {{path}}",
+      projectImportRangeInvalid: "Import edit range is invalid: {{path}}",
+      projectFileMissing: "File not found",
+      archiveSizeLimit: "ZIP file limit: {{size}} MiB",
+      archiveEntryLimit: "ZIP entry limit: {{count}}",
+      archiveEmpty: "The ZIP file contains no files",
+      archiveFileLimit: "Project file limit: {{count}}",
+      archiveInvalidPath: "The ZIP file contains an invalid path",
+      archiveDuplicatePath: "The ZIP file contains a duplicate path",
+      archivePathCollision: "The ZIP file contains colliding paths",
+      archiveInvalidDirectory: "The ZIP file contains an invalid or duplicate directory",
+      archiveFileDirectoryCollision: "A ZIP file and directory path conflict",
+      archiveInvalidSize: "The ZIP file contains invalid size information",
+      projectSizeLimit: "Project size limit: {{size}} MiB",
+      archiveMainRequired: "The ZIP root must contain main.mcl",
+      projectStructureInvalid: "The project file structure is invalid",
+      shareSnapshotInvalid: "The shared project format is invalid",
+      shareResponseNotJSON: "The share API returned a non-JSON response",
+      shareResponseTooLarge: "The share API response exceeds the size limit",
+      shareResponseUnreadable: "The share API response could not be read",
+      shareSizeLimit: "The shared project exceeds the size limit",
+      shareRateLimit: "Too many share links were created. Try again later.",
+      shareCreateFailed: "Could not create a share link (HTTP {{status}})",
+      shareResponseInvalid: "The share API response format is invalid",
+      shareIDInvalid: "The share link ID is invalid",
+      shareNotFound: "The share link was not found or has expired",
+      shareLoadFailed: "Could not load the shared project (HTTP {{status}})",
+      snippetLetLabel: "let declaration",
+      snippetEmitLabel: "emit statement",
+      snippetConfigMapLabel: "ConfigMap resource",
+      snippetDetail: "MCL snippet",
+      standardLibraryReference: "Standard library reference",
+      sourceSizeLimit: "MCL source limit: {{size}} KiB",
+      projectFileSizeLimit: "File size limit: {{size}} MiB",
+      projectTooManyFiles: "A project can contain up to {{count}} files",
+      projectActivePathInvalid: "The selected file is unavailable",
+      projectSizeMetadataInvalid: "Project size information is invalid",
+      projectPathsInvalid: "The project contains an invalid file path",
+      projectPathsOverlap: "File and directory paths overlap",
+      projectUpdateFailed: "Could not update the project",
+      fileContentsLabel: "{{path}} contents",
     },
   },
   ja: {
@@ -397,6 +443,52 @@ export const resources = {
       yamlCopied: "YAMLをコピーしました",
       deleteProjectTitle: "プロジェクトを削除しますか？",
       deleteProjectDescription: "{{name}}とローカルドラフトを削除します。",
+      projectFileUnavailable: "選択できるファイルがありません",
+      projectFileNotEditable: "編集できるファイルがありません",
+      projectFilePathInvalid: "使用できないファイルパスです",
+      projectFileLimit: "プロジェクトのファイル数は{{count}}件までです",
+      projectRenameStale: "プロジェクトが変更されました。もう一度ファイル名を変更してください。",
+      projectImportTargetMissing: "importの編集対象が見つかりません: {{path}}",
+      projectImportRangeInvalid: "importの編集位置を適用できません: {{path}}",
+      projectFileMissing: "ファイルが見つかりません",
+      archiveSizeLimit: "ZIPファイルの上限は{{size}} MiBです",
+      archiveEntryLimit: "ZIPファイルの上限は{{count}}エントリーです",
+      archiveEmpty: "ZIPファイルにファイルがありません",
+      archiveFileLimit: "プロジェクトの上限は{{count}}ファイルです",
+      archiveInvalidPath: "ZIPファイルに無効なパスがあります",
+      archiveDuplicatePath: "ZIPファイルに重複したパスがあります",
+      archivePathCollision: "ZIPファイルに重複または衝突するパスがあります",
+      archiveInvalidDirectory: "ZIPファイルに無効または重複したディレクトリがあります",
+      archiveFileDirectoryCollision: "ZIPファイル内でファイルとディレクトリのパスが衝突しています",
+      archiveInvalidSize: "ZIPファイルのサイズ情報が無効です",
+      projectSizeLimit: "プロジェクトの上限は{{size}} MiBです",
+      archiveMainRequired: "ZIPファイルのルートにmain.mclが必要です",
+      projectStructureInvalid: "プロジェクトのファイル構成が無効です",
+      shareSnapshotInvalid: "共有プロジェクトの形式が正しくありません",
+      shareResponseNotJSON: "共有APIからJSON以外の応答が返りました",
+      shareResponseTooLarge: "共有APIの応答サイズが上限を超えています",
+      shareResponseUnreadable: "共有APIの応答を読み込めませんでした",
+      shareSizeLimit: "共有プロジェクトのサイズが上限を超えています",
+      shareRateLimit: "共有リンクの作成回数が上限に達しました。時間をおいて再試行してください。",
+      shareCreateFailed: "共有リンクを作成できませんでした（HTTP {{status}}）",
+      shareResponseInvalid: "共有APIの応答形式が正しくありません",
+      shareIDInvalid: "共有リンクのIDが正しくありません",
+      shareNotFound: "共有リンクが見つからないか、期限が切れています",
+      shareLoadFailed: "共有プロジェクトを読み込めませんでした（HTTP {{status}}）",
+      snippetLetLabel: "let宣言",
+      snippetEmitLabel: "emit文",
+      snippetConfigMapLabel: "ConfigMapリソース",
+      snippetDetail: "MCLスニペット",
+      standardLibraryReference: "標準関数リファレンス",
+      sourceSizeLimit: "MCLソースの上限は{{size}} KiBです",
+      projectFileSizeLimit: "各ファイルの上限は{{size}} MiBです",
+      projectTooManyFiles: "プロジェクトのファイル数は{{count}}件までです",
+      projectActivePathInvalid: "選択中のファイルが使用できません",
+      projectSizeMetadataInvalid: "プロジェクトのサイズ情報が正しくありません",
+      projectPathsInvalid: "使用できないファイルパスです",
+      projectPathsOverlap: "ファイルとディレクトリのパスが重複しています",
+      projectUpdateFailed: "プロジェクトを更新できません",
+      fileContentsLabel: "{{path}}の内容",
     },
   },
 } as const;
@@ -597,6 +689,52 @@ declare global {
       yamlCopied: string;
       deleteProjectTitle: string;
       deleteProjectDescription: string;
+      projectFileUnavailable: string;
+      projectFileNotEditable: string;
+      projectFilePathInvalid: string;
+      projectFileLimit: string;
+      projectRenameStale: string;
+      projectImportTargetMissing: string;
+      projectImportRangeInvalid: string;
+      projectFileMissing: string;
+      archiveSizeLimit: string;
+      archiveEntryLimit: string;
+      archiveEmpty: string;
+      archiveFileLimit: string;
+      archiveInvalidPath: string;
+      archiveDuplicatePath: string;
+      archivePathCollision: string;
+      archiveInvalidDirectory: string;
+      archiveFileDirectoryCollision: string;
+      archiveInvalidSize: string;
+      projectSizeLimit: string;
+      archiveMainRequired: string;
+      projectStructureInvalid: string;
+      shareSnapshotInvalid: string;
+      shareResponseNotJSON: string;
+      shareResponseTooLarge: string;
+      shareResponseUnreadable: string;
+      shareSizeLimit: string;
+      shareRateLimit: string;
+      shareCreateFailed: string;
+      shareResponseInvalid: string;
+      shareIDInvalid: string;
+      shareNotFound: string;
+      shareLoadFailed: string;
+      snippetLetLabel: string;
+      snippetEmitLabel: string;
+      snippetConfigMapLabel: string;
+      snippetDetail: string;
+      standardLibraryReference: string;
+      sourceSizeLimit: string;
+      projectFileSizeLimit: string;
+      projectTooManyFiles: string;
+      projectActivePathInvalid: string;
+      projectSizeMetadataInvalid: string;
+      projectPathsInvalid: string;
+      projectPathsOverlap: string;
+      projectUpdateFailed: string;
+      fileContentsLabel: string;
     }
   }
 }

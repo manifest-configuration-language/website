@@ -1,3 +1,5 @@
+import type { TFunction } from "i18next";
+
 export type SharedProjectFile =
   | { encoding: "utf8"; content: string }
   | { encoding: "binary"; content: string };
@@ -37,7 +39,7 @@ function isSnapshotFile(value: unknown): value is SharedProjectFile {
   return value.encoding === "utf8" || value.encoding === "binary";
 }
 
-function parseSnapshot(value: unknown): SharedProjectSnapshot {
+function parseSnapshot(value: unknown, t: TFunction<"starlight">): SharedProjectSnapshot {
   if (
     !isRecord(value) ||
     value.version !== 1 ||
@@ -46,7 +48,7 @@ function parseSnapshot(value: unknown): SharedProjectSnapshot {
     Object.values(value.files).some((file) => !isSnapshotFile(file)) ||
     (value.activePath !== undefined && typeof value.activePath !== "string")
   )
-    throw new Error("共有プロジェクトの形式が正しくありません。");
+    throw new Error(t("shareSnapshotInvalid"));
 
   return {
     version: 1,
@@ -56,14 +58,14 @@ function parseSnapshot(value: unknown): SharedProjectSnapshot {
   };
 }
 
-async function readJSON(response: Response): Promise<unknown> {
+async function readJSON(response: Response, t: TFunction<"starlight">): Promise<unknown> {
   const contentType = response.headers.get("content-type");
   if (!contentType?.toLowerCase().includes("application/json"))
-    throw new Error("共有APIからJSON以外の応答が返りました。");
+    throw new Error(t("shareResponseNotJSON"));
   const contentLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(contentLength) && contentLength > maxRequestBytes)
-    throw new Error("共有APIの応答サイズが上限を超えています。");
-  if (!response.body) throw new Error("共有APIの応答を読み込めませんでした。");
+    throw new Error(t("shareResponseTooLarge"));
+  if (!response.body) throw new Error(t("shareResponseUnreadable"));
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -74,7 +76,7 @@ async function readJSON(response: Response): Promise<unknown> {
     size += value.byteLength;
     if (size > maxRequestBytes) {
       await reader.cancel();
-      throw new Error("共有APIの応答サイズが上限を超えています。");
+      throw new Error(t("shareResponseTooLarge"));
     }
     chunks.push(value);
   }
@@ -90,11 +92,12 @@ async function readJSON(response: Response): Promise<unknown> {
 
 export async function createShortShare(
   snapshot: Omit<SharedProjectSnapshot, "version">,
+  t: TFunction<"starlight">,
   signal?: AbortSignal,
 ): Promise<CreatedShortShare> {
   const body = JSON.stringify({ version: 1, ...snapshot });
   if (new TextEncoder().encode(body).byteLength > maxRequestBytes)
-    throw new Error("共有プロジェクトのサイズが上限を超えています。");
+    throw new Error(t("shareSizeLimit"));
 
   const response = await fetch(endpoint, {
     method: "POST",
@@ -103,18 +106,11 @@ export async function createShortShare(
     signal,
   });
   if (!response.ok) {
-    if (response.status === 429)
-      throw new ShareAPIError(
-        "共有リンクの作成回数が上限に達しました。時間をおいて再試行してください。",
-        429,
-      );
-    throw new ShareAPIError(
-      `共有リンクを作成できませんでした（HTTP ${response.status}）。`,
-      response.status,
-    );
+    if (response.status === 429) throw new ShareAPIError(t("shareRateLimit"), 429);
+    throw new ShareAPIError(t("shareCreateFailed", { status: response.status }), response.status);
   }
 
-  const result: unknown = await readJSON(response);
+  const result: unknown = await readJSON(response, t);
   if (
     !isRecord(result) ||
     typeof result.id !== "string" ||
@@ -122,26 +118,24 @@ export async function createShortShare(
     typeof result.expiresAt !== "string" ||
     !Number.isFinite(Date.parse(result.expiresAt))
   )
-    throw new Error("共有APIの応答形式が正しくありません。");
+    throw new Error(t("shareResponseInvalid"));
 
   return { id: result.id, expiresAt: result.expiresAt };
 }
 
 export async function loadShortShare(
   id: string,
+  t: TFunction<"starlight">,
   signal?: AbortSignal,
 ): Promise<SharedProjectSnapshot> {
-  if (!shareIDPattern.test(id)) throw new Error("共有リンクのIDが正しくありません。");
+  if (!shareIDPattern.test(id)) throw new Error(t("shareIDInvalid"));
 
   const response = await fetch(`${endpoint}/${encodeURIComponent(id)}`, {
     headers: { accept: "application/json" },
     signal,
   });
-  if (response.status === 404) throw new Error("共有リンクが見つからないか、期限が切れています。");
+  if (response.status === 404) throw new Error(t("shareNotFound"));
   if (!response.ok)
-    throw new ShareAPIError(
-      `共有プロジェクトを読み込めませんでした（HTTP ${response.status}）。`,
-      response.status,
-    );
-  return parseSnapshot(await readJSON(response));
+    throw new ShareAPIError(t("shareLoadFailed", { status: response.status }), response.status);
+  return parseSnapshot(await readJSON(response, t), t);
 }

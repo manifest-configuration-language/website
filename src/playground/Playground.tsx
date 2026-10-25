@@ -17,9 +17,7 @@ import type { RuntimeStatus } from "@manifest-configuration-language/browser";
 import { useTranslation } from "react-i18next";
 import { playgroundLocale } from "./playgroundI18n";
 import { createPlaygroundClient } from "./apiClient";
-import { MclEditor, initialSource, type ApplyWorkspaceEdits } from "./MclEditor";
-import { ProjectTabs } from "./ProjectTabs";
-import { TextProjectEditor } from "./TextProjectEditor";
+import { initialSource, type ApplyWorkspaceEdits } from "./MclEditor";
 import { decodeSharedProject, parseSharedProjectPayload } from "./projectShare";
 import { loadShortShare } from "./projectShareApi";
 import { projectSnapshotError, projectSnapshotErrorMessage } from "./projectValidation.js";
@@ -39,6 +37,7 @@ import { PlaygroundShareDialog } from "./PlaygroundShareDialog";
 import { DraftConflictDialog } from "./DraftConflictDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { WorkspaceHeader } from "./WorkspaceHeader";
+import { WorkspaceEditorPane } from "./WorkspaceEditorPane";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import "./symbolRenamePreview.css";
@@ -921,6 +920,7 @@ export default function Playground() {
             const shared = parseSharedProjectPayload(
               await loadShortShare(
                 shortShareId,
+                t,
                 AbortSignal.any([startupController.signal, AbortSignal.timeout(15_000)]),
               ),
             );
@@ -1336,10 +1336,13 @@ export default function Playground() {
 
   async function exportProject() {
     try {
-      const archive = await writeProjectArchive({
-        source: projectRef.current.source,
-        files: projectRef.current.files,
-      });
+      const archive = await writeProjectArchive(
+        {
+          source: projectRef.current.source,
+          files: projectRef.current.files,
+        },
+        t,
+      );
       downloadBlob(archive, "mcl-project.zip");
       setNotice(t("zipExported"));
     } catch (cause) {
@@ -1468,6 +1471,46 @@ export default function Playground() {
     setFileActionError("");
     setFileAction(undefined);
   }
+
+  const mclEditorServices = {
+    onReady: onEditorReady,
+    onWorkspaceEditApplierReady: (applier: ApplyWorkspaceEdits | undefined) => {
+      workspaceEditApplier.current = applier;
+    },
+    onDocumentChange,
+    onError: onEditorError,
+    diagnostics,
+    onRun: () => void run(),
+    onFormat: () => void formatSource(),
+    onComplete: (path: string, position: { line: number; character: number }) =>
+      client.current
+        ? client.current.complete(sourceForPath(path), path, position, languageServiceFiles())
+        : Promise.resolve([]),
+    onDefinition: (path: string, position: { line: number; character: number }) =>
+      client.current
+        ? client.current.definition(sourceForPath(path), path, position, languageServiceFiles())
+        : Promise.resolve(null),
+    onHover: (path: string, position: { line: number; character: number }) =>
+      client.current
+        ? client.current.hover(sourceForPath(path), path, position, languageServiceFiles())
+        : Promise.resolve(null),
+    onNavigate: navigateToDefinition,
+    onSelectionChange: handleEditorSelectionChange,
+    onNavigateToYaml: navigateToYaml,
+    onShowProblems: () => {
+      setMobileView("problems");
+      setShowProblems(true);
+      setShowDiff(false);
+    },
+    onFindReferences: openSymbolReferences,
+    onRenameSymbol: openSymbolRename,
+  };
+  const textEditorServices = {
+    onReady: onEditorReady,
+    onDocumentChange,
+    onError: onEditorError,
+    onRun: () => void run(),
+  };
 
   return (
     <I18nProvider locale={playgroundLocale}>
@@ -1627,148 +1670,35 @@ export default function Playground() {
           data-mobile-view={mobileView}
         >
           <Panel id="editor" className="playground-editor-panel" defaultSize="60" minSize="25">
-            <div className="playground-editor-filebar">
-              <button
-                type="button"
-                className="playground-explorer-toggle"
-                aria-label={explorerOpen ? t("closeExplorer") : t("openExplorer")}
-                aria-pressed={explorerOpen}
-                onClick={() => setExplorerOpen((value) => !value)}
-                title={explorerOpen ? t("closeExplorer") : t("openExplorer")}
-              >
-                ▤
-              </button>
-              <div className="playground-file-tabs" role="group" aria-label={t("openFiles")}>
-                {openPaths.map((path) => (
-                  <div className="playground-file-tab" key={path}>
-                    <button
-                      type="button"
-                      aria-pressed={path === activePath}
-                      title={path}
-                      onClick={() => selectFile(path)}
-                    >
-                      {path.split("/").at(-1)}
-                    </button>
-                    {path !== "main.mcl" && (
-                      <button
-                        type="button"
-                        className="playground-file-tab-close"
-                        aria-label={t("closeFile", { path })}
-                        title={t("close")}
-                        onClick={() => {
-                          const index = openPaths.indexOf(path);
-                          const remaining = openPaths.filter((entry) => entry !== path);
-                          if (path === activePath)
-                            selectProjectFile(
-                              remaining[Math.min(index, remaining.length - 1)] ?? "main.mcl",
-                            );
-                          setOpenPaths(remaining.length ? remaining : ["main.mcl"]);
-                        }}
-                      >
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="playground-new-file"
-                onClick={requestCreateFile}
-                disabled={!draftsLoaded || busy || loadingProject || draftConflict}
-                title={t("createFile")}
-                aria-label={t("createFile")}
-              >
-                +
-              </button>
-            </div>
-            <div className={`playground-editor-workspace${explorerOpen ? " has-explorer" : ""}`}>
-              {explorerOpen && (
-                <ProjectTabs
-                  paths={projectPaths}
-                  files={projectFiles}
-                  activePath={activePath}
-                  onSelect={selectFile}
-                  onCreate={requestCreateFile}
-                  onRename={requestRenameFile}
-                  onDelete={requestDeleteFile}
-                  disabled={!draftsLoaded || busy || loadingProject || draftConflict}
-                />
-              )}
-              {activePath.endsWith(".mcl") ? (
-                <MclEditor
-                  key={`${editorAttempt}:${projectGeneration}`}
-                  path={activePath}
-                  paths={projectPaths}
-                  source={activeSource}
-                  settings={editorSettings}
-                  readOnly={draftConflict}
-                  editorStates={mclEditorStates.current}
-                  onReady={onEditorReady}
-                  onWorkspaceEditApplierReady={(applier) => {
-                    workspaceEditApplier.current = applier;
-                  }}
-                  onDocumentChange={onDocumentChange}
-                  onError={onEditorError}
-                  diagnostics={diagnostics}
-                  onRun={() => void run()}
-                  onFormat={() => void formatSource()}
-                  onComplete={(path, position) =>
-                    client.current
-                      ? client.current.complete(
-                          sourceForPath(path),
-                          path,
-                          position,
-                          languageServiceFiles(),
-                        )
-                      : Promise.resolve([])
-                  }
-                  onDefinition={(path, position) =>
-                    client.current
-                      ? client.current.definition(
-                          sourceForPath(path),
-                          path,
-                          position,
-                          languageServiceFiles(),
-                        )
-                      : Promise.resolve(null)
-                  }
-                  onHover={(path, position) =>
-                    client.current
-                      ? client.current.hover(
-                          sourceForPath(path),
-                          path,
-                          position,
-                          languageServiceFiles(),
-                        )
-                      : Promise.resolve(null)
-                  }
-                  onNavigate={navigateToDefinition}
-                  onSelectionChange={handleEditorSelectionChange}
-                  onNavigateToYaml={navigateToYaml}
-                  onShowProblems={() => {
-                    setMobileView("problems");
-                    setShowProblems(true);
-                    setShowDiff(false);
-                  }}
-                  onFindReferences={openSymbolReferences}
-                  onRenameSymbol={openSymbolRename}
-                />
-              ) : (
-                <TextProjectEditor
-                  key={`${editorAttempt}:${projectGeneration}`}
-                  path={activePath}
-                  source={activeSource}
-                  settings={editorSettings}
-                  readOnly={draftConflict}
-                  editorStates={textEditorStates.current}
-                  onReady={onEditorReady}
-                  onDocumentChange={onDocumentChange}
-                  onError={onEditorError}
-                  onRun={() => void run()}
-                />
-              )}
-            </div>
+            <WorkspaceEditorPane
+              paths={projectPaths}
+              files={projectFiles}
+              activePath={activePath}
+              activeSource={activeSource}
+              openPaths={openPaths}
+              explorerOpen={explorerOpen}
+              disabled={!draftsLoaded || busy || loadingProject || draftConflict}
+              readOnly={draftConflict}
+              editorAttempt={editorAttempt}
+              projectGeneration={projectGeneration}
+              settings={editorSettings}
+              mclEditorStates={mclEditorStates.current}
+              textEditorStates={textEditorStates.current}
+              mclServices={mclEditorServices}
+              textEditorServices={textEditorServices}
+              onToggleExplorer={() => setExplorerOpen((value) => !value)}
+              onSelectFile={selectFile}
+              onCloseFile={(path) => {
+                const index = openPaths.indexOf(path);
+                const remaining = openPaths.filter((entry) => entry !== path);
+                if (path === activePath)
+                  selectProjectFile(remaining[Math.min(index, remaining.length - 1)] ?? "main.mcl");
+                setOpenPaths(remaining.length ? remaining : ["main.mcl"]);
+              }}
+              onCreateFile={requestCreateFile}
+              onRenameFile={requestRenameFile}
+              onDeleteFile={requestDeleteFile}
+            />
           </Panel>
           <Separator className="playground-resize-handle" aria-label={t("resizePanels")} />
           <Panel id="output" className="playground-output-panel" defaultSize="40" minSize="25">

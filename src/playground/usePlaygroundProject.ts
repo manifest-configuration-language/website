@@ -1,10 +1,10 @@
 import { useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   isValidProjectFileSet,
   isValidProjectPath,
   projectLimits,
   projectSnapshotError,
-  projectSnapshotErrorMessage,
 } from "./projectValidation.js";
 import type { PlaygroundRenameEdit, ProjectFile } from "./types";
 
@@ -22,6 +22,31 @@ export type ProjectMutation =
   | { ok: false; error: string };
 
 const encoder = new TextEncoder();
+
+function projectErrorMessage(error: string, t: ReturnType<typeof useTranslation>["t"]): string {
+  switch (error) {
+    case "Source exceeds the size limit":
+      return t("sourceSizeLimit", { size: projectLimits.sourceBytes / 1024 });
+    case "Project file exceeds the size limit":
+      return t("projectFileSizeLimit", {
+        size: projectLimits.projectFileBytes / (1024 * 1024),
+      });
+    case "Project exceeds the size limit":
+      return t("projectSizeLimit", { size: projectLimits.projectBytes / (1024 * 1024) });
+    case "Project has too many files":
+      return t("projectTooManyFiles", { count: projectLimits.projectFiles });
+    case "Invalid active project path":
+      return t("projectActivePathInvalid");
+    case "Invalid project size metadata":
+      return t("projectSizeMetadataInvalid");
+    case "Project contains an invalid file path":
+      return t("projectPathsInvalid");
+    case "Project file paths overlap files and directories":
+      return t("projectPathsOverlap");
+    default:
+      return t("projectUpdateFailed");
+  }
+}
 
 export type RenameFileImports = (
   source: string,
@@ -114,6 +139,7 @@ function freezeProjectFiles(files: Record<string, ProjectFile>) {
 }
 
 export function usePlaygroundProject(initialSource: string, renameFileImports: RenameFileImports) {
+  const { t } = useTranslation();
   const [project, setProject] = useState<PlaygroundProject>(() => {
     const files = Object.freeze(Object.create(null)) as Record<string, ProjectFile>;
     const sizes = projectFileSizes(initialSource, files);
@@ -143,7 +169,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
           (change.activePath !== "main.mcl" &&
             current.files[change.activePath]?.encoding !== "utf8")
         )
-          return { ok: false, error: "選択できるファイルがありません" };
+          return { ok: false, error: t("projectFileUnavailable") };
         const next = Object.freeze({
           ...current,
           activePath: change.activePath,
@@ -178,13 +204,12 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         revision: current.revision + 1,
       });
       const validationError = projectSnapshotError(next, fileSizes);
-      if (validationError)
-        return { ok: false, error: projectSnapshotErrorMessage(validationError) };
+      if (validationError) return { ok: false, error: projectErrorMessage(validationError, t) };
       projectRef.current = next;
       setProject(next);
       return { ok: true, project: next };
     },
-    [],
+    [t],
   );
 
   const replace = useCallback(
@@ -198,7 +223,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
     (path: string, content: string): ProjectMutation => {
       const current = projectRef.current;
       if (path !== "main.mcl" && current.files[path]?.encoding !== "utf8")
-        return { ok: false, error: "編集できるファイルがありません" };
+        return { ok: false, error: t("projectFileNotEditable") };
       if (path === "main.mcl") return commit({ source: content });
       const files = Object.assign(Object.create(null), current.files) as Record<
         string,
@@ -207,7 +232,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
       files[path] = { encoding: "utf8", content };
       return commit({ files });
     },
-    [commit],
+    [commit, t],
   );
 
   const setFiles = useCallback(
@@ -230,12 +255,12 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         path === "main.mcl" ||
         !isValidProjectFileSet(["main.mcl", ...Object.keys(current.files), path])
       ) {
-        return { ok: false, error: "使用できないファイルパスです" };
+        return { ok: false, error: t("projectFilePathInvalid") };
       }
       if (Object.keys(current.files).length + 1 >= projectLimits.projectFiles) {
         return {
           ok: false,
-          error: `プロジェクトのファイル数は${projectLimits.projectFiles}件までです`,
+          error: t("projectFileLimit", { count: projectLimits.projectFiles }),
         };
       }
       const files = Object.assign(Object.create(null), current.files) as Record<
@@ -245,7 +270,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
       files[path] = { encoding: "utf8", content: "" };
       return commit({ files, activePath: path });
     },
-    [commit],
+    [commit, t],
   );
 
   const renameFile = useCallback(
@@ -258,7 +283,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         nextPath === "main.mcl" ||
         !isValidProjectFileSet(["main.mcl", ...otherPaths, nextPath])
       ) {
-        return { ok: false, error: "使用できないファイルパスです" };
+        return { ok: false, error: t("projectFilePathInvalid") };
       }
       const files = Object.assign(Object.create(null), current.files) as Record<
         string,
@@ -277,7 +302,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         if (projectRef.current !== current)
           return {
             ok: false,
-            error: "プロジェクトが変更されたため、もう一度ファイル名を変更してください",
+            error: t("projectRenameStale"),
           };
         const sources = new Map<string, string>([["main.mcl", current.source]]);
         for (const [filePath, file] of Object.entries(current.files))
@@ -286,10 +311,10 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         for (const filePath of new Set(edits.map((edit) => edit.path))) {
           const source = sources.get(filePath);
           if (source === undefined)
-            return { ok: false, error: `MCLのimport編集対象が見つかりません: ${filePath}` };
+            return { ok: false, error: t("projectImportTargetMissing", { path: filePath }) };
           const updated = applyImportEdits(source, edits, filePath);
           if (updated === undefined)
-            return { ok: false, error: `MCLのimport位置を適用できません: ${filePath}` };
+            return { ok: false, error: t("projectImportRangeInvalid", { path: filePath }) };
           sources.set(filePath, updated);
         }
         const updatedSource = sources.get("main.mcl") ?? current.source;
@@ -299,7 +324,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         const movedSource = sources.get(path);
         if (movedSource !== undefined) files[path] = { encoding: "utf8", content: movedSource };
         const movedFile = files[path];
-        if (!movedFile) return { ok: false, error: "ファイルが見つかりません" };
+        if (!movedFile) return { ok: false, error: t("projectFileMissing") };
         files[nextPath] = movedFile;
         delete files[path];
         const result = commit({
@@ -310,7 +335,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         return result;
       }
       const movedFile = files[path];
-      if (!movedFile) return { ok: false, error: "ファイルが見つかりません" };
+      if (!movedFile) return { ok: false, error: t("projectFileMissing") };
       files[nextPath] = movedFile;
       delete files[path];
       return commit({
@@ -318,14 +343,14 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         activePath: current.activePath === path ? nextPath : current.activePath,
       });
     },
-    [commit, renameFileImports],
+    [commit, renameFileImports, t],
   );
 
   const deleteFile = useCallback(
     (path: string): ProjectMutation => {
       const current = projectRef.current;
       if (path === "main.mcl" || !Object.hasOwn(current.files, path))
-        return { ok: false, error: "ファイルが見つかりません" };
+        return { ok: false, error: t("projectFileMissing") };
       const files = Object.assign(Object.create(null), current.files) as Record<
         string,
         ProjectFile
@@ -336,7 +361,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         activePath: current.activePath === path ? "main.mcl" : current.activePath,
       });
     },
-    [commit],
+    [commit, t],
   );
 
   return {

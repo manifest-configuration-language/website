@@ -1,6 +1,7 @@
 import { autocompletion, snippetCompletion, type Completion } from "@codemirror/autocomplete";
 import { hoverTooltip } from "@codemirror/view";
 import { EditorView, type KeyBinding } from "@codemirror/view";
+import type { TFunction } from "i18next";
 import type { Extension } from "@codemirror/state";
 import type {
   PlaygroundCompletionItem,
@@ -25,6 +26,7 @@ type LanguageServiceCallbacks = {
 type Ref<T> = { current: T };
 
 type LanguageServiceContext = {
+  t: TFunction<"starlight">;
   callbacks: Ref<LanguageServiceCallbacks>;
   currentPath: Ref<string>;
   view: Ref<EditorView | undefined>;
@@ -33,35 +35,37 @@ type LanguageServiceContext = {
   hoverRequest: Ref<number>;
 };
 
-const starterCompletions = [
-  {
-    trigger: "let",
-    completion: snippetCompletion("let ${1:name} = ${0:null}", {
-      label: "let宣言",
-      detail: "MCLスニペット",
-      type: "keyword",
-    }),
-  },
-  {
-    trigger: "emit",
-    completion: snippetCompletion("emit ${0:resource}", {
-      label: "emit文",
-      detail: "MCLスニペット",
-      type: "keyword",
-    }),
-  },
-  {
-    trigger: "node",
-    completion: snippetCompletion(
-      'node:\n  apiVersion: "${1:v1}"\n  kind: "${2:ConfigMap}"\n  metadata:\n    name: "${3:resource-name}"\n  data:\n    ${4:key}: "${5:value}"\n$0',
-      {
-        label: "ConfigMapリソース",
-        detail: "MCLスニペット",
+function starterCompletions(t: TFunction<"starlight">) {
+  return [
+    {
+      trigger: "let",
+      completion: snippetCompletion("let ${1:name} = ${0:null}", {
+        label: t("snippetLetLabel"),
+        detail: t("snippetDetail"),
         type: "keyword",
-      },
-    ),
-  },
-];
+      }),
+    },
+    {
+      trigger: "emit",
+      completion: snippetCompletion("emit ${0:resource}", {
+        label: t("snippetEmitLabel"),
+        detail: t("snippetDetail"),
+        type: "keyword",
+      }),
+    },
+    {
+      trigger: "node",
+      completion: snippetCompletion(
+        'node:\n  apiVersion: "${1:v1}"\n  kind: "${2:ConfigMap}"\n  metadata:\n    name: "${3:resource-name}"\n  data:\n    ${4:key}: "${5:value}"\n$0',
+        {
+          label: t("snippetConfigMapLabel"),
+          detail: t("snippetDetail"),
+          type: "keyword",
+        },
+      ),
+    },
+  ];
+}
 
 export function createEditorLanguageServices(context: LanguageServiceContext): {
   extensions: Extension[];
@@ -109,7 +113,7 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
                 };
               });
               const labels = new Set(options.map((option) => option.label));
-              for (const starter of starterCompletions) {
+              for (const starter of starterCompletions(context.t)) {
                 if (word?.text !== starter.trigger || labels.has(starter.completion.label))
                   continue;
                 options.push(starter.completion);
@@ -181,7 +185,7 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
                   link.href = "/reference/stdlib-functions/";
                   link.target = "_blank";
                   link.rel = "noopener noreferrer";
-                  link.textContent = "標準関数リファレンス";
+                  link.textContent = context.t("standardLibraryReference");
                   dom.append(document.createElement("br"), link);
                 }
                 return { dom };

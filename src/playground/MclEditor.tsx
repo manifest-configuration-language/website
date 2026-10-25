@@ -301,6 +301,7 @@ export function MclEditor({
       documentGeneration,
       definitionRequest,
       hoverRequest,
+      t,
     });
     try {
       extensions.current = [

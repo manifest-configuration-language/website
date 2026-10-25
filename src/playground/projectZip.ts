@@ -1,4 +1,5 @@
 import { BlobReader, BlobWriter, ZipReader, ZipWriter } from "@zip.js/zip.js";
+import type { TFunction } from "i18next";
 import {
   isValidProjectFileSet,
   isValidProjectPath,
@@ -16,39 +17,41 @@ type Project = {
   files: Record<string, ProjectFile>;
 };
 
-export async function readProjectArchive(archive: File): Promise<File[]> {
+export async function readProjectArchive(
+  archive: File,
+  t: TFunction<"starlight">,
+): Promise<File[]> {
   if (archive.size > maxArchiveBytes) {
-    throw new Error(`ZIPファイルの上限は${maxArchiveBytes / 1024 / 1024} MiBです。`);
+    throw new Error(t("archiveSizeLimit", { size: maxArchiveBytes / 1024 / 1024 }));
   }
   const reader = new ZipReader(new BlobReader(archive));
   try {
     const allEntries = [];
     for await (const entry of reader.getEntriesGenerator()) {
       if (allEntries.length >= maxArchiveEntries) {
-        throw new Error(`ZIPファイルの上限は${maxArchiveEntries.toLocaleString()}エントリーです。`);
+        throw new Error(t("archiveEntryLimit", { count: maxArchiveEntries.toLocaleString() }));
       }
       allEntries.push(entry);
     }
     const entries = allEntries.filter((entry) => !entry.directory);
-    if (entries.length === 0) throw new Error("ZIPファイルにファイルがありません。");
+    if (entries.length === 0) throw new Error(t("archiveEmpty"));
     if (entries.length > projectLimits.projectFiles) {
       throw new Error(
-        `プロジェクトの上限は${projectLimits.projectFiles.toLocaleString()}ファイルです。`,
+        t("archiveFileLimit", { count: projectLimits.projectFiles.toLocaleString() }),
       );
     }
 
     let declaredBytes = 0;
     for (const entry of allEntries) {
       const path = entry.directory ? entry.filename.replace(/\/$/, "") : entry.filename;
-      if (!isValidProjectPath(path)) throw new Error("ZIPファイルに無効なパスがあります。");
+      if (!isValidProjectPath(path)) throw new Error(t("archiveInvalidPath"));
     }
     const rawFilePaths: string[] = entries.map((entry) => entry.filename as string);
     const normalizedFilePaths: string[] = normalizeImportedProjectPaths(rawFilePaths, true);
     const filePaths = new Set(normalizedFilePaths);
     if (new Set(rawFilePaths).size !== rawFilePaths.length)
-      throw new Error("ZIPファイルに重複したパスがあります。");
-    if (!isValidProjectFileSet(normalizedFilePaths))
-      throw new Error("ZIPファイルに重複または衝突するパスがあります。");
+      throw new Error(t("archiveDuplicatePath"));
+    if (!isValidProjectFileSet(normalizedFilePaths)) throw new Error(t("archivePathCollision"));
 
     const roots = new Set(rawFilePaths.map((path) => path.split("/")[0]));
     const stripRoot =
@@ -66,7 +69,7 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
             : path;
       if (normalizedPath === "") continue;
       if (!isValidProjectPath(normalizedPath) || directories.has(normalizedPath))
-        throw new Error("ZIPファイルに無効または重複したディレクトリがあります。");
+        throw new Error(t("archiveInvalidDirectory"));
       let separator = normalizedPath.indexOf("/");
       let overlapsFile = filePaths.has(normalizedPath);
       while (!overlapsFile && separator !== -1) {
@@ -74,24 +77,22 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
         separator = normalizedPath.indexOf("/", separator + 1);
       }
       if (overlapsFile) {
-        throw new Error("ZIPファイルのファイルとディレクトリが衝突しています。");
+        throw new Error(t("archiveFileDirectoryCollision"));
       }
       directories.add(normalizedPath);
     }
     for (const entry of entries) {
       if (!Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0) {
-        throw new Error("ZIPファイルのサイズ情報が無効です。");
+        throw new Error(t("archiveInvalidSize"));
       }
       declaredBytes += entry.uncompressedSize;
       if (declaredBytes > projectLimits.projectBytes) {
-        throw new Error(
-          `プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`,
-        );
+        throw new Error(t("projectSizeLimit", { size: projectLimits.projectBytes / 1024 / 1024 }));
       }
     }
 
     if (!normalizedFilePaths.includes("main.mcl")) {
-      throw new Error("ZIPファイルのルートにmain.mclが必要です。");
+      throw new Error(t("archiveMainRequired"));
     }
 
     const files: File[] = [];
@@ -103,7 +104,7 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
         write(chunk) {
           if (actualBytes + chunk.byteLength > projectLimits.projectBytes) {
             throw new Error(
-              `プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`,
+              t("projectSizeLimit", { size: projectLimits.projectBytes / 1024 / 1024 }),
             );
           }
           actualBytes += chunk.byteLength;
@@ -128,16 +129,19 @@ export async function readProjectArchive(archive: File): Promise<File[]> {
   }
 }
 
-export async function writeProjectArchive(project: Project): Promise<Blob> {
+export async function writeProjectArchive(
+  project: Project,
+  t: TFunction<"starlight">,
+): Promise<Blob> {
   const snapshotError = projectSnapshotError(project);
   if (snapshotError) {
     if (snapshotError === "Project has too many files")
       throw new Error(
-        `プロジェクトの上限は${projectLimits.projectFiles.toLocaleString()}ファイルです。`,
+        t("archiveFileLimit", { count: projectLimits.projectFiles.toLocaleString() }),
       );
     if (snapshotError.includes("size limit"))
-      throw new Error(`プロジェクトの上限は${projectLimits.projectBytes / 1024 / 1024} MiBです。`);
-    throw new Error("プロジェクトのファイル構成が無効です。");
+      throw new Error(t("projectSizeLimit", { size: projectLimits.projectBytes / 1024 / 1024 }));
+    throw new Error(t("projectStructureInvalid"));
   }
   const files = Object.entries(project.files).sort(([left], [right]) => left.localeCompare(right));
 

@@ -49,7 +49,7 @@ export function ProjectFileInput({
     setLoading(true);
     onLoading(true);
     try {
-      const files = fromArchive ? await readProjectArchive(selected[0]) : selected;
+      const files = fromArchive ? await readProjectArchive(selected[0], t) : selected;
       const project = await onLoad(files);
       if (currentSelection === selection.current) onLoaded(project);
     } catch (cause) {

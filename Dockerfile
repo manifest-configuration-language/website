@@ -14,7 +14,8 @@ ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080
 COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN corepack enable pnpm \
     && pnpm install --prod --frozen-lockfile
-COPY src/api ./src/api
+COPY src/api/migrate.js src/api/server.js src/api/snapshot.js src/api/storage.js ./src/api/
+COPY src/api/migrations ./src/api/migrations
 USER 65532:65532
 EXPOSE 8080
 CMD ["node", "src/api/server.js"]

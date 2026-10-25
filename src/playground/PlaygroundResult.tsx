@@ -47,6 +47,10 @@ export function PlaygroundResult({
   const [showResources, setShowResources] = useState(false);
   const [selectedResourceKey, setSelectedResourceKey] = useState<string>();
   const displayedYaml = staleYaml ?? currentYaml;
+  const sourceMapDocument = useMemo(
+    () => (displayedYaml === undefined ? undefined : Text.of(displayedYaml.split("\n"))),
+    [displayedYaml],
+  );
   const resources = useMemo(() => parseYamlResources(displayedYaml ?? ""), [displayedYaml]);
   const previousResources = useMemo(() => parseYamlResources(previousYaml ?? ""), [previousYaml]);
   const currentResources = useMemo(() => parseYamlResources(currentYaml ?? ""), [currentYaml]);
@@ -92,13 +96,23 @@ export function PlaygroundResult({
           EditorView.theme({ ".cm-content, .cm-gutters": { fontSize: `${fontSize}px` } }),
           keymap.of([...searchKeymap, ...foldKeymap]),
           EditorView.contentAttributes.of({ "aria-label": "YAML結果" }),
-          ...(!selectedResource && sourceMap
+          ...(sourceMap && sourceMapDocument
             ? [
                 EditorView.decorations.of(
-                  sourceMapDecorations(Text.of(text.split("\n")), sourceMap, navigablePaths),
+                  sourceMapDecorations(
+                    Text.of(text.split("\n")),
+                    sourceMap,
+                    navigablePaths,
+                    sourceMapDocument,
+                    selectedResource,
+                  ),
                 ),
                 hoverTooltip((editor, position) => {
-                  const source = sourceForOutputPosition(editor, sourceMap, position);
+                  const source = sourceForOutputPosition(
+                    sourceMapDocument,
+                    sourceMap,
+                    selectedResource ? selectedResource.outputStartOffset + position : position,
+                  );
                   if (!source || !navigablePaths.includes(source.path)) return null;
                   return {
                     pos: position,
@@ -115,7 +129,11 @@ export function PlaygroundResult({
                   click(event, editor) {
                     const offset = editor.posAtCoords({ x: event.clientX, y: event.clientY });
                     if (offset === null) return false;
-                    const source = sourceForOutputPosition(editor, sourceMap, offset);
+                    const source = sourceForOutputPosition(
+                      sourceMapDocument,
+                      sourceMap,
+                      selectedResource ? selectedResource.outputStartOffset + offset : offset,
+                    );
                     if (!source) return false;
                     onSourceLocationRef.current(source.path, source.line, source.character);
                     return true;
@@ -137,6 +155,7 @@ export function PlaygroundResult({
     navigablePaths,
     selectedResource,
     sourceMap,
+    sourceMapDocument,
     showProblems,
     showDiff,
   ]);
@@ -151,15 +170,34 @@ export function PlaygroundResult({
       targetOutputPosition.requestId !== reply.requestId
     )
       return;
-    const offset = positionOffset(
-      view.state.doc,
+    const outputOffset = positionOffset(
+      sourceMapDocument ?? view.state.doc,
       targetOutputPosition.line,
       targetOutputPosition.character,
     );
-    if (offset === undefined) return;
+    if (outputOffset === undefined) return;
+    let offset = outputOffset;
+    if (selectedResource) {
+      if (
+        outputOffset < selectedResource.outputStartOffset ||
+        outputOffset >= selectedResource.outputEndOffset
+      ) {
+        setSelectedResourceKey(undefined);
+        return;
+      }
+      offset -= selectedResource.outputStartOffset;
+    }
     view.dispatch({ selection: { anchor: offset }, scrollIntoView: true });
     view.focus();
-  }, [targetOutputPosition, staleYaml, reply, showProblems, showDiff]);
+  }, [
+    targetOutputPosition,
+    staleYaml,
+    reply,
+    showProblems,
+    showDiff,
+    selectedResource,
+    sourceMapDocument,
+  ]);
 
   function goToDocument(line: number) {
     const view = outputEditor.current;
@@ -408,17 +446,13 @@ export function PlaygroundResult({
 }
 
 function sourceForOutputPosition(
-  editor: EditorView,
+  document: Text,
   sourceMap: PlaygroundSourceMap,
   offset: number,
 ): { path: string; line: number; character: number } | undefined {
   const candidates = sourceMap.entries.flatMap((entry) => {
-    const start = positionOffset(
-      editor.state.doc,
-      entry.output.start.line,
-      entry.output.start.character,
-    );
-    const end = positionOffset(editor.state.doc, entry.output.end.line, entry.output.end.character);
+    const start = positionOffset(document, entry.output.start.line, entry.output.start.character);
+    const end = positionOffset(document, entry.output.end.line, entry.output.end.character);
     if (start === undefined || end === undefined || offset < start || offset >= end) return [];
     return [{ entry, start, end }];
   });
@@ -444,6 +478,8 @@ function sourceMapDecorations(
   document: Text,
   sourceMap: PlaygroundSourceMap,
   navigablePaths: string[],
+  fullDocument: Text,
+  resource?: YamlResource,
 ) {
   const builder = new RangeSetBuilder<Decoration>();
   const ranges = sourceMap.entries
@@ -456,9 +492,22 @@ function sourceMapDecorations(
         !navigablePaths.includes(entry.sources[0].path)
       )
         return [];
-      const from = positionOffset(document, entry.output.start.line, entry.output.start.character);
-      const to = positionOffset(document, entry.output.end.line, entry.output.end.character);
-      return from !== undefined && to !== undefined && to > from ? [{ from, to }] : [];
+      const fullFrom = positionOffset(
+        fullDocument,
+        entry.output.start.line,
+        entry.output.start.character,
+      );
+      const fullTo = positionOffset(
+        fullDocument,
+        entry.output.end.line,
+        entry.output.end.character,
+      );
+      if (fullFrom === undefined || fullTo === undefined || fullTo <= fullFrom) return [];
+      if (resource && (fullFrom < resource.outputStartOffset || fullTo > resource.outputEndOffset))
+        return [];
+      const from = resource ? fullFrom - resource.outputStartOffset : fullFrom;
+      const to = resource ? fullTo - resource.outputStartOffset : fullTo;
+      return from >= 0 && to <= document.length && to > from ? [{ from, to }] : [];
     })
     .sort((left, right) => left.from - right.from || left.to - right.to);
   for (const range of ranges)
@@ -482,6 +531,8 @@ type YamlResource = {
   namespace?: string;
   line: number;
   yaml: string;
+  outputStartOffset: number;
+  outputEndOffset: number;
   previous?: YamlResource;
   current?: YamlResource;
 };
@@ -520,8 +571,14 @@ function parseYamlResources(text: string): YamlResource[] {
         : `文書${index + 1}`;
     const start = document.range?.[0] ?? 0;
     const end = document.range?.[1] ?? text.length;
+    const rawYaml = text.slice(start, end);
+    const outputStartOffset = start + rawYaml.length - rawYaml.trimStart().length;
+    const outputEndOffset = Math.max(
+      outputStartOffset,
+      end - (rawYaml.length - rawYaml.trimEnd().length),
+    );
     const line = text.slice(0, start).split("\n").length - 1;
-    const yaml = text.slice(start, end).trim();
+    const yaml = text.slice(outputStartOffset, outputEndOffset);
 
     return [
       {
@@ -531,6 +588,8 @@ function parseYamlResources(text: string): YamlResource[] {
         namespace: typeof namespace === "string" ? namespace : undefined,
         line,
         yaml: yaml ? `${yaml}\n` : "",
+        outputStartOffset,
+        outputEndOffset,
       },
     ];
   });

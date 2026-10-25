@@ -20,6 +20,7 @@ import { Annotation, Compartment, EditorState, type Extension } from "@codemirro
 import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
 import { history, indentWithTab, toggleComment } from "@codemirror/commands";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
+import { oneDark } from "@codemirror/theme-one-dark";
 import { vscodeKeymap } from "@replit/codemirror-vscode-keymap";
 import { vim } from "@replit/codemirror-vim";
 import { yaml } from "@codemirror/lang-yaml";
@@ -86,6 +87,34 @@ let configMap =
 
 emit configMap
 `;
+
+function editorTheme(theme: EditorSettings["theme"]): Extension {
+  const dark =
+    theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  return [
+    EditorView.theme(
+      {
+        "&": { color: "var(--sl-color-text)", backgroundColor: "var(--sl-color-bg)" },
+        ".cm-content": { caretColor: "var(--sl-color-text)" },
+        ".cm-cursor, .cm-dropCursor": { borderInlineStartColor: "var(--sl-color-text)" },
+        ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+          backgroundColor: "var(--playground-editor-selection)",
+        },
+        ".cm-activeLine, .cm-activeLineGutter": {
+          backgroundColor: "var(--playground-editor-active-line)",
+        },
+        ".cm-gutters": {
+          color: "var(--sl-color-gray-2)",
+          borderColor: "var(--sl-color-gray-5)",
+          backgroundColor: "var(--sl-color-bg)",
+        },
+      },
+      { dark },
+    ),
+    ...(dark ? [oneDark] : []),
+  ];
+}
 
 type Props = {
   path: string;
@@ -188,6 +217,7 @@ export function MclEditor({
   const wrapping = useRef(new Compartment());
   const indentation = useRef(new Compartment());
   const textSize = useRef(new Compartment());
+  const themeMode = useRef(new Compartment());
   const vimMode = useRef(new Compartment());
   const languageMode = useRef(new Compartment());
   const settingsRef = useRef(settings);
@@ -236,6 +266,7 @@ export function MclEditor({
       textSize.current.reconfigure(
         EditorView.theme({ ".cm-content, .cm-gutters": { fontSize: `${next.fontSize}px` } }),
       ),
+      themeMode.current.reconfigure(editorTheme(next.theme)),
       vimMode.current.reconfigure(next.vim ? vim() : []),
     ];
   }
@@ -267,6 +298,7 @@ export function MclEditor({
             ".cm-content, .cm-gutters": { fontSize: `${settingsRef.current.fontSize}px` },
           }),
         ),
+        themeMode.current.of(editorTheme(settingsRef.current.theme)),
         drawSelection(),
         EditorView.contentAttributes.of({ "aria-label": `${path}の内容` }),
         history(),
@@ -523,6 +555,25 @@ export function MclEditor({
       states.current.set(currentPath.current, view.state);
     }
   }, [settings]);
+
+  useEffect(() => {
+    if (settings.theme !== "system") return;
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateTheme = () => {
+      const effect = themeMode.current.reconfigure(editorTheme("system"));
+      for (const [statePath, state] of states.current) {
+        if (statePath !== currentPath.current)
+          states.current.set(statePath, state.update({ effects: effect }).state);
+      }
+      const view = viewRef.current;
+      if (view) {
+        view.dispatch({ effects: effect });
+        states.current.set(currentPath.current, view.state);
+      }
+    };
+    colorScheme.addEventListener("change", updateTheme);
+    return () => colorScheme.removeEventListener("change", updateTheme);
+  }, [settings.theme]);
 
   useEffect(() => {
     const view = viewRef.current;

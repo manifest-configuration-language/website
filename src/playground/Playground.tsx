@@ -19,7 +19,13 @@ import {
   type EditorSettings,
 } from "./MclEditor";
 import { ProjectTabs } from "./ProjectTabs";
-import { decodeSharedProject, encodeSharedProject } from "./projectShare";
+import {
+  createSharedProjectPayload,
+  decodeSharedProject,
+  encodeSharedProject,
+  parseSharedProjectPayload,
+} from "./projectShare";
+import { createShortShare, loadShortShare } from "./projectShareApi";
 import { isValidProjectFileSet, isValidProjectPath, projectLimits } from "./projectValidation.js";
 import { PlaygroundResult } from "./PlaygroundResult";
 import { ProjectFileInput } from "./ProjectFileInput";
@@ -109,6 +115,23 @@ type RenderAction =
   | { type: "failed"; reply: PlaygroundReply };
 
 const initialRenderState: RenderState = { stale: false };
+const shortShareDraftSessionKey = "mcl-playground-short-share-draft-v1:";
+
+function loadShortShareDraftID(id: string): string | undefined {
+  try {
+    return sessionStorage.getItem(`${shortShareDraftSessionKey}${id}`) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveShortShareDraftID(shareID: string, draftID: string) {
+  try {
+    sessionStorage.setItem(`${shortShareDraftSessionKey}${shareID}`, draftID);
+  } catch {
+    // Session storage may be disabled; the immutable snapshot remains available from the API.
+  }
+}
 
 function renderStateReducer(state: RenderState, action: RenderAction): RenderState {
   switch (action.type) {
@@ -162,8 +185,11 @@ async function loadExampleFiles(example: ExampleSpec): Promise<Record<string, st
 }
 
 function clearSharedFragment() {
-  if (!window.location.hash.startsWith("#project=")) return;
-  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  const url = new URL(window.location.href);
+  if (!url.hash.startsWith("#project=") && !url.searchParams.has("s")) return;
+  if (url.hash.startsWith("#project=")) url.hash = "";
+  url.searchParams.delete("s");
+  history.replaceState(null, "", url);
 }
 
 function textForPath(project: StoredProject, path: string): string | undefined {
@@ -406,7 +432,6 @@ export default function Playground() {
     draftsRef,
     draftsLoaded,
     setActiveDraft,
-    setDraftShare,
     activateDraft,
     updateDraftMetadata,
     saveDraftSnapshot,
@@ -713,6 +738,7 @@ export default function Playground() {
     client.current = createdClient;
 
     let cancelled = false;
+    const startupController = new AbortController();
     void (async () => {
       let restored: StoredProject | undefined;
       let activeId = "";
@@ -752,42 +778,70 @@ export default function Playground() {
       }
 
       let recoveredSharedDraft = false;
+      const shortShareId = new URL(window.location.href).searchParams.get("s");
       try {
-        const shared = await decodeSharedProject(window.location.hash);
-        if (shared) {
-          clearSharedDraftRecovery();
-          restored = shared;
-          activeId = crypto.randomUUID();
-          activateDraft(activeId, "共有プロジェクト");
-          sharedRecovery.current = {
-            metadata: {
-              draftId: activeId,
-              fragment: window.location.hash,
-              activePath: shared.activePath ?? "main.mcl",
-            },
-            base: shared,
-          };
-        } else if (!window.location.hash.startsWith("#project=")) {
-          const savedRecovery = loadSharedDraftRecovery();
-          if (savedRecovery) {
-            const base = await decodeSharedProject(savedRecovery.metadata.fragment);
-            const recovered = base
-              ? applySharedDraftRecovery(
-                  base,
-                  savedRecovery.metadata.activePath,
-                  savedRecovery.patches,
-                )
-              : undefined;
-            if (base && recovered) {
-              restored = recovered;
-              activeId = savedRecovery.metadata.draftId;
-              await setActiveDraft(activeId);
-              if (!draftsRef.current.some((draft) => draft.id === activeId))
-                updateDraftMetadata(activeId, "共有プロジェクト");
-              sharedRecovery.current = { metadata: savedRecovery.metadata, base };
-              recoveredSharedDraft = true;
-            } else {
-              clearSharedDraftRecovery();
+        if (shortShareId) {
+          const sessionDraftId = loadShortShareDraftID(shortShareId);
+          const sessionDraft: unknown = sessionDraftId
+            ? await loadDraft(sessionDraftId)
+            : undefined;
+          if (cancelled) return;
+          if (sessionDraftId && isStoredProject(sessionDraft)) {
+            restored = sessionDraft;
+            activeId = sessionDraftId;
+            await setActiveDraft(activeId);
+            if (!draftsRef.current.some((draft) => draft.id === activeId))
+              updateDraftMetadata(activeId, "共有プロジェクト");
+          } else {
+            const shared = parseSharedProjectPayload(
+              await loadShortShare(
+                shortShareId,
+                AbortSignal.any([startupController.signal, AbortSignal.timeout(15_000)]),
+              ),
+            );
+            if (cancelled) return;
+            restored = shared;
+            activeId = crypto.randomUUID();
+            activateDraft(activeId, "共有プロジェクト");
+            saveShortShareDraftID(shortShareId, activeId);
+          }
+        } else {
+          const shared = await decodeSharedProject(window.location.hash);
+          if (shared) {
+            clearSharedDraftRecovery();
+            restored = shared;
+            activeId = crypto.randomUUID();
+            activateDraft(activeId, "共有プロジェクト");
+            sharedRecovery.current = {
+              metadata: {
+                draftId: activeId,
+                fragment: window.location.hash,
+                activePath: shared.activePath ?? "main.mcl",
+              },
+              base: shared,
+            };
+          } else if (!window.location.hash.startsWith("#project=")) {
+            const savedRecovery = loadSharedDraftRecovery();
+            if (savedRecovery) {
+              const base = await decodeSharedProject(savedRecovery.metadata.fragment);
+              const recovered = base
+                ? applySharedDraftRecovery(
+                    base,
+                    savedRecovery.metadata.activePath,
+                    savedRecovery.patches,
+                  )
+                : undefined;
+              if (base && recovered) {
+                restored = recovered;
+                activeId = savedRecovery.metadata.draftId;
+                await setActiveDraft(activeId);
+                if (!draftsRef.current.some((draft) => draft.id === activeId))
+                  updateDraftMetadata(activeId, "共有プロジェクト");
+                sharedRecovery.current = { metadata: savedRecovery.metadata, base };
+                recoveredSharedDraft = true;
+              } else {
+                clearSharedDraftRecovery();
+              }
             }
           }
         }
@@ -795,7 +849,7 @@ export default function Playground() {
         if (!cancelled) setError(sharedProjectError(cause, false));
       }
 
-      if (!window.location.hash.startsWith("#project=")) {
+      if (!shortShareId && !window.location.hash.startsWith("#project=")) {
         const url = new URL(window.location.href);
         const exampleSlug = url.searchParams.get("example");
         const example = examples.find((entry) => entry.slug === exampleSlug);
@@ -849,6 +903,7 @@ export default function Playground() {
 
     return () => {
       cancelled = true;
+      startupController.abort();
       createdClient.dispose();
       client.current = undefined;
     };
@@ -1208,27 +1263,44 @@ export default function Playground() {
     const snapshot = projectRef.current;
     try {
       await saveDraftSnapshot(draftId, snapshot);
-      const fragment = await encodeSharedProject({
+      const payload = createSharedProjectPayload({
         source: snapshot.source,
         files: snapshot.files,
         activePath: snapshot.activePath,
       });
-      const shareURL = new URL(window.location.href);
-      shareURL.hash = fragment.slice(1);
-      await setDraftShare(draftId, fragment);
-      const metadata = { draftId, fragment, activePath: snapshot.activePath };
-      resetSharedDraftRecovery(metadata);
-      sharedRecovery.current = {
-        metadata,
-        base: {
-          source: snapshot.source,
-          files: snapshot.files,
-          activePath: snapshot.activePath,
-        },
-      };
+      let shareURL: URL;
+      let shareNotice = "共有URLをコピーしました";
+      try {
+        const created = await createShortShare(payload, AbortSignal.timeout(15_000));
+        shareURL = new URL(window.location.href);
+        shareURL.hash = "";
+        shareURL.searchParams.delete("example");
+        shareURL.searchParams.set("s", created.id);
+        clearSharedDraftRecovery(draftId);
+        sharedRecovery.current = undefined;
+        const expiration = new Intl.DateTimeFormat("ja-JP", { dateStyle: "long" }).format(
+          new Date(created.expiresAt),
+        );
+        shareNotice = `共有URLをコピーしました（${expiration}まで有効。URLを知る人は閲覧できます）`;
+      } catch {
+        const fragment = await encodeSharedProject(snapshot);
+        shareURL = new URL(window.location.href);
+        shareURL.searchParams.delete("s");
+        shareURL.hash = fragment.slice(1);
+        const metadata = { draftId, fragment, activePath: snapshot.activePath };
+        resetSharedDraftRecovery(metadata);
+        sharedRecovery.current = {
+          metadata,
+          base: {
+            source: snapshot.source,
+            files: snapshot.files,
+            activePath: snapshot.activePath,
+          },
+        };
+      }
       await navigator.clipboard.writeText(shareURL.href);
-      history.replaceState(null, "", fragment);
-      setNotice("共有URLをコピーしました");
+      history.replaceState(null, "", shareURL);
+      setNotice(shareNotice);
     } catch (cause) {
       setError(sharedProjectError(cause, true));
     }

@@ -1,0 +1,95 @@
+.playground-app .project-explorer-tree {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.45rem;
+}
+
+.playground-app .project-explorer-tree .project-file-row {
+  display: flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.2rem;
+  border-radius: 0.35rem;
+}
+
+.playground-app .project-explorer-tree .project-file-open {
+  display: flex;
+  min-width: 0;
+  min-height: 1.9rem;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.35rem;
+  overflow: hidden;
+  padding-block: 0.35rem;
+  padding-inline-end: 0.5rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--sl-color-text);
+  font: inherit;
+  font-size: 0.82rem;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.playground-app .project-explorer-tree .project-file-open[aria-current="page"] {
+  background: color-mix(in srgb, var(--sl-color-accent) 15%, transparent);
+  color: var(--sl-color-accent);
+  font-weight: 650;
+}
+
+.playground-app .project-explorer-tree .project-file-open[aria-disabled="true"] {
+  color: var(--sl-color-gray-2);
+  cursor: default;
+}
+
+.playground-app .project-explorer-tree .project-file-open:focus-visible,
+.playground-app .project-explorer-tree .project-file-actions button:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: -2px;
+}
+
+.playground-app .project-explorer-tree .project-file-indicator {
+  width: 0.8rem;
+  flex: 0 0 0.8rem;
+  color: var(--sl-color-gray-2);
+  text-align: center;
+}
+
+.playground-app .project-explorer-tree .project-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playground-app .project-explorer-tree .project-file-row:hover,
+.playground-app .project-explorer-tree .project-file-row:focus-within {
+  background: var(--sl-color-gray-6);
+}
+
+.playground-app .project-explorer-tree .project-file-actions {
+  display: flex;
+  gap: 0.1rem;
+  margin-inline-start: 0;
+  opacity: 0;
+}
+
+.playground-app .project-explorer-tree .project-file-row:hover .project-file-actions,
+.playground-app .project-explorer-tree .project-file-row:focus-within .project-file-actions {
+  opacity: 1;
+}
+
+.playground-app .project-explorer-tree .project-file-actions button {
+  padding: 0.2rem 0.3rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+}
+
+.playground-app .project-explorer-tree .project-file-actions button:disabled {
+  cursor: wait;
+  opacity: 0.5;
+}

@@ -1,18 +1,12 @@
-import { get, set, setMany } from "idb-keyval";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorSettings } from "./MclEditor";
 import { isValidProjectSnapshot } from "./projectValidation.js";
+import {
+  ensurePlaygroundStorageMigrated,
+  playgroundDatabase,
+  playgroundSettingKeys,
+} from "./playgroundDatabase";
 import type { ProjectFile } from "./types";
-
-const storageKey = "mcl-playground-project-v1";
-const activeDraftKey = "mcl-playground-active-draft-v1";
-const draftIndexKey = "mcl-playground-drafts-v1";
-const draftKeyPrefix = "mcl-playground-draft-v1:";
-const draftShareKeyPrefix = "mcl-playground-draft-share-v1:";
-const editorSettingsKey = "mcl-playground-editor-settings-v1";
-const sharedRecoveryKey = "mcl-playground-shared-recovery-v1";
-const sharedRecoveryBasePrefix = "mcl-playground-shared-recovery-base-v1:";
-const sharedRecoveryPatchPrefix = "mcl-playground-shared-recovery-patch-v1:";
 
 export const defaultEditorSettings: EditorSettings = {
   theme: "system",
@@ -29,139 +23,6 @@ export type StoredProject = {
   activePath?: string;
 };
 export type DraftMetadata = { id: string; name: string; updatedAt: number };
-export type SharedDraftRecovery = {
-  draftId: string;
-  fragment: string;
-  activePath: string;
-};
-export type SharedDraftRecoveryPatch = {
-  path: string;
-  start: number;
-  end: number;
-  insert: string;
-};
-
-function sharedRecoveryPatchKey(draftId: string, path: string) {
-  return `${sharedRecoveryPatchPrefix}${draftId}:${encodeURIComponent(path)}`;
-}
-
-function sharedRecoveryBaseKey(draftId: string) {
-  return `${sharedRecoveryBasePrefix}${draftId}`;
-}
-
-export function loadSharedDraftRecovery():
-  | {
-      metadata: SharedDraftRecovery;
-      patches: SharedDraftRecoveryPatch[];
-    }
-  | undefined {
-  try {
-    const rawMetadata = sessionStorage.getItem(sharedRecoveryKey);
-    if (!rawMetadata) return undefined;
-    const value: unknown = JSON.parse(rawMetadata);
-    if (!value || typeof value !== "object") return undefined;
-    const stored = value as Record<string, unknown>;
-    if (
-      typeof stored.draftId !== "string" ||
-      !/^[0-9a-f-]{36}$/i.test(stored.draftId) ||
-      typeof stored.activePath !== "string"
-    )
-      return undefined;
-
-    const fragment = sessionStorage.getItem(sharedRecoveryBaseKey(stored.draftId));
-    if (!fragment?.startsWith("#project=")) return undefined;
-    const metadata = {
-      draftId: stored.draftId,
-      fragment,
-      activePath: stored.activePath,
-    };
-    const prefix = `${sharedRecoveryPatchPrefix}${stored.draftId}:`;
-    const patches: SharedDraftRecoveryPatch[] = [];
-    for (let index = 0; index < sessionStorage.length; index += 1) {
-      const key = sessionStorage.key(index);
-      if (!key?.startsWith(prefix)) continue;
-      const patch: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
-      if (
-        !patch ||
-        typeof patch !== "object" ||
-        typeof (patch as SharedDraftRecoveryPatch).path !== "string" ||
-        !Number.isSafeInteger((patch as SharedDraftRecoveryPatch).start) ||
-        !Number.isSafeInteger((patch as SharedDraftRecoveryPatch).end) ||
-        typeof (patch as SharedDraftRecoveryPatch).insert !== "string"
-      )
-        return undefined;
-      patches.push(patch as SharedDraftRecoveryPatch);
-    }
-    return { metadata: metadata as unknown as SharedDraftRecovery, patches };
-  } catch {
-    return undefined;
-  }
-}
-
-export function saveSharedDraftRecovery(
-  metadata: SharedDraftRecovery,
-  patch?: SharedDraftRecoveryPatch,
-) {
-  let previousMetadata: unknown;
-  try {
-    previousMetadata = JSON.parse(sessionStorage.getItem(sharedRecoveryKey) ?? "null");
-  } catch {
-    previousMetadata = undefined;
-  }
-  if (
-    !previousMetadata ||
-    typeof previousMetadata !== "object" ||
-    (previousMetadata as Record<string, unknown>).draftId !== metadata.draftId ||
-    sessionStorage.getItem(sharedRecoveryBaseKey(metadata.draftId)) !== metadata.fragment
-  )
-    sessionStorage.setItem(sharedRecoveryBaseKey(metadata.draftId), metadata.fragment);
-  if (patch)
-    sessionStorage.setItem(
-      sharedRecoveryPatchKey(metadata.draftId, patch.path),
-      JSON.stringify(patch),
-    );
-  sessionStorage.setItem(
-    sharedRecoveryKey,
-    JSON.stringify({ draftId: metadata.draftId, activePath: metadata.activePath }),
-  );
-}
-
-export function resetSharedDraftRecovery(metadata: SharedDraftRecovery) {
-  const prefix = `${sharedRecoveryPatchPrefix}${metadata.draftId}:`;
-  for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
-    const key = sessionStorage.key(index);
-    if (key?.startsWith(prefix)) sessionStorage.removeItem(key);
-  }
-  sessionStorage.setItem(sharedRecoveryBaseKey(metadata.draftId), metadata.fragment);
-  sessionStorage.setItem(
-    sharedRecoveryKey,
-    JSON.stringify({ draftId: metadata.draftId, activePath: metadata.activePath }),
-  );
-}
-
-export function clearSharedDraftRecovery(draftId?: string) {
-  const saved = loadSharedDraftRecovery();
-  if (draftId && saved && saved.metadata.draftId !== draftId) return;
-  const targetDraftId = saved?.metadata.draftId ?? draftId;
-  if (targetDraftId) {
-    const prefix = `${sharedRecoveryPatchPrefix}${targetDraftId}:`;
-    for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
-      const key = sessionStorage.key(index);
-      if (key?.startsWith(prefix)) sessionStorage.removeItem(key);
-    }
-    sessionStorage.removeItem(sharedRecoveryBaseKey(targetDraftId));
-  }
-  sessionStorage.removeItem(sharedRecoveryKey);
-}
-
-function draftDataKey(id: string) {
-  return `${draftKeyPrefix}${id}`;
-}
-
-function draftShareKey(id: string) {
-  return `${draftShareKeyPrefix}${id}`;
-}
-
 function isDraftMetadataList(value: unknown): value is DraftMetadata[] {
   return (
     Array.isArray(value) &&
@@ -230,7 +91,14 @@ export function usePlaygroundPersistence(
       const next = [nextDraft, ...draftsRef.current.filter((draft) => draft.id !== id)];
       draftsRef.current = next;
       setDrafts(next);
-      if (persist) void enqueueWrite(() => set(draftIndexKey, next)).catch(onError);
+      if (persist)
+        void enqueueWrite(async () => {
+          await ensurePlaygroundStorageMigrated();
+          await playgroundDatabase.transaction("rw", playgroundDatabase.drafts, async () => {
+            const current = await playgroundDatabase.drafts.get(id);
+            await playgroundDatabase.drafts.put({ ...current, ...nextDraft });
+          });
+        }).catch(onError);
       return next;
     },
     [enqueueWrite, onError],
@@ -239,13 +107,21 @@ export function usePlaygroundPersistence(
   const saveDraftSnapshot = useCallback(
     async (id: string, value: StoredProject) => {
       if (!id) return;
-      const index = updateDraftMetadata(id, undefined, false);
-      await enqueueWrite(() =>
-        setMany([
-          [draftDataKey(id), value],
-          [draftIndexKey, index],
-        ]),
-      );
+      const [draft] = updateDraftMetadata(id, undefined, false);
+      if (!draft) return;
+      await enqueueWrite(async () => {
+        await ensurePlaygroundStorageMigrated();
+        await playgroundDatabase.transaction(
+          "rw",
+          playgroundDatabase.drafts,
+          playgroundDatabase.projects,
+          async () => {
+            const current = await playgroundDatabase.drafts.get(id);
+            await playgroundDatabase.drafts.put({ ...current, ...draft });
+            await playgroundDatabase.projects.put({ id, project: value });
+          },
+        );
+      });
     },
     [enqueueWrite, updateDraftMetadata],
   );
@@ -253,24 +129,31 @@ export function usePlaygroundPersistence(
   useEffect(() => {
     if (!draftsLoaded || !activeDraftId) return;
     const timer = setTimeout(() => {
-      void saveDraftSnapshot(activeDraftId, project).catch(onError);
+      void saveDraftSnapshot(activeDraftId, project).catch((cause: unknown) => onError(cause));
     }, 300);
     return () => clearTimeout(timer);
   }, [activeDraftId, draftsLoaded, onError, project, saveDraftSnapshot]);
 
+  const setActiveDraft = useCallback(async (id: string) => {
+    activeDraftIdRef.current = id;
+    setActiveDraftId(id);
+    await ensurePlaygroundStorageMigrated();
+    await playgroundDatabase.settings.put({ key: playgroundSettingKeys.activeDraft, value: id });
+  }, []);
+
   const activateDraft = useCallback(
-    (id: string, name?: string, shareFragment?: string) => {
-      activeDraftIdRef.current = id;
-      setActiveDraftId(id);
-      void set(activeDraftKey, id).catch(onError);
-      if (shareFragment !== undefined) void set(draftShareKey(id), shareFragment).catch(onError);
+    (id: string, name?: string) => {
+      void setActiveDraft(id).catch(onError);
       updateDraftMetadata(id, name);
     },
-    [onError, updateDraftMetadata],
+    [onError, setActiveDraft, updateDraftMetadata],
   );
 
   const loadDraftIndex = useCallback(async () => {
-    const savedIndex: unknown = await get(draftIndexKey);
+    await ensurePlaygroundStorageMigrated();
+    const savedIndex = (
+      await playgroundDatabase.drafts.orderBy("updatedAt").reverse().toArray()
+    ).map(({ id, name, updatedAt }) => ({ id, name, updatedAt }));
     const savedDrafts = isDraftMetadataList(savedIndex) ? savedIndex : [];
     draftsRef.current = savedDrafts;
     setDrafts(savedDrafts);
@@ -278,18 +161,48 @@ export function usePlaygroundPersistence(
   }, []);
 
   const loadActiveDraftId = useCallback(async () => {
-    const value: unknown = await get(activeDraftKey);
+    await ensurePlaygroundStorageMigrated();
+    const value: unknown = (
+      await playgroundDatabase.settings.get(playgroundSettingKeys.activeDraft)
+    )?.value;
     return typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value) ? value : "";
   }, []);
 
-  const loadDraft = useCallback(async (id: string) => get(draftDataKey(id)), []);
-  const loadLegacyProject = useCallback(async () => get(storageKey), []);
-  const loadDraftShare = useCallback(async (id: string) => get(draftShareKey(id)), []);
+  const loadDraft = useCallback(async (id: string) => {
+    await ensurePlaygroundStorageMigrated();
+    return (await playgroundDatabase.projects.get(id))?.project;
+  }, []);
+  const deleteDraft = useCallback(
+    async (id: string) => {
+      await enqueueWrite(async () => {
+        await ensurePlaygroundStorageMigrated();
+        await playgroundDatabase.transaction(
+          "rw",
+          playgroundDatabase.drafts,
+          playgroundDatabase.projects,
+          async () => {
+            await playgroundDatabase.drafts.delete(id);
+            await playgroundDatabase.projects.delete(id);
+          },
+        );
+      });
+      const next = draftsRef.current.filter((draft) => draft.id !== id);
+      draftsRef.current = next;
+      setDrafts(next);
+    },
+    [enqueueWrite],
+  );
+  const loadLegacyProject = useCallback(async () => {
+    await ensurePlaygroundStorageMigrated();
+    return (await playgroundDatabase.settings.get(playgroundSettingKeys.legacyProject))?.value;
+  }, []);
   const markDraftsLoaded = useCallback(() => setDraftsLoaded(true), []);
 
   useEffect(() => {
     let cancelled = false;
-    void get(editorSettingsKey)
+    void ensurePlaygroundStorageMigrated()
+      .then(() => playgroundDatabase.settings.get(playgroundSettingKeys.editorSettings))
+      .then((record) => record?.value)
       .then((saved: unknown) => {
         if (!cancelled && isEditorSettings(saved))
           setEditorSettings({
@@ -311,18 +224,15 @@ export function usePlaygroundPersistence(
 
   useEffect(() => {
     if (!editorSettingsLoaded) return;
-    void set(editorSettingsKey, editorSettings).catch((cause: unknown) => onError(cause));
+    void ensurePlaygroundStorageMigrated()
+      .then(() =>
+        playgroundDatabase.settings.put({
+          key: playgroundSettingKeys.editorSettings,
+          value: editorSettings,
+        }),
+      )
+      .catch((cause: unknown) => onError(cause));
   }, [editorSettings, editorSettingsLoaded, onError]);
-
-  const setActiveDraft = useCallback(async (id: string) => {
-    activeDraftIdRef.current = id;
-    setActiveDraftId(id);
-    await set(activeDraftKey, id);
-  }, []);
-
-  const setDraftShare = useCallback(async (id: string, fragment: string) => {
-    await set(draftShareKey(id), fragment);
-  }, []);
 
   return {
     editorSettings,
@@ -334,15 +244,14 @@ export function usePlaygroundPersistence(
     draftsRef,
     draftsLoaded,
     setActiveDraft,
-    setDraftShare,
     activateDraft,
     updateDraftMetadata,
     saveDraftSnapshot,
     loadDraftIndex,
     loadActiveDraftId,
     loadDraft,
+    deleteDraft,
     loadLegacyProject,
-    loadDraftShare,
     markDraftsLoaded,
   };
 }

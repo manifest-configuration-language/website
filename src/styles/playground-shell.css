@@ -1,8 +1,8 @@
 .playground-app {
   display: flex;
   width: 100%;
-  height: calc(100dvh - var(--sl-nav-height, 4rem) - 1rem);
-  min-height: 24rem;
+  height: calc(100dvh - var(--sl-nav-height, 4rem) - 0.5rem);
+  min-height: 0;
   overflow: hidden;
   --playground-editor-selection: #d5ebdc;
   --playground-editor-active-line: #f4f8f5;
@@ -44,6 +44,28 @@
   padding-inline: clamp(0.5rem, 1vw, 1rem);
 }
 
+body:has(.playground-app) .right-sidebar-container {
+  display: none;
+}
+
+.main-pane:has(.playground-app) {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+}
+
+.main-pane:has(.playground-app) main {
+  padding: 0;
+}
+
+.main-pane:has(.playground-app) > main > .content-panel:first-child {
+  display: none;
+}
+
+.main-pane:has(.playground-app) .content-panel:last-child {
+  padding: 0;
+}
+
 .sl-container:has(.playground-app) .content-panel {
   padding-block-start: 0;
 }
@@ -60,6 +82,8 @@
   max-height: 100%;
   margin: 0;
   padding: clamp(0.5rem, 1.5vw, 1.25rem);
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -158,6 +182,7 @@
   padding: 0.35rem 0.75rem;
   border-radius: 0.45rem;
   background: var(--sl-color-bg);
+  color: var(--sl-color-text);
   list-style: none;
 }
 
@@ -534,7 +559,7 @@
 @media (max-width: 48rem) {
   .playground-app {
     height: calc(100dvh - var(--sl-nav-height, 4rem) - 0.5rem);
-    min-height: 24rem;
+    min-height: 0;
   }
 
   .playground-app > astro-island {

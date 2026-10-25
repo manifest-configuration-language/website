@@ -6,6 +6,10 @@ export type QuickAccessItem = {
   shortcut?: string;
   keywords?: string[];
   group?: string;
+  description?: string;
+  tags?: string[];
+  difficulty?: string;
+  preview?: string;
   onSelect: () => void;
 };
 
@@ -43,10 +47,40 @@ export function QuickAccessList({ label, placeholder, emptyMessage, items }: Pro
               <Command.Item
                 key={item.value}
                 value={item.value}
-                keywords={item.keywords}
+                keywords={[
+                  ...(item.keywords ?? []),
+                  ...(item.description ? [item.description] : []),
+                  ...(item.tags ?? []),
+                  ...(item.difficulty ? [item.difficulty] : []),
+                  ...(item.preview ? [item.preview] : []),
+                ]}
                 onSelect={item.onSelect}
               >
-                <span>{item.label}</span>
+                {item.description || item.preview || item.tags?.length || item.difficulty ? (
+                  <div className="playground-quick-access-copy">
+                    <div className="playground-quick-access-heading">
+                      <span>{item.label}</span>
+                      {item.difficulty && (
+                        <span className="playground-quick-access-difficulty">
+                          {item.difficulty}
+                        </span>
+                      )}
+                    </div>
+                    {item.description && (
+                      <span className="playground-quick-access-description">
+                        {item.description}
+                      </span>
+                    )}
+                    {item.preview && (
+                      <pre className="playground-quick-access-preview">{item.preview}</pre>
+                    )}
+                    {item.tags && item.tags.length > 0 && (
+                      <span className="playground-quick-access-tags">{item.tags.join(" · ")}</span>
+                    )}
+                  </div>
+                ) : (
+                  <span>{item.label}</span>
+                )}
                 {item.shortcut && <kbd>{item.shortcut}</kbd>}
               </Command.Item>
             ))}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EditorState, RangeSetBuilder, Text } from "@codemirror/state";
-import { Decoration, EditorView, hoverTooltip } from "@codemirror/view";
+import { EditorState, RangeSetBuilder, StateEffect, StateField, Text } from "@codemirror/state";
+import { Decoration, EditorView, hoverTooltip, type DecorationSet } from "@codemirror/view";
 import { yaml } from "@codemirror/lang-yaml";
 import { foldGutter, foldKeymap } from "@codemirror/language";
 import { openSearchPanel, searchKeymap } from "@codemirror/search";
@@ -10,6 +10,28 @@ import type { PlaygroundDiagnostic, PlaygroundReply, PlaygroundSourceMap } from 
 import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundYamlResultView, type YamlResource } from "./PlaygroundYamlResultView";
 import { PlaygroundDiffResultView } from "./PlaygroundDiffResultView";
+import "./sourceMapSelection.css";
+
+const setSourceMapSelection = StateEffect.define<DecorationSet>();
+const sourceMapSelectionField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(decorations, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setSourceMapSelection)) return effect.value;
+    }
+    return decorations.map(transaction.changes);
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+export type SourceMapLocationCandidate = {
+  path: string;
+  range: {
+    start: { line: number; character: number };
+    end: { line: number; character: number };
+  };
+  unambiguous: boolean;
+};
 
 type Props = {
   reply?: PlaygroundReply;
@@ -24,8 +46,9 @@ type Props = {
   referenceItems: QuickAccessItem[];
   referenceError: string;
   targetOutputPosition?: { line: number; character: number; requestId: number };
+  sourcePosition?: { path: string; line: number; character: number };
   onDiagnostic: (diagnostic: PlaygroundDiagnostic) => void;
-  onSourceLocation: (path: string, line: number, character: number) => void;
+  onSourceCandidates: (candidates: SourceMapLocationCandidate[]) => void;
 };
 
 export function PlaygroundResult({
@@ -41,13 +64,14 @@ export function PlaygroundResult({
   referenceItems,
   referenceError,
   targetOutputPosition,
+  sourcePosition,
   onDiagnostic,
-  onSourceLocation,
+  onSourceCandidates,
 }: Props) {
   const outputHost = useRef<HTMLDivElement>(null);
   const outputEditor = useRef<EditorView | undefined>(undefined);
-  const onSourceLocationRef = useRef(onSourceLocation);
-  onSourceLocationRef.current = onSourceLocation;
+  const onSourceCandidatesRef = useRef(onSourceCandidates);
+  onSourceCandidatesRef.current = onSourceCandidates;
   const currentYaml = reply?.ok ? reply.result?.yaml : undefined;
   const sourceMap = staleYaml === undefined && reply?.ok ? reply.result?.sourceMap : undefined;
   const [showResources, setShowResources] = useState(false);
@@ -102,6 +126,7 @@ export function PlaygroundResult({
           EditorView.theme({ ".cm-content, .cm-gutters": { fontSize: `${fontSize}px` } }),
           keymap.of([...searchKeymap, ...foldKeymap]),
           EditorView.contentAttributes.of({ "aria-label": "YAML結果" }),
+          sourceMapSelectionField,
           ...(sourceMap && sourceMapDocument
             ? [
                 EditorView.decorations.of(
@@ -114,19 +139,21 @@ export function PlaygroundResult({
                   ),
                 ),
                 hoverTooltip((editor, position) => {
-                  const source = sourceForOutputPosition(
+                  const sources = sourceLocationsForOutputPosition(
                     sourceMapDocument,
                     sourceMap,
                     selectedResource ? selectedResource.outputStartOffset + position : position,
+                    navigablePaths,
                   );
-                  if (!source || !navigablePaths.includes(source.path)) return null;
+                  if (sources.length !== 1 || !sources[0].unambiguous) return null;
+                  const [source] = sources;
                   return {
                     pos: position,
                     end: Math.min(position + 1, editor.state.doc.length),
                     create() {
                       const dom = document.createElement("div");
                       dom.className = "cm-source-map-tooltip";
-                      dom.textContent = `${source.path}:${source.line + 1}:${source.character + 1}`;
+                      dom.textContent = `${source.path}:${source.range.start.line + 1}:${source.range.start.character + 1}`;
                       return { dom };
                     },
                   };
@@ -135,13 +162,14 @@ export function PlaygroundResult({
                   click(event, editor) {
                     const offset = editor.posAtCoords({ x: event.clientX, y: event.clientY });
                     if (offset === null) return false;
-                    const source = sourceForOutputPosition(
+                    const sources = sourceLocationsForOutputPosition(
                       sourceMapDocument,
                       sourceMap,
                       selectedResource ? selectedResource.outputStartOffset + offset : offset,
+                      navigablePaths,
                     );
-                    if (!source) return false;
-                    onSourceLocationRef.current(source.path, source.line, source.character);
+                    if (sources.length === 0) return false;
+                    onSourceCandidatesRef.current(sources);
                     return true;
                   },
                 }),
@@ -162,6 +190,35 @@ export function PlaygroundResult({
     selectedResource,
     sourceMap,
     sourceMapDocument,
+    showProblems,
+    showDiff,
+    showReferences,
+  ]);
+
+  useEffect(() => {
+    const view = outputEditor.current;
+    if (!view) return;
+    const decorations =
+      sourcePosition &&
+      sourceMap &&
+      sourceMapDocument &&
+      !showProblems &&
+      !showDiff &&
+      !showReferences
+        ? sourceMapSelectionDecorations(
+            view.state.doc,
+            sourceMap,
+            sourcePosition,
+            sourceMapDocument,
+            selectedResource,
+          )
+        : Decoration.none;
+    view.dispatch({ effects: setSourceMapSelection.of(decorations) });
+  }, [
+    sourcePosition,
+    sourceMap,
+    sourceMapDocument,
+    selectedResource,
     showProblems,
     showDiff,
     showReferences,
@@ -335,33 +392,71 @@ export function PlaygroundResult({
   );
 }
 
-function sourceForOutputPosition(
+function sourceLocationsForOutputPosition(
   document: Text,
   sourceMap: PlaygroundSourceMap,
   offset: number,
-): { path: string; line: number; character: number } | undefined {
+  navigablePaths: string[],
+): SourceMapLocationCandidate[] {
   const candidates = sourceMap.entries.flatMap((entry) => {
     const start = positionOffset(document, entry.output.start.line, entry.output.start.character);
     const end = positionOffset(document, entry.output.end.line, entry.output.end.character);
     if (start === undefined || end === undefined || offset < start || offset >= end) return [];
     return [{ entry, start, end }];
   });
-  if (candidates.length === 0) return undefined;
+  if (candidates.length === 0) return [];
 
   const shortest = Math.min(...candidates.map(({ start, end }) => end - start));
   const mostSpecific = candidates.filter(({ start, end }) => end - start === shortest);
-  if (mostSpecific.length !== 1) return undefined;
+  const result = new Map<string, SourceMapLocationCandidate>();
+  for (const { entry } of mostSpecific) {
+    for (const source of entry.sources) {
+      const { start, end } = source.range;
+      if (
+        source.kind !== "mcl" ||
+        !navigablePaths.includes(source.path) ||
+        !isValidSourceRange(start, end)
+      )
+        continue;
+      const key = JSON.stringify([
+        source.path,
+        start.line,
+        start.character,
+        end.line,
+        end.character,
+      ]);
+      const unambiguous = source.multiplicity === "unique" && source.occurrences === 1;
+      const current = result.get(key);
+      if (current) current.unambiguous &&= unambiguous;
+      else result.set(key, { path: source.path, range: { start, end }, unambiguous });
+    }
+  }
+  return [...result.values()].sort(
+    (left, right) =>
+      left.path.localeCompare(right.path) ||
+      left.range.start.line - right.range.start.line ||
+      left.range.start.character - right.range.start.character ||
+      left.range.end.line - right.range.end.line ||
+      left.range.end.character - right.range.end.character,
+  );
+}
 
-  const sources = mostSpecific[0].entry.sources;
-  if (sources.length !== 1) return undefined;
-  const [source] = sources;
-  if (source.kind !== "mcl" || source.multiplicity !== "unique" || source.occurrences !== 1)
-    return undefined;
-  return {
-    path: source.path,
-    line: source.range.start.line,
-    character: source.range.start.character,
-  };
+function isValidSourceRange(
+  start: { line: number; character: number },
+  end: { line: number; character: number },
+): boolean {
+  if (
+    !Number.isSafeInteger(start.line) ||
+    !Number.isSafeInteger(start.character) ||
+    !Number.isSafeInteger(end.line) ||
+    !Number.isSafeInteger(end.character) ||
+    start.line < 0 ||
+    start.character < 0 ||
+    end.line < start.line ||
+    (end.line === start.line && end.character < start.character)
+  )
+    return false;
+  return true;
 }
 
 function sourceMapDecorations(
@@ -403,6 +498,62 @@ function sourceMapDecorations(
   for (const range of ranges)
     builder.add(range.from, range.to, Decoration.mark({ class: "cm-source-map-link" }));
   return builder.finish();
+}
+
+function sourceMapSelectionDecorations(
+  document: Text,
+  sourceMap: PlaygroundSourceMap,
+  sourcePosition: { path: string; line: number; character: number },
+  fullDocument: Text,
+  resource?: YamlResource,
+) {
+  const ranges = sourceMap.entries.flatMap((entry) => {
+    const sourceMatches = entry.sources.some(
+      (source) =>
+        source.kind === "mcl" &&
+        source.path === sourcePosition.path &&
+        positionInRange(sourcePosition, source.range.start, source.range.end),
+    );
+    if (!sourceMatches) return [];
+    const fullFrom = positionOffset(
+      fullDocument,
+      entry.output.start.line,
+      entry.output.start.character,
+    );
+    const fullTo = positionOffset(fullDocument, entry.output.end.line, entry.output.end.character);
+    if (fullFrom === undefined || fullTo === undefined || fullTo <= fullFrom) return [];
+    if (resource && (fullFrom < resource.outputStartOffset || fullTo > resource.outputEndOffset))
+      return [];
+    const from = resource ? fullFrom - resource.outputStartOffset : fullFrom;
+    const to = resource ? fullTo - resource.outputStartOffset : fullTo;
+    return from >= 0 && to <= document.length ? [{ from, to }] : [];
+  });
+  ranges.sort((left, right) => left.from - right.from || left.to - right.to);
+
+  const merged: Array<{ from: number; to: number }> = [];
+  for (const range of ranges) {
+    const previous = merged.at(-1);
+    if (previous && range.from <= previous.to) previous.to = Math.max(previous.to, range.to);
+    else merged.push(range);
+  }
+
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const range of merged)
+    builder.add(range.from, range.to, Decoration.mark({ class: "cm-source-map-selection" }));
+  return builder.finish();
+}
+
+function positionInRange(
+  position: { line: number; character: number },
+  start: { line: number; character: number },
+  end: { line: number; character: number },
+): boolean {
+  const afterStart =
+    position.line > start.line ||
+    (position.line === start.line && position.character >= start.character);
+  const beforeEnd =
+    position.line < end.line || (position.line === end.line && position.character < end.character);
+  return afterStart && beforeEnd;
 }
 
 function positionOffset(document: Text, line: number, character: number): number | undefined {

@@ -148,6 +148,7 @@ type Props = {
     position: { line: number; character: number },
   ) => Promise<PlaygroundHover | null>;
   onNavigate: (location: PlaygroundDefinitionLocation) => void;
+  onSelectionChange: (path: string, line: number, character: number) => void;
   onNavigateToYaml: () => void;
   onShowProblems: () => void;
   onFindReferences: () => void;
@@ -207,6 +208,7 @@ export function MclEditor({
   onDefinition,
   onHover,
   onNavigate,
+  onSelectionChange,
   onNavigateToYaml,
   onShowProblems,
   onFindReferences,
@@ -242,6 +244,7 @@ export function MclEditor({
     onDefinition,
     onHover,
     onNavigate,
+    onSelectionChange,
     onNavigateToYaml,
     onShowProblems,
     onFindReferences,
@@ -258,6 +261,7 @@ export function MclEditor({
     onDefinition,
     onHover,
     onNavigate,
+    onSelectionChange,
     onNavigateToYaml,
     onShowProblems,
     onFindReferences,
@@ -326,6 +330,11 @@ export function MclEditor({
               line: line.number,
               column: update.state.selection.main.head - line.from + 1,
             });
+            callbacks.current.onSelectionChange(
+              currentPath.current,
+              line.number - 1,
+              update.state.selection.main.head - line.from,
+            );
           }
           if (update.selectionSet) {
             definitionRequest.current += 1;
@@ -434,6 +443,11 @@ export function MclEditor({
         line: initialLine.number,
         column: initialState.selection.main.head - initialLine.from + 1,
       });
+      callbacks.current.onSelectionChange(
+        path,
+        initialLine.number - 1,
+        initialState.selection.main.head - initialLine.from,
+      );
       view = new EditorView({
         parent: host.current,
         state: initialState,
@@ -545,6 +559,11 @@ export function MclEditor({
     view.setState(nextState);
     const line = nextState.doc.lineAt(nextState.selection.main.head);
     setCursorPosition({ line: line.number, column: nextState.selection.main.head - line.from + 1 });
+    callbacks.current.onSelectionChange(
+      path,
+      line.number - 1,
+      nextState.selection.main.head - line.from,
+    );
     view.dispatch({ effects: languageMode.current.reconfigure(languageForPath(path)) });
     callbacks.current.onReady(view);
   }, [path, source]);

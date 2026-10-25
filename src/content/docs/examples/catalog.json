@@ -1,0 +1,176 @@
+{
+  "adapters/helm": {
+    "title": "Helm Chart",
+    "description": "ローカルのHelm ChartとvaluesからKubernetesマニフェストを生成します。",
+    "tags": ["Helm", "Chart", "Kubernetes"],
+    "difficulty": "応用"
+  },
+  "adapters/kustomize": {
+    "title": "Kustomize",
+    "description": "Kustomizeのoverlayを評価し、環境ごとのマニフェストを生成します。",
+    "tags": ["Kustomize", "overlay", "Kubernetes"],
+    "difficulty": "応用"
+  },
+  "adapters/lifecycle": {
+    "title": "ライフサイクル",
+    "description": "データ変換と検証を組み合わせて、構成の処理手順を定義します。",
+    "tags": ["adapter", "validation", "pipeline"],
+    "difficulty": "中級"
+  },
+  "adapters/manifest": {
+    "title": "マニフェスト生成",
+    "description": "MCLの値からKubernetesリソースを組み立てて出力します。",
+    "tags": ["Kubernetes", "manifest", "emit"],
+    "difficulty": "初級"
+  },
+  "composition/merge-lists-by-key": {
+    "title": "キーによるリストのマージ",
+    "description": "指定したキーを使って、リストの要素を対応付けてマージします。",
+    "tags": ["list", "merge", "key"],
+    "difficulty": "中級"
+  },
+  "composition/recursive-merge": {
+    "title": "再帰マージ",
+    "description": "ネストした構成値を再帰的にマージし、共通設定をまとめます。",
+    "tags": ["merge", "object", "composition"],
+    "difficulty": "中級"
+  },
+  "composition/without": {
+    "title": "キーの除外",
+    "description": "構成オブジェクトから不要なキーを取り除きます。",
+    "tags": ["object", "filter", "composition"],
+    "difficulty": "初級"
+  },
+  "language/basic": {
+    "title": "基本",
+    "description": "変数、オブジェクト、`emit`を使って最初のマニフェストを作ります。",
+    "tags": ["beginner", "variable", "emit"],
+    "difficulty": "入門"
+  },
+  "language/collection-operations": {
+    "title": "コレクション操作",
+    "description": "リストやオブジェクトに対する標準関数を使います。",
+    "tags": ["list", "object", "standard library"],
+    "difficulty": "初級"
+  },
+  "language/collections": {
+    "title": "コレクション",
+    "description": "リストとオブジェクトを定義し、構成データを整理します。",
+    "tags": ["list", "object", "data"],
+    "difficulty": "入門"
+  },
+  "language/comprehensions-and-aggregation": {
+    "title": "内包表記と集約",
+    "description": "内包表記で値を変換し、複数の値を集約します。",
+    "tags": ["comprehension", "aggregation", "list"],
+    "difficulty": "中級"
+  },
+  "language/functions-and-collections": {
+    "title": "関数とコレクション",
+    "description": "関数を使ってコレクションの値を組み立てます。",
+    "tags": ["function", "list", "object"],
+    "difficulty": "初級"
+  },
+  "language/multiline-strings": {
+    "title": "複数行文字列",
+    "description": "複数行文字列を使って、埋め込み設定やテキストを定義します。",
+    "tags": ["string", "template", "text"],
+    "difficulty": "初級"
+  },
+  "language/optional-reference-and-fallback": {
+    "title": "省略可能な参照と既定値",
+    "description": "値がない場合の参照とフォールバック値を扱います。",
+    "tags": ["optional", "reference", "fallback"],
+    "difficulty": "中級"
+  },
+  "language/short-circuit-and-membership": {
+    "title": "短絡評価とメンバー判定",
+    "description": "論理式の短絡評価と、コレクション内の値の判定を確認します。",
+    "tags": ["boolean", "membership", "expression"],
+    "difficulty": "中級"
+  },
+  "language/typed-functions": {
+    "title": "型付き関数",
+    "description": "引数と戻り値の型を指定した関数を定義します。",
+    "tags": ["function", "type", "signature"],
+    "difficulty": "中級"
+  },
+  "language/union-narrowing": {
+    "title": "Union型の絞り込み",
+    "description": "条件分岐でUnion型の値を判定し、安全に参照します。",
+    "tags": ["union", "type", "narrowing"],
+    "difficulty": "中級"
+  },
+  "language/values-and-expressions": {
+    "title": "値と式",
+    "description": "基本値と式を組み合わせて、構成データを表現します。",
+    "tags": ["value", "expression", "beginner"],
+    "difficulty": "入門"
+  },
+  "modules/imports": {
+    "title": "ファイルのimport",
+    "description": "複数のMCLファイルに定義を分け、相対パスでimportします。",
+    "tags": ["module", "import", "multi-file"],
+    "difficulty": "中級"
+  },
+  "projects/complete-application": {
+    "title": "アプリケーション構成",
+    "description": "複数のリソースと設定をまとめたアプリケーション構成を作ります。",
+    "tags": ["project", "Kubernetes", "multi-file"],
+    "difficulty": "応用"
+  },
+  "references/clone-node": {
+    "title": "Nodeの複製",
+    "description": "既存リソースを複製し、一部の値を変えて別のリソースを作ります。",
+    "tags": ["reference", "clone", "resource"],
+    "difficulty": "中級"
+  },
+  "references/deferred-resource-reference": {
+    "title": "遅延リソース参照",
+    "description": "後から解決されるリソース参照を使って依存関係を表します。",
+    "tags": ["reference", "deferred", "dependency"],
+    "difficulty": "応用"
+  },
+  "references/nodes": {
+    "title": "Node参照",
+    "description": "Nodeの参照を使って、リソース間で値を共有します。",
+    "tags": ["node", "reference", "resource"],
+    "difficulty": "中級"
+  },
+  "resources/configurations": {
+    "title": "ConfigMap",
+    "description": "アプリケーション用の設定値をConfigMapとして出力します。",
+    "tags": ["ConfigMap", "Kubernetes", "resource"],
+    "difficulty": "初級"
+  },
+  "types/structures-and-unions": {
+    "title": "構造体とUnion型",
+    "description": "構造体とUnion型を定義し、値の形を表現します。",
+    "tags": ["type", "structure", "union"],
+    "difficulty": "中級"
+  },
+  "validation/bundle": {
+    "title": "バンドル検証",
+    "description": "複数のリソースに対する検証ルールをまとめて適用します。",
+    "tags": ["validation", "bundle", "rules"],
+    "difficulty": "応用"
+  },
+  "validation/crd-validation": {
+    "title": "CRD検証",
+    "description": "カスタムリソース定義に沿って、リソースの値を検証します。",
+    "tags": ["CRD", "schema", "Kubernetes"],
+    "difficulty": "応用"
+  },
+  "validation/rules": {
+    "title": "検証ルール",
+    "description": "型と条件式を使って、構成値に独自の制約を設定します。",
+    "tags": ["validation", "type", "rule"],
+    "difficulty": "中級"
+  },
+  "validation/schema-validation": {
+    "title": "Schema検証",
+    "description": "Schemaで定義した形と制約に一致するか構成値を検証します。",
+    "tags": ["schema", "validation", "type"],
+    "difficulty": "中級"
+  }
+}

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   open: boolean;
@@ -8,36 +9,29 @@ type Props = {
 };
 
 export function PlaygroundShareDialog({ open, sharing, onClose, onShare }: Props) {
-  const dialog = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const element = dialog.current;
-    if (!element) return;
-    if (open && !element.open) element.showModal();
-    else if (!open && element.open) element.close();
-  }, [open]);
+  const { t } = useTranslation();
 
   return (
-    <dialog
-      ref={dialog}
-      className="playground-file-action"
-      aria-labelledby="playground-share-title"
-      onCancel={(event) => {
-        if (sharing) event.preventDefault();
-        else onClose();
+    <ModalOverlay
+      className="playground-aria-overlay"
+      isOpen={open}
+      isDismissable={!sharing}
+      onOpenChange={(isOpen) => {
+        if (!isOpen && !sharing) onClose();
       }}
     >
-      <h2 id="playground-share-title">共有</h2>
-      <p>リンクを知っている人は閲覧できます</p>
-      <div className="playground-file-action-buttons">
-        <button type="button" disabled={sharing} onClick={onShare}>
-          共有リンクをコピー
-        </button>
-        <button type="button" disabled={sharing} onClick={onClose}>
-          キャンセル
-        </button>
-      </div>
-      {sharing && <p role="status">共有中</p>}
-    </dialog>
+      <Modal className="playground-aria-modal">
+        <Dialog aria-label={t("share")} className="playground-file-action">
+          <Heading slot="title">{t("share")}</Heading>
+          <p>{t("shareAccessNotice")}</p>
+          <div className="playground-file-action-buttons">
+            <Button isDisabled={sharing} onPress={onShare}>
+              {t("copyShareLink")}
+            </Button>
+          </div>
+          {sharing && <p role="status">{t("sharing")}</p>}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
   );
 }

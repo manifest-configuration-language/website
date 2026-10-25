@@ -1,0 +1,5 @@
+.cm-source-map-selection {
+  border-radius: 0.15rem;
+  background: color-mix(in srgb, var(--sl-color-accent) 18%, transparent);
+  box-shadow: inset 0 -1px color-mix(in srgb, var(--sl-color-accent) 55%, transparent);
+}

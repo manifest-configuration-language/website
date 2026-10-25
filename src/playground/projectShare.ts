@@ -65,20 +65,13 @@ export function createSharedProjectPayload(project: SharedProject): SharedProjec
   };
 }
 
-function serialize(project: SharedProject): Uint8Array {
-  const { version: _version, ...data } = createSharedProjectPayload(project);
-  return new TextEncoder().encode(JSON.stringify(data));
-}
-
 export async function encodeSharedProject(project: SharedProject): Promise<string> {
   if (typeof CompressionStream === "undefined") throw new Error("Compression is unavailable");
-  const serialized = serialize(project);
+  const serialized = new TextEncoder().encode(JSON.stringify(createSharedProjectPayload(project)));
   if (serialized.byteLength > maxSerializedBytes)
     throw new Error("Project serialization exceeds the share size limit");
   const compressed = await transform(serialized, new CompressionStream("gzip"));
-  const encoded = encodeBase64Url(compressed);
-  const value = `${projectFragmentPrefix}${encoded}`;
-  const fragment = `#${value}`;
+  const fragment = `#${projectFragmentPrefix}${encodeBase64Url(compressed)}`;
   if (fragment.length > maxFragmentLength) throw new Error("Project URL fragment exceeds 2 MiB");
   return fragment;
 }

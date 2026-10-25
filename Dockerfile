@@ -7,6 +7,18 @@ RUN corepack enable pnpm \
 COPY . .
 RUN pnpm run build
 
+FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659ba15ed4a8602e937f AS api
+
+WORKDIR /app
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=8080
+COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable pnpm \
+    && pnpm install --prod --frozen-lockfile
+COPY src/api ./src/api
+USER 65532:65532
+EXPOSE 8080
+CMD ["node", "src/api/server.js"]
+
 FROM caddy:2.11.7-alpine@sha256:24ec7b05bc532c7bb57f727030c5056e257ff7138b4b50460306819ff79362bd
 
 LABEL org.opencontainers.image.source="https://github.com/manifest-configuration-language/website"

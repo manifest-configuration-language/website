@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const websiteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const examplesRoot = join(websiteRoot, "src/content/docs/examples");
+const catalogPath = join(examplesRoot, "catalog.json");
 const output = join(websiteRoot, "src/playground/generatedExamples.json");
 const assetsRoot = join(websiteRoot, "public/playground-examples");
 const categories = new Map([
@@ -18,8 +19,31 @@ const categories = new Map([
   ["types", "Types"],
   ["validation", "Validation"],
 ]);
-const titles = new Map([["validation/crd-validation", "CRD Validation"]]);
+const difficulties = new Set(["入門", "初級", "中級", "応用"]);
 const decoder = new TextDecoder("utf-8", { fatal: true });
+const catalog = JSON.parse(await readFile(catalogPath, "utf8"));
+
+if (!catalog || typeof catalog !== "object" || Array.isArray(catalog))
+  throw new Error("Example catalog must be an object keyed by example slug.");
+
+function metadataFor(slug) {
+  const metadata = catalog[slug];
+  if (
+    !metadata ||
+    typeof metadata !== "object" ||
+    typeof metadata.title !== "string" ||
+    metadata.title.trim() === "" ||
+    typeof metadata.description !== "string" ||
+    metadata.description.trim() === "" ||
+    !Array.isArray(metadata.tags) ||
+    metadata.tags.length === 0 ||
+    !metadata.tags.every((tag) => typeof tag === "string" && tag.trim() !== "") ||
+    !difficulties.has(metadata.difficulty)
+  )
+    throw new Error(`Example catalog entry is incomplete or invalid: ${slug}`);
+
+  return metadata;
+}
 
 async function collectFiles(directory, sampleRoot, files) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -44,7 +68,6 @@ async function collectFiles(directory, sampleRoot, files) {
 async function findEntrypoints(directory, matches = []) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    if (directory === examplesRoot && !categories.has(entry.name)) continue;
     const path = join(directory, entry.name);
     if ((await readdir(path)).includes("main.mcl")) matches.push(path);
     await findEntrypoints(path, matches);
@@ -55,19 +78,15 @@ async function findEntrypoints(directory, matches = []) {
 await rm(assetsRoot, { recursive: true, force: true });
 await mkdir(assetsRoot, { recursive: true });
 const examples = [];
+const usedSlugs = new Set();
 for (const sampleRoot of (await findEntrypoints(examplesRoot)).sort()) {
   const relativeRoot = relative(examplesRoot, sampleRoot).split(sep).join("/");
   const [categoryKey, ...slugParts] = relativeRoot.split("/");
   const category = categories.get(categoryKey);
   if (!category) throw new Error(`Missing category for example directory: ${relativeRoot}`);
   const slug = `${categoryKey}/${slugParts.join("/")}`;
-  const title =
-    titles.get(slug) ??
-    slugParts
-      .at(-1)
-      .split("-")
-      .map((part) => part[0].toUpperCase() + part.slice(1))
-      .join(" ");
+  const metadata = metadataFor(slug);
+  usedSlugs.add(slug);
   const files = {};
   await collectFiles(sampleRoot, sampleRoot, files);
   if (!Object.hasOwn(files, "main.mcl")) {
@@ -78,10 +97,14 @@ for (const sampleRoot of (await findEntrypoints(examplesRoot)).sort()) {
   const asset = `/playground-examples/${slug}.${digest}.json`;
   await mkdir(dirname(join(assetsRoot, `${slug}.${digest}.json`)), { recursive: true });
   await writeFile(join(assetsRoot, `${slug}.${digest}.json`), assetContents);
-  examples.push({ category, title, slug, asset });
+  const preview = files["main.mcl"].split("\n").slice(0, 6).join("\n").trimEnd();
+  examples.push({ ...metadata, category, slug, asset, preview });
 }
 
 if (examples.length === 0) throw new Error("No Playground examples were found.");
+const unusedSlugs = Object.keys(catalog).filter((slug) => !usedSlugs.has(slug));
+if (unusedSlugs.length > 0)
+  throw new Error(`Example catalog contains unknown slugs: ${unusedSlugs.join(", ")}`);
 await mkdir(dirname(output), { recursive: true });
 await writeFile(output, `${JSON.stringify(examples, null, 2)}\n`);
 
@@ -95,9 +118,18 @@ const docs = [
 for (const category of new Set(examples.map((example) => example.category))) {
   docs.push(`## ${category}`, "");
   for (const example of examples.filter((item) => item.category === category)) {
-    docs.push(`- [${example.title}](/playground/?example=${encodeURIComponent(example.slug)})`);
+    const tags = example.tags.map((tag) => `\`${tag}\``).join("、");
+    docs.push(
+      `### ${example.title}`,
+      "",
+      example.description,
+      "",
+      `難易度は${example.difficulty}です。タグは${tags}です。`,
+      "",
+      `- [Playgroundで開く](/playground/?example=${encodeURIComponent(example.slug)})`,
+      "",
+    );
   }
-  docs.push("");
 }
 await writeFile(join(examplesRoot, "index.mdx"), `${docs.join("\n")}\n`);
 console.log(`Prepared ${examples.length} local Playground examples.`);

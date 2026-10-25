@@ -16,7 +16,17 @@ export type CreatedShortShare = {
 
 const endpoint = "/api/playground/snippets";
 const maxRequestBytes = 64 * 1024 * 1024;
-const shareIDPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const shareIDPattern = /^[A-Za-z0-9_-]{22}$/;
+
+export class ShareAPIError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = "ShareAPIError";
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -94,8 +104,14 @@ export async function createShortShare(
   });
   if (!response.ok) {
     if (response.status === 429)
-      throw new Error("共有リンクの作成回数が上限に達しました。時間をおいて再試行してください。");
-    throw new Error(`共有リンクを作成できませんでした（HTTP ${response.status}）。`);
+      throw new ShareAPIError(
+        "共有リンクの作成回数が上限に達しました。時間をおいて再試行してください。",
+        429,
+      );
+    throw new ShareAPIError(
+      `共有リンクを作成できませんでした（HTTP ${response.status}）。`,
+      response.status,
+    );
   }
 
   const result: unknown = await readJSON(response);
@@ -123,6 +139,9 @@ export async function loadShortShare(
   });
   if (response.status === 404) throw new Error("共有リンクが見つからないか、期限が切れています。");
   if (!response.ok)
-    throw new Error(`共有プロジェクトを読み込めませんでした（HTTP ${response.status}）。`);
+    throw new ShareAPIError(
+      `共有プロジェクトを読み込めませんでした（HTTP ${response.status}）。`,
+      response.status,
+    );
   return parseSnapshot(await readJSON(response));
 }

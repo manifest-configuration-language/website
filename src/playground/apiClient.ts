@@ -10,11 +10,19 @@ import type {
   PlaygroundClient,
   PlaygroundDiagnostic,
   PlaygroundPriority,
+  PlaygroundRenameEdit,
   ProjectFile,
 } from "./types";
 import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;
+type FileImportRename = (options: {
+  oldPath: string;
+  newPath: string;
+  signal: AbortSignal;
+  timeoutMs: number;
+  priority: "interactive";
+}) => Promise<{ edits: PlaygroundRenameEdit[] }>;
 
 type PlaygroundRuntimeStatusEvent = RuntimeStatusEvent & {
   workerGeneration?: number;
@@ -197,6 +205,26 @@ export function createPlaygroundClient(
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
+        });
+        return result.edits;
+      } finally {
+        finishRequest(controller);
+      }
+    },
+    async renameFileImports(source, files, oldPath, newPath) {
+      const controller = beginRequest();
+      try {
+        const project = updateProject(source, files);
+        const renameFileImports = Reflect.get(project, "renameFileImports") as
+          | FileImportRename
+          | undefined;
+        if (!renameFileImports) return [];
+        const result = await renameFileImports.call(project, {
+          oldPath,
+          newPath,
+          signal: controller.signal,
+          timeoutMs: operationTimeoutMs,
+          priority: "interactive",
         });
         return result.edits;
       } finally {

@@ -106,6 +106,12 @@ export interface PlaygroundClient {
     files?: Record<string, ProjectFile>,
     priority?: PlaygroundPriority,
   ): Promise<PlaygroundRenameEdit[]>;
+  renameFileImports(
+    source: string,
+    files: Record<string, ProjectFile>,
+    oldPath: string,
+    newPath: string,
+  ): Promise<PlaygroundRenameEdit[]>;
   references(
     source: string,
     entrypoint: string,

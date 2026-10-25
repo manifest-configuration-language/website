@@ -1,0 +1,38 @@
+.playground-aria-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: #0008;
+}
+
+.playground-aria-modal {
+  width: min(32rem, 100%);
+  max-height: min(80dvh, 44rem);
+  overflow: auto;
+}
+
+.playground-aria-modal .playground-file-action {
+  width: auto;
+  max-height: inherit;
+  margin: 0;
+}
+
+.playground-source-map-candidates > ul {
+  display: grid;
+  max-height: 55vh;
+  gap: 0.35rem;
+  margin: 0.75rem 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.playground-source-map-candidates li button {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  text-align: start;
+}

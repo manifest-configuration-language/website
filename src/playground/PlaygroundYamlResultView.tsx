@@ -30,7 +30,6 @@ type Props = {
   selectedResource?: YamlResource;
   showResources: boolean;
   outputHost: RefObject<HTMLDivElement | null>;
-  onToggleResources: () => void;
   onSelectResource: (resource: YamlResource) => void;
   onClearResource: () => void;
   onSearch: () => void;
@@ -43,7 +42,6 @@ export function PlaygroundYamlResultView({
   selectedResource,
   showResources,
   outputHost,
-  onToggleResources,
   onSelectResource,
   onClearResource,
   onSearch,
@@ -65,14 +63,6 @@ export function PlaygroundYamlResultView({
             {t("clearResourceSelection")}
           </Button>
         )}
-        <Button
-          className="playground-resource-toggle"
-          aria-pressed={showResources}
-          onPress={onToggleResources}
-          isDisabled={resources.length === 0}
-        >
-          {selectedResource?.label ?? t("resource")}
-        </Button>
         <Button onPress={onSearch}>{t("search")}</Button>
       </div>
       <ResourceBrowser resources={resources} onSelect={onSelectResource} hidden={!showResources} />
@@ -143,7 +133,9 @@ export function ResourceBrowser({
         )}
       </SearchField>
       {visibleGroups.length === 0 ? (
-        <p className="playground-resource-empty">{t("noResourcesMatch")}</p>
+        <p className="playground-resource-empty">
+          {resources.length === 0 ? t("noResources") : t("noResourcesMatch")}
+        </p>
       ) : (
         <DisclosureGroup
           className="playground-resource-groups"

@@ -135,6 +135,7 @@ export const resources = {
       latestOutput: "Latest",
       clearResourceSelection: "All resources",
       resource: "Resources",
+      noResources: "No resources",
       search: "Search",
       selectedResourceYaml: "{{label}} YAML output",
       previousYamlOutput: "Previous YAML output",
@@ -379,6 +380,7 @@ export const resources = {
       latestOutput: "最新",
       clearResourceSelection: "すべてのリソース",
       resource: "リソース",
+      noResources: "リソースはありません",
       search: "検索",
       selectedResourceYaml: "{{label}}のYAML出力",
       previousYamlOutput: "前回のYAML出力",
@@ -629,6 +631,7 @@ declare global {
       latestOutput: string;
       clearResourceSelection: string;
       resource: string;
+      noResources: string;
       search: string;
       selectedResourceYaml: string;
       previousYamlOutput: string;

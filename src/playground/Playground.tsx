@@ -1401,7 +1401,9 @@ export default function Playground() {
           <Panel id="output" className="playground-output-panel" defaultSize="40" minSize="25">
             <WorkspaceOutputPane
               showProblems={showProblems}
+              showResources={showResources}
               diagnosticsCount={diagnostics.length}
+              onShowResourcesChange={setShowResources}
               onShowProblemsChange={(show) => {
                 setShowProblems(show);
                 setShowResources(false);
@@ -1432,6 +1434,12 @@ export default function Playground() {
                 Boolean(reply?.ok) &&
                 previousYaml !== undefined &&
                 previousYaml !== reply?.result?.yaml
+              }
+              canShowResources={
+                !showProblems &&
+                !showDiff &&
+                !symbolReferencesOpen &&
+                (staleYaml !== undefined || reply?.result?.yaml !== undefined)
               }
               onCopyOutput={() => void copyOutput()}
               onDownloadOutput={downloadOutput}
@@ -1477,6 +1485,11 @@ export default function Playground() {
                 conflict: t("saveConflict"),
               }[saveStatus]
             }
+            canShowResources=
+            {!showProblems &&
+              !showDiff &&
+              !symbolReferencesOpen &&
+              (staleYaml !== undefined || reply?.result?.yaml !== undefined)}
           </span>
           <span
             className={

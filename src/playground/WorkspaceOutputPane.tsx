@@ -5,8 +5,10 @@ import { useTranslation } from "react-i18next";
 type Props = {
   children: ReactNode;
   showProblems: boolean;
+  showResources: boolean;
   diagnosticsCount: number;
   onShowProblemsChange: (show: boolean) => void;
+  onShowResourcesChange: (show: boolean) => void;
   showDiff: boolean;
   onShowDiffChange: (show: boolean) => void;
   showReferences: boolean;
@@ -16,6 +18,7 @@ type Props = {
   canCopyOutput: boolean;
   canDownloadOutput: boolean;
   canShowDiff: boolean;
+  canShowResources: boolean;
   onCopyOutput: () => void;
   onDownloadOutput: () => void;
   orientation: "horizontal" | "vertical";
@@ -25,8 +28,10 @@ type Props = {
 export function WorkspaceOutputPane({
   children,
   showProblems,
+  showResources,
   diagnosticsCount,
   onShowProblemsChange,
+  onShowResourcesChange,
   showDiff,
   onShowDiffChange,
   showReferences,
@@ -36,6 +41,7 @@ export function WorkspaceOutputPane({
   canCopyOutput,
   canDownloadOutput,
   canShowDiff,
+  canShowResources,
   onCopyOutput,
   onDownloadOutput,
   orientation,
@@ -48,14 +54,28 @@ export function WorkspaceOutputPane({
       <div className="playground-result-toolbar">
         <div className="playground-result-tabs" role="group" aria-label={t("results")}>
           <Button
-            aria-pressed={!showProblems && !showDiff && !showReferences}
+            aria-pressed={!showProblems && !showDiff && !showReferences && !showResources}
             onPress={() => {
               onCloseReferences();
+              onShowResourcesChange(false);
               onShowProblemsChange(false);
               onShowDiffChange(false);
             }}
           >
             YAML
+          </Button>
+          <Button
+            className="playground-resource-toggle"
+            aria-pressed={!showProblems && !showDiff && !showReferences && showResources}
+            onPress={() => {
+              onCloseReferences();
+              onShowResourcesChange(true);
+              onShowProblemsChange(false);
+              onShowDiffChange(false);
+            }}
+            isDisabled={!canShowResources}
+          >
+            {t("resource")}
           </Button>
           <Button
             aria-pressed={!showReferences && showProblems}

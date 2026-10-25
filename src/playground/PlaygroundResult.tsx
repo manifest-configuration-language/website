@@ -367,7 +367,6 @@ export function PlaygroundResult({
           selectedResource={selectedResource}
           showResources={showResources}
           outputHost={outputHost}
-          onToggleResources={onToggleResources}
           onSelectResource={selectResource}
           onClearResource={() => setSelectedResourceKey(undefined)}
           onSearch={() => outputEditor.current && openSearchPanel(outputEditor.current)}

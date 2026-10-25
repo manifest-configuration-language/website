@@ -1485,11 +1485,6 @@ export default function Playground() {
                 conflict: t("saveConflict"),
               }[saveStatus]
             }
-            canShowResources=
-            {!showProblems &&
-              !showDiff &&
-              !symbolReferencesOpen &&
-              (staleYaml !== undefined || reply?.result?.yaml !== undefined)}
           </span>
           <span
             className={

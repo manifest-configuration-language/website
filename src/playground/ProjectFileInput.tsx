@@ -5,6 +5,7 @@ import {
   type DragEvent,
   type InputHTMLAttributes,
 } from "react";
+import { useTranslation } from "react-i18next";
 import type { LoadedProject } from "./types";
 import { projectLimits } from "./projectValidation.js";
 import { readProjectArchive } from "./projectZip";
@@ -35,6 +36,7 @@ export function ProjectFileInput({
   onExport,
   disabled = false,
 }: Props) {
+  const { t } = useTranslation();
   const selection = useRef(0);
   const directoryInput = useRef<HTMLInputElement>(null);
   const archiveInput = useRef<HTMLInputElement>(null);
@@ -78,35 +80,35 @@ export function ProjectFileInput({
     if (disabled || loading) return;
     const files = [...event.dataTransfer.files];
     if (files.length !== 1 || !files[0].name.toLowerCase().endsWith(".zip")) {
-      onError("ZIPファイルを1つドロップしてください。");
+      onError(t("zipRequiredError"));
       return;
     }
     void loadFiles(files, true);
   }
 
   return (
-    <section className="playground-project-files" aria-label="プロジェクトファイル">
+    <section className="playground-project-files" aria-label={t("projectFolder")}>
       <div className="playground-project-file-actions">
         <button
           type="button"
           onClick={() => directoryInput.current?.click()}
           disabled={disabled || loading}
         >
-          フォルダーを開く
+          {t("openFolder")}
         </button>
         <button
           type="button"
           onClick={() => archiveInput.current?.click()}
           disabled={disabled || loading}
         >
-          ZIPを開く
+          {t("openZip")}
         </button>
         <button
           type="button"
           onClick={() => void onExport()}
           disabled={disabled || loading || fileCount === 0}
         >
-          ZIPを書き出す
+          {t("exportZip")}
         </button>
         <input
           ref={directoryInput}
@@ -115,7 +117,7 @@ export function ProjectFileInput({
           multiple
           disabled={disabled || loading}
           {...directoryInputProps}
-          aria-label="プロジェクトフォルダーを読み込む"
+          aria-label={t("importFolder")}
           tabIndex={-1}
           onChange={(event) => void load(event)}
         />
@@ -125,7 +127,7 @@ export function ProjectFileInput({
           type="file"
           accept=".zip,application/zip"
           disabled={disabled || loading}
-          aria-label="プロジェクトZIPを読み込む"
+          aria-label={t("importZip")}
           tabIndex={-1}
           onChange={(event) => void load(event, true)}
         />
@@ -136,22 +138,22 @@ export function ProjectFileInput({
         onDragOver={handleDragOver}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
-        aria-label="ZIPファイルのドロップ領域"
+        aria-label={t("zipDropZone")}
       >
         <span className="playground-project-dropzone-icon" aria-hidden="true">
           ↓
         </span>
-        <span>ZIPをここにドロップ</span>
+        <span>{t("dropZipHere")}</span>
       </div>
       <div className="playground-project-summary" aria-live="polite">
+        <span>{t("filesCount", { count: fileCount })}</span>
         <span>
-          ファイル <strong>{fileCount.toLocaleString()}</strong> 件
+          {t("projectSizeSummary", {
+            size: t("fileSize", { size: (projectSize / 1024 / 1024).toFixed(1) }),
+            limit: t("fileSize", { size: projectLimits.projectBytes / (1024 * 1024) }),
+          })}
         </span>
-        <span>
-          合計 <strong>{(projectSize / 1024 / 1024).toFixed(1)} MiB</strong> /{" "}
-          {projectLimits.projectBytes / (1024 * 1024)} MiB
-        </span>
-        {loading && <span role="status">読み込み中</span>}
+        {loading && <span role="status">{t("loadingProject")}</span>}
       </div>
     </section>
   );

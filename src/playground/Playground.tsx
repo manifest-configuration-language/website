@@ -25,6 +25,7 @@ import { loadShortShare } from "./projectShareApi";
 import { projectSnapshotError, projectSnapshotErrorMessage } from "./projectValidation.js";
 import { PlaygroundResult } from "./PlaygroundResult";
 import type { SourceMapLocationCandidate } from "./PlaygroundResult";
+import { WorkspaceOutputPane } from "./WorkspaceOutputPane";
 import { PlaygroundSettingsDialog } from "./PlaygroundSettingsDialog";
 import { PlaygroundEditorDialogs } from "./PlaygroundEditorDialogs";
 import { ProjectFileInput } from "./ProjectFileInput";
@@ -1811,101 +1812,53 @@ export default function Playground() {
           </Panel>
           <Separator className="playground-resize-handle" aria-label={t("resizePanels")} />
           <Panel id="output" className="playground-output-panel" defaultSize="40" minSize="25">
-            <div className="playground-result-panel">
-              <div className="playground-result-toolbar">
-                <div className="playground-result-tabs" role="group" aria-label={t("results")}>
-                  <button
-                    type="button"
-                    aria-pressed={!showProblems && !showDiff && !symbolReferencesOpen}
-                    onClick={() => {
-                      closeSymbolReferences();
-                      setShowProblems(false);
-                      setShowDiff(false);
-                      setShowResources(false);
-                    }}
-                  >
-                    YAML
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={!symbolReferencesOpen && showProblems}
-                    onClick={() => {
-                      closeSymbolReferences();
-                      setShowProblems(true);
-                      setShowDiff(false);
-                      setShowResources(false);
-                    }}
-                  >
-                    {t("problemsCount", { count: diagnostics.length })}
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={!symbolReferencesOpen && showDiff}
-                    onClick={() => {
-                      closeSymbolReferences();
-                      setShowProblems(false);
-                      setShowDiff(true);
-                      setShowResources(false);
-                    }}
-                    disabled={
-                      staleYaml !== undefined ||
-                      !reply?.ok ||
-                      previousYaml === undefined ||
-                      previousYaml === reply.result?.yaml
-                    }
-                  >
-                    {t("diff")}
-                  </button>
-                  {symbolReferencesOpen && (
-                    <button type="button" aria-pressed="true" onClick={openSymbolReferences}>
-                      参照{symbolReferenceItems.length > 0 ? ` ${symbolReferenceItems.length}` : ""}
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void copyOutput()}
-                  disabled={
-                    showProblems ||
-                    showDiff ||
-                    symbolReferencesOpen ||
-                    (staleYaml === undefined && reply?.result?.yaml === undefined)
-                  }
-                >
-                  コピー
-                </button>
-                <button
-                  type="button"
-                  onClick={downloadOutput}
-                  disabled={
-                    showProblems ||
-                    showDiff ||
-                    symbolReferencesOpen ||
-                    (staleYaml === undefined && reply?.result?.yaml === undefined)
-                  }
-                >
-                  ダウンロード
-                </button>
-                <button
-                  type="button"
-                  className="playground-layout-toggle"
-                  onClick={() => {
-                    const nextOrientation = orientation === "vertical" ? "horizontal" : "vertical";
-                    setOrientationOverridden(true);
-                    setOrientation(nextOrientation);
-                    saveLayoutPreference({
-                      orientation: nextOrientation,
-                      layout: panelGroup.current?.getLayout() ?? defaultPanelLayout,
-                    });
-                  }}
-                  aria-label={
-                    orientation === "vertical" ? t("arrangeSideBySide") : t("arrangeStacked")
-                  }
-                  title={orientation === "vertical" ? t("arrangeSideBySide") : t("arrangeStacked")}
-                >
-                  {orientation === "vertical" ? t("arrangeHorizontal") : t("arrangeVertical")}
-                </button>
-              </div>
+            <WorkspaceOutputPane
+              showProblems={showProblems}
+              diagnosticsCount={diagnostics.length}
+              onShowProblemsChange={(show) => {
+                setShowProblems(show);
+                setShowResources(false);
+              }}
+              showDiff={showDiff}
+              onShowDiffChange={(show) => {
+                setShowDiff(show);
+                setShowResources(false);
+              }}
+              showReferences={symbolReferencesOpen}
+              referenceCount={symbolReferenceItems.length}
+              onCloseReferences={closeSymbolReferences}
+              onOpenReferences={openSymbolReferences}
+              canCopyOutput={
+                !showProblems &&
+                !showDiff &&
+                !symbolReferencesOpen &&
+                (staleYaml !== undefined || reply?.result?.yaml !== undefined)
+              }
+              canDownloadOutput={
+                !showProblems &&
+                !showDiff &&
+                !symbolReferencesOpen &&
+                (staleYaml !== undefined || reply?.result?.yaml !== undefined)
+              }
+              canShowDiff={
+                staleYaml === undefined &&
+                Boolean(reply?.ok) &&
+                previousYaml !== undefined &&
+                previousYaml !== reply?.result?.yaml
+              }
+              onCopyOutput={() => void copyOutput()}
+              onDownloadOutput={downloadOutput}
+              orientation={orientation}
+              onToggleOrientation={() => {
+                const nextOrientation = orientation === "vertical" ? "horizontal" : "vertical";
+                setOrientationOverridden(true);
+                setOrientation(nextOrientation);
+                saveLayoutPreference({
+                  orientation: nextOrientation,
+                  layout: panelGroup.current?.getLayout() ?? defaultPanelLayout,
+                });
+              }}
+            >
               <PlaygroundResult
                 reply={reply}
                 diagnostics={diagnostics}
@@ -1929,7 +1882,7 @@ export default function Playground() {
               {showProblems && draftsLoaded && diagnostics.length === 0 && (
                 <p className="playground-no-problems">{t("noProblems")}</p>
               )}
-            </div>
+            </WorkspaceOutputPane>
           </Panel>
         </Group>
         <footer className="playground-statusbar" aria-label={t("projectStatus")}>

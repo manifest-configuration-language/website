@@ -129,6 +129,44 @@ export const resources = {
       applyRename: "Rename",
       newName: "New name",
       reviewRename: "Review changes",
+      previousOutput: "Previous output",
+      yamlOutput: "YAML output",
+      staleOutput: "Stale",
+      latestOutput: "Latest",
+      clearResourceSelection: "All resources",
+      resource: "Resources",
+      search: "Search",
+      selectedResourceYaml: "{{label}} YAML output",
+      previousYamlOutput: "Previous YAML output",
+      renderedYamlOutput: "Rendered YAML",
+      resourceSearch: "Search resources",
+      searchResources: "Search resources",
+      noResourcesMatch: "No matching resources",
+      unchanged: "Unchanged",
+      changed: "Changed",
+      added: "Added",
+      deleted: "Deleted",
+      yamlDocument: "YAML documents",
+      projectFolder: "Project files",
+      openFolder: "Open folder",
+      openZip: "Open ZIP",
+      exportZip: "Export ZIP",
+      importFolder: "Import project folder",
+      importZip: "Import project ZIP",
+      zipDropZone: "ZIP file drop zone",
+      dropZipHere: "Drop a ZIP file here",
+      projectSizeSummary: "{{size}} / {{limit}}",
+      zipRequiredError: "Drop one ZIP file.",
+      goToDefinitionMissing: "No definition at this position",
+      renameSymbolNoTarget: "No renameable symbol at this position.",
+      renameSymbolUnsupportedFiles: "Rename is unavailable for unsupported files.",
+      editorNotReady: "The editor is not ready.",
+      renamePreviewInvalid: "The rename preview is invalid.",
+      renameSourceChanged: "The source changed before the rename was applied.",
+      symbolRenamed: "Symbol renamed",
+      copy: "Copy",
+      download: "Download",
+      referencesCount: "References {{count}}",
     },
   },
   ja: {
@@ -256,6 +294,45 @@ export const resources = {
       applyRename: "名前を変更",
       newName: "新しい名前",
       reviewRename: "変更箇所を確認",
+      previousOutput: "前回の出力",
+      yamlOutput: "YAML出力",
+      staleOutput: "古い結果",
+      latestOutput: "最新",
+      clearResourceSelection: "すべてのリソース",
+      resource: "リソース",
+      search: "検索",
+      selectedResourceYaml: "{{label}}のYAML出力",
+      previousYamlOutput: "前回のYAML出力",
+      renderedYamlOutput: "レンダリング結果",
+      resourceSearch: "リソース検索",
+      searchResources: "リソースを検索",
+      noResourcesMatch: "一致するリソースはありません",
+      unchanged: "変更なし",
+      changed: "変更",
+      added: "追加",
+      deleted: "削除",
+      yamlDocument: "YAML文書",
+      projectFolder: "プロジェクトファイル",
+      openFolder: "フォルダーを開く",
+      openZip: "ZIPを開く",
+      exportZip: "ZIPを書き出す",
+      importFolder: "プロジェクトフォルダーを読み込む",
+      importZip: "プロジェクトZIPを読み込む",
+      zipDropZone: "ZIPファイルのドロップ領域",
+      dropZipHere: "ZIPをここにドロップ",
+      projectSizeSummary: "{{size}} / {{limit}}",
+      zipRequiredError: "ZIPファイルを1つドロップしてください。",
+      goToDefinitionMissing: "この位置に定義はありません",
+      renameSymbolNoTarget: "この位置に変更可能なシンボルがありません。",
+      renameSymbolUnsupportedFiles:
+        "対応していないファイルが含まれているため名前を変更できません。",
+      editorNotReady: "エディターの準備ができていません。",
+      renamePreviewInvalid: "名前変更プレビューが無効です。",
+      renameSourceChanged: "名前を変更する前にソースが変更されました。",
+      symbolRenamed: "シンボル名を変更しました",
+      copy: "コピー",
+      download: "ダウンロード",
+      referencesCount: "参照{{count}}件",
     },
   },
 } as const;
@@ -388,6 +465,44 @@ declare global {
       applyRename: string;
       newName: string;
       reviewRename: string;
+      previousOutput: string;
+      yamlOutput: string;
+      staleOutput: string;
+      latestOutput: string;
+      clearResourceSelection: string;
+      resource: string;
+      search: string;
+      selectedResourceYaml: string;
+      previousYamlOutput: string;
+      renderedYamlOutput: string;
+      resourceSearch: string;
+      searchResources: string;
+      noResourcesMatch: string;
+      unchanged: string;
+      changed: string;
+      added: string;
+      deleted: string;
+      yamlDocument: string;
+      projectFolder: string;
+      openFolder: string;
+      openZip: string;
+      exportZip: string;
+      importFolder: string;
+      importZip: string;
+      zipDropZone: string;
+      dropZipHere: string;
+      projectSizeSummary: string;
+      zipRequiredError: string;
+      goToDefinitionMissing: string;
+      renameSymbolNoTarget: string;
+      renameSymbolUnsupportedFiles: string;
+      editorNotReady: string;
+      renamePreviewInvalid: string;
+      renameSourceChanged: string;
+      symbolRenamed: string;
+      copy: string;
+      download: string;
+      referencesCount: string;
     }
   }
 }

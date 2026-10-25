@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import { Command } from "cmdk";
+import { useTranslation } from "react-i18next";
 
 export type YamlResource = {
   key: string;
@@ -39,16 +40,20 @@ export function PlaygroundYamlResultView({
   onSearch,
   onGoToDocument,
 }: Props) {
+  const { t } = useTranslation();
   return (
-    <section className="playground-result-content" aria-label={stale ? "前回の結果" : "YAML出力"}>
+    <section
+      className="playground-result-content"
+      aria-label={t(stale ? "previousOutput" : "yamlOutput")}
+    >
       <div className="playground-yaml-toolbar">
-        <span>{stale ? "前回の結果" : "YAML"}</span>
+        <span>{stale ? t("previousOutput") : t("yamlOutput")}</span>
         <span className={stale ? "playground-result-stale" : "playground-result-status"}>
-          {stale ? "古い結果" : "最新"}
+          {stale ? t("staleOutput") : t("latestOutput")}
         </span>
         {selectedResource && (
           <button type="button" className="playground-resource-clear" onClick={onClearResource}>
-            すべて
+            {t("clearResourceSelection")}
           </button>
         )}
         <button
@@ -58,10 +63,10 @@ export function PlaygroundYamlResultView({
           onClick={onToggleResources}
           disabled={resources.length === 0}
         >
-          {selectedResource?.label ?? "リソース"}
+          {selectedResource?.label ?? t("resource")}
         </button>
         <button type="button" onClick={onSearch}>
-          検索
+          {t("search")}
         </button>
       </div>
       <ResourceBrowser resources={resources} onSelect={onSelectResource} hidden={!showResources} />
@@ -72,10 +77,10 @@ export function PlaygroundYamlResultView({
         className="playground-output"
         aria-label={
           selectedResource
-            ? `${selectedResource.label}のYAML結果`
+            ? t("selectedResourceYaml", { label: selectedResource.label })
             : stale
-              ? "前回のYAML結果"
-              : "レンダリング結果"
+              ? t("previousYamlOutput")
+              : t("renderedYamlOutput")
         }
         hidden={showResources}
         ref={outputHost}
@@ -95,12 +100,13 @@ export function ResourceBrowser({
   hidden: boolean;
   showChanges?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="playground-resource-browser" hidden={hidden}>
-      <Command label="リソース検索" loop>
-        <Command.Input aria-label="リソース検索" placeholder="リソースを検索" />
+      <Command label={t("resourceSearch")} loop>
+        <Command.Input aria-label={t("resourceSearch")} placeholder={t("searchResources")} />
         <Command.List>
-          <Command.Empty>一致するリソースはありません</Command.Empty>
+          <Command.Empty>{t("noResourcesMatch")}</Command.Empty>
           {resources.map((resource) => (
             <Command.Item
               key={resource.key}
@@ -115,11 +121,11 @@ export function ResourceBrowser({
                 {showChanges
                   ? resource.previous && resource.current
                     ? resource.previous.yaml === resource.current.yaml
-                      ? "変更なし"
-                      : "変更"
+                      ? t("unchanged")
+                      : t("changed")
                     : resource.current
-                      ? "追加"
-                      : "削除"
+                      ? t("added")
+                      : t("deleted")
                   : [resource.apiVersion, resource.namespace].filter(Boolean).join(" · ")}
               </span>
             </Command.Item>
@@ -139,9 +145,10 @@ function YamlNavigation({
   onSelect: (line: number) => void;
   hidden: boolean;
 }) {
+  const { t } = useTranslation();
   if (resources.length < 2) return null;
   return (
-    <nav className="yaml-document-nav" aria-label="YAML文書" hidden={hidden}>
+    <nav className="yaml-document-nav" aria-label={t("yamlDocument")} hidden={hidden}>
       {resources.map((resource) => (
         <button type="button" key={resource.key} onClick={() => onSelect(resource.line)}>
           {resource.label}

@@ -1,4 +1,5 @@
 import { useState, type RefObject, type SyntheticEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { EditorView } from "@codemirror/view";
 import type { ApplyWorkspaceEdits } from "./MclEditor";
 import type {
@@ -154,6 +155,7 @@ export function usePlaygroundLanguageActions({
   onNotice,
   onError,
 }: Args) {
+  const { t } = useTranslation();
   const [symbolRenameOpen, setSymbolRenameOpen] = useState(false);
   const [symbolRenameInput, setSymbolRenameInput] = useState("");
   const [symbolRenameError, setSymbolRenameError] = useState("");
@@ -201,7 +203,7 @@ export function usePlaygroundLanguageActions({
       );
       if (currentRevision !== revision.current || editor.current !== view) return;
       if (location) navigateToDefinition(location);
-      else onNotice("この位置に定義はありません");
+      else onNotice(t("goToDefinitionMissing"));
     } catch (cause) {
       if (currentRevision !== revision.current || editor.current !== view) return;
       onError(cause instanceof Error ? cause.message : String(cause));
@@ -291,16 +293,16 @@ export function usePlaygroundLanguageActions({
       );
       if (currentRevision !== revision.current || editor.current !== view) return;
       if (edits.length === 0) {
-        setSymbolRenameError("この位置に変更可能なシンボルがありません。");
+        setSymbolRenameError(t("renameSymbolNoTarget"));
         return;
       }
       if (edits.some((edit) => !mclPaths.includes(edit.path))) {
-        setSymbolRenameError("変更対象にプロジェクト内のMCLファイル以外が含まれています。");
+        setSymbolRenameError(t("renameSymbolUnsupportedFiles"));
         return;
       }
       const applyEdits = workspaceEditApplier.current;
       if (!applyEdits) {
-        setSymbolRenameError("エディターの準備が完了していません。");
+        setSymbolRenameError(t("editorNotReady"));
         return;
       }
       const sources: Record<string, string> = Object.create(null);
@@ -310,7 +312,7 @@ export function usePlaygroundLanguageActions({
       }
       const preview = renamePreviewEntries(edits, sources);
       if (!preview) {
-        setSymbolRenameError("変更位置を確認できません。");
+        setSymbolRenameError(t("renamePreviewInvalid"));
         return;
       }
       setPendingSymbolRename({ edits, sources, revision: currentRevision });
@@ -324,7 +326,7 @@ export function usePlaygroundLanguageActions({
     const applyEdits = workspaceEditApplier.current;
     if (!pending || !applyEdits) return;
     if (pending.revision !== revision.current) {
-      setSymbolRenameError("ソースが変更されています。もう一度プレビューしてください。");
+      setSymbolRenameError(t("renameSourceChanged"));
       setPendingSymbolRename(undefined);
       return;
     }
@@ -355,7 +357,7 @@ export function usePlaygroundLanguageActions({
     await finishProjectMutation();
     setSymbolRenameOpen(false);
     setPendingSymbolRename(undefined);
-    onNotice("シンボル名を変更しました");
+    onNotice(t("symbolRenamed"));
   }
 
   function openSymbolRename() {

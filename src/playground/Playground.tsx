@@ -1,13 +1,5 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useReducer,
-  useRef,
-  useState,
-  type SyntheticEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
 import { I18nProvider } from "react-aria-components";
@@ -43,6 +35,7 @@ import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import { usePlaygroundLayout } from "./usePlaygroundLayout";
 import { usePlaygroundKeyboardShortcuts } from "./usePlaygroundKeyboardShortcuts";
+import { usePlaygroundFileActions } from "./usePlaygroundFileActions";
 import { createSourcePositionStore } from "./sourcePositionStore";
 import "./symbolRenamePreview.css";
 import {
@@ -114,7 +107,6 @@ emit deployment
 };
 
 type ExampleLocale = "en" | "ja";
-type FileAction = { kind: "create" } | { kind: "rename" | "delete"; path: string };
 type RenderState = {
   reply?: PlaygroundReply;
   latestSuccess?: PlaygroundReply;
@@ -279,10 +271,6 @@ export default function Playground() {
   const [recentPaths, setRecentPaths] = useState(["main.mcl"]);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"editor" | "output" | "problems">("editor");
-  const [fileAction, setFileAction] = useState<FileAction>();
-  const [filePathInput, setFilePathInput] = useState("");
-  const [fileActionError, setFileActionError] = useState("");
-
   const reportPersistenceError = useCallback((cause: unknown) => {
     if (cause instanceof DraftConflictError) return;
     setError(cause instanceof Error ? cause.message : String(cause));
@@ -487,6 +475,27 @@ export default function Playground() {
     clearShareReferenceFromURL();
   }
 
+  const {
+    fileAction,
+    fileActionError,
+    filePathInput,
+    setFilePathInput,
+    requestCreateFile,
+    requestRenameFile,
+    requestDeleteFile,
+    submitFileAction,
+    confirmDeleteFile,
+    closeFileAction,
+  } = usePlaygroundFileActions({
+    createFile: createProjectFile,
+    renameFile: renameProjectFile,
+    deleteFile: deleteProjectFile,
+    finishProjectMutation,
+    setOpenPaths,
+    setRecentPaths,
+    setError,
+  });
+
   function languageServiceFiles(): Record<string, ProjectFile> {
     const files = Object.assign(Object.create(null), projectRef.current.files) as Record<
       string,
@@ -616,11 +625,7 @@ export default function Playground() {
     renameSymbol: openSymbolRename,
     share: openShareDialog,
     openFile: () => setQuickOpen(true),
-    createFile: () => {
-      setFileActionError("");
-      setFilePathInput("");
-      setFileAction({ kind: "create" });
-    },
+    createFile: requestCreateFile,
     newProject: createDraft,
     showOutput: () => setMobileView("output"),
     showProblems: () => {
@@ -1104,71 +1109,6 @@ export default function Playground() {
     setRecentPaths((previous) => [path, ...previous.filter((entry) => entry !== path)]);
   }
 
-  function requestCreateFile() {
-    setFilePathInput("");
-    setFileActionError("");
-    setFileAction({ kind: "create" });
-  }
-
-  function requestRenameFile(path: string) {
-    setFilePathInput(path);
-    setFileActionError("");
-    setFileAction({ kind: "rename", path });
-  }
-
-  function requestDeleteFile(path: string) {
-    setFileActionError("");
-    setFileAction({ kind: "delete", path });
-  }
-
-  async function submitFileAction(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!fileAction || fileAction.kind === "delete") return;
-    const path = filePathInput.trim();
-    const result = await (fileAction.kind === "create"
-      ? createProjectFile(path)
-      : renameProjectFile(fileAction.path, path));
-    if (!result.ok) {
-      setFileActionError(result.error);
-      return;
-    }
-    void finishProjectMutation();
-    setOpenPaths((previous) => {
-      const next =
-        fileAction.kind === "create"
-          ? previous
-          : previous.map((entry) => (entry === fileAction.path ? path : entry));
-      return next.includes(path) ? next : [...next, path];
-    });
-    setRecentPaths((previous) =>
-      fileAction.kind === "create"
-        ? [path, ...previous.filter((entry) => entry !== path)]
-        : previous.map((entry) => (entry === fileAction.path ? path : entry)),
-    );
-    setError("");
-    setFileActionError("");
-    setFileAction(undefined);
-  }
-
-  function confirmDeleteFile() {
-    if (!fileAction || fileAction.kind !== "delete") return;
-    const { path } = fileAction;
-    const result = deleteProjectFile(path);
-    if (!result.ok) {
-      setFileActionError(result.error);
-      return;
-    }
-    setOpenPaths((previous) => {
-      const remaining = previous.filter((entry) => entry !== path);
-      return remaining.length ? remaining : ["main.mcl"];
-    });
-    void finishProjectMutation();
-    setRecentPaths((previous) => previous.filter((entry) => entry !== path));
-    setError("");
-    setFileActionError("");
-    setFileAction(undefined);
-  }
-
   const mclEditorServices = {
     onReady: onEditorReady,
     onWorkspaceEditApplierReady: (applier: ApplyWorkspaceEdits | undefined) => {
@@ -1522,7 +1462,7 @@ export default function Playground() {
           fileActionError={fileActionError}
           filePathInput={filePathInput}
           onFilePathInputChange={setFilePathInput}
-          onCloseFileAction={() => setFileAction(undefined)}
+          onCloseFileAction={closeFileAction}
           onSubmitFileAction={(event) => void submitFileAction(event)}
           onConfirmDeleteFile={confirmDeleteFile}
           symbolRenameOpen={symbolRenameOpen}

@@ -534,6 +534,7 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
 }
 
 .playground-app .playground-result-panel {
+  container: playground-result / inline-size;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
@@ -541,6 +542,23 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
 
 .playground-app .playground-result-toolbar {
   position: static;
+}
+
+.playground-app .playground-result-tabs > button,
+.playground-app .playground-result-toolbar > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@container playground-result (max-width: 40rem) {
+  .playground-app .playground-result-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .playground-app .playground-result-tabs {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
 }
 
 .playground-app .playground-layout-toggle {
@@ -590,6 +608,7 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
 
   .playground-site-nav {
     width: 100%;
+    min-width: 0;
     min-height: 3.25rem;
     flex: 0 0 auto;
     flex-direction: row;
@@ -642,11 +661,70 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
 
   .playground-app .playground-toolbar {
     flex: 1 1 100%;
+    min-width: 0;
     justify-content: flex-start;
   }
 
-  .playground-app .playground-primary-actions {
+  .playground-app .playground-primary-actions,
+  .playground-app .playground-secondary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
     margin-inline-start: 0;
+    box-sizing: border-box;
+  }
+
+  .playground-app .playground-secondary-actions > .playground-command-button,
+  .playground-app .playground-secondary-actions > .playground-more {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+
+  .playground-app .playground-header,
+  .playground-app .playground-toolbar,
+  .playground-app .playground-result-toolbar {
+    min-width: 0;
+  }
+
+  .playground-app .playground-header {
+    flex: 0 0 auto;
+  }
+
+  .playground-app .playground-more-menu {
+    inset-inline-end: 0;
+    width: min(24rem, calc(100vw - 1rem));
+    max-width: calc(100vw - 1rem);
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .playground-app .playground-secondary-actions {
+    position: relative;
+  }
+
+  .playground-app .playground-more {
+    position: static;
+  }
+
+  .playground-app .playground-result-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .playground-app .playground-result-tabs {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  .playground-app .playground-result-toolbar > button {
+    flex: 0 1 auto;
+  }
+
+  .playground-app .playground-editor-filebar,
+  .playground-app .playground-file-tabs {
+    min-width: 0;
   }
 
   .playground-app .playground-statusbar {

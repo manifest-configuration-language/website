@@ -668,16 +668,17 @@ body:has(.playground) .right-sidebar-container {
   }
 
   .playground-panels[data-mobile-view] > [data-panel] {
-    display: none;
+    display: none !important;
     min-height: 0;
     max-height: none;
   }
 
-  .playground-panels[data-mobile-view="editor"] > .playground-editor-panel,
-  .playground-panels[data-mobile-view="output"] > .playground-output-panel,
-  .playground-panels[data-mobile-view="problems"] > .playground-output-panel {
-    display: flex;
+  .playground-panels[data-mobile-view="editor"] > [data-panel][id="editor"],
+  .playground-panels[data-mobile-view="output"] > [data-panel][id="output"],
+  .playground-panels[data-mobile-view="problems"] > [data-panel][id="output"] {
+    display: flex !important;
     flex: 1 1 100% !important;
+    min-width: 0;
     min-height: 0;
     max-height: 100%;
   }

@@ -1,4 +1,4 @@
-import { Group, Panel, Separator } from "react-resizable-panels";
+import { Group, Panel, Separator, useGroupRef, type Layout } from "react-resizable-panels";
 import {
   useCallback,
   useEffect,
@@ -9,16 +9,14 @@ import {
   type SyntheticEvent,
 } from "react";
 import type { EditorView } from "@codemirror/view";
+import type { EditorState } from "@codemirror/state";
 import { selectNextOccurrence, selectSelectionMatches } from "@codemirror/search";
 import { toggleComment } from "@codemirror/commands";
+import type { RuntimeStatus } from "@manifest-configuration-language/browser";
 import { createPlaygroundClient } from "./apiClient";
-import {
-  MclEditor,
-  initialSource,
-  type ApplyWorkspaceEdits,
-  type EditorSettings,
-} from "./MclEditor";
+import { MclEditor, initialSource, type ApplyWorkspaceEdits } from "./MclEditor";
 import { ProjectTabs } from "./ProjectTabs";
+import { TextProjectEditor } from "./TextProjectEditor";
 import {
   createSharedProjectPayload,
   decodeSharedProject,
@@ -28,6 +26,7 @@ import {
 import { createShortShare, loadShortShare } from "./projectShareApi";
 import { isValidProjectFileSet, isValidProjectPath, projectLimits } from "./projectValidation.js";
 import { PlaygroundResult } from "./PlaygroundResult";
+import { PlaygroundSettingsDialog } from "./PlaygroundSettingsDialog";
 import { ProjectFileInput } from "./ProjectFileInput";
 import type {
   PlaygroundDefinitionLocation,
@@ -43,6 +42,7 @@ import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
 import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
 import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
+import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
 import "./symbolRenamePreview.css";
 import {
   clearSharedDraftRecovery,
@@ -57,6 +57,51 @@ import type {
   SharedDraftRecoveryPatch,
   StoredProject,
 } from "./usePlaygroundPersistence";
+
+const layoutPreferenceKey = "mcl-playground-layout-v1";
+const defaultPanelLayout: Layout = { editor: 60, output: 40 };
+
+type LayoutPreference = {
+  orientation: "horizontal" | "vertical";
+  layout: Layout;
+};
+
+function readLayoutPreference(): LayoutPreference | undefined {
+  try {
+    const value: unknown = JSON.parse(localStorage.getItem(layoutPreferenceKey) ?? "null");
+    if (!value || typeof value !== "object") return undefined;
+    const preference = value as Record<string, unknown>;
+    if (preference.orientation !== "horizontal" && preference.orientation !== "vertical")
+      return undefined;
+    if (!preference.layout || typeof preference.layout !== "object") return undefined;
+    const layout = preference.layout as Record<string, unknown>;
+    if (
+      typeof layout.editor !== "number" ||
+      typeof layout.output !== "number" ||
+      !Number.isFinite(layout.editor) ||
+      !Number.isFinite(layout.output) ||
+      layout.editor <= 0 ||
+      layout.output <= 0 ||
+      Math.abs(layout.editor + layout.output - 100) > 0.01
+    )
+      return undefined;
+
+    return {
+      orientation: preference.orientation,
+      layout: { editor: layout.editor, output: layout.output },
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function saveLayoutPreference(preference: LayoutPreference) {
+  try {
+    localStorage.setItem(layoutPreferenceKey, JSON.stringify(preference));
+  } catch {
+    // Layout preferences are optional when browser storage is unavailable.
+  }
+}
 
 const samples = {
   configMap: initialSource,
@@ -364,6 +409,8 @@ export default function Playground() {
     deleteFile: deleteProjectFile,
   } = usePlaygroundProject(initialSource);
   const editor = useRef<EditorView | undefined>(undefined);
+  const mclEditorStates = useRef(new Map<string, EditorState>());
+  const textEditorStates = useRef(new Map<string, EditorState>());
   const workspaceEditApplier = useRef<ApplyWorkspaceEdits | undefined>(undefined);
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
   const revision = useRef(0);
@@ -372,9 +419,7 @@ export default function Playground() {
     undefined,
   );
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
-  const quickOpenDialog = useRef<HTMLDialogElement>(null);
-  const examplesDialog = useRef<HTMLDialogElement>(null);
-  const commandPaletteDialog = useRef<HTMLDialogElement>(null);
+  const panelGroup = useGroupRef();
   const fileActionDialog = useRef<HTMLDialogElement>(null);
   const symbolRenameDialog = useRef<HTMLDialogElement>(null);
   const symbolReferencesDialog = useRef<HTMLDialogElement>(null);
@@ -399,8 +444,8 @@ export default function Playground() {
   const projectSizeBytes = project.totalBytes;
   const activePath = project.activePath;
   const [projectGeneration, setProjectGeneration] = useState(0);
-  const [wasmReady, setWasmReady] = useState(false);
-  const [orientation, setOrientation] = useState<"horizontal" | "vertical">("vertical");
+  const [wasmStatus, setWasmStatus] = useState<RuntimeStatus | "waiting">("waiting");
+  const [orientation, setOrientation] = useState<"horizontal" | "vertical">("horizontal");
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [openPaths, setOpenPaths] = useState(["main.mcl"]);
@@ -450,7 +495,7 @@ export default function Playground() {
         : [];
     setDiagnostics(currentDiagnostics);
   }, []);
-  const handleWasmReady = useCallback(() => setWasmReady(true), []);
+  const handleWasmReady = useCallback(() => setWasmStatus("ready"), []);
   const runtime = usePlaygroundRuntime({
     client,
     project: projectRef,
@@ -507,7 +552,7 @@ export default function Playground() {
   });
   const commands = [
     { name: "実行", action: () => void run() },
-    { name: "整形", action: () => void formatSource() },
+    ...(activePath.endsWith(".mcl") ? [{ name: "整形", action: () => void formatSource() }] : []),
     {
       name: "コメントを切り替え",
       action: () => {
@@ -697,6 +742,8 @@ export default function Playground() {
 
   const applyProject = useCallback(
     (project: StoredProject, options: { newDraft?: boolean; name?: string } = {}) => {
+      mclEditorStates.current.clear();
+      textEditorStates.current.clear();
       if (options.newDraft !== false) {
         clearSharedFragment();
         clearSharedDraftRecovery(activeDraftIdRef.current);
@@ -734,10 +781,51 @@ export default function Playground() {
   );
 
   useEffect(() => {
-    const createdClient = createPlaygroundClient();
-    client.current = createdClient;
+    const preference = readLayoutPreference();
+    if (!preference) return;
+    setOrientation(preference.orientation);
+    panelGroup.current?.setLayout(preference.layout);
+  }, []);
 
+  useEffect(() => {
     let cancelled = false;
+    const createdClient = createPlaygroundClient(
+      (status) => {
+        if (!cancelled) setWasmStatus(status);
+      },
+      ({ operation, durationMs, outcome }) => {
+        if (cancelled) return;
+        const name = `mcl.playground.${operation}.${outcome}`;
+        const end = performance.now();
+        performance.clearMeasures(name);
+        performance.measure(name, {
+          start: Math.max(0, end - durationMs),
+          duration: durationMs,
+          detail: { operation, outcome },
+        });
+      },
+    );
+    client.current = createdClient;
+    let startupSettled = false;
+    let runtimeReady = false;
+    const editorView = editor.current;
+    if (editorView) editorView.contentDOM.contentEditable = "false";
+    const runInitialProject = () => {
+      if (!cancelled && startupSettled && runtimeReady) runAction.current();
+    };
+
+    void createdClient
+      .warmUp("background")
+      .then(() => {
+        if (cancelled) return;
+        runtimeReady = true;
+        setWasmStatus("ready");
+        runInitialProject();
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+      });
+
     const startupController = new AbortController();
     void (async () => {
       let restored: StoredProject | undefined;
@@ -885,20 +973,19 @@ export default function Playground() {
         activateDraft(activeId, "プロジェクト");
       if (restored) {
         applyProject(restored, { newDraft: false });
-        if (recoveredSharedDraft) await saveDraftSnapshot(activeId, projectRef.current);
+        if (recoveredSharedDraft) {
+          try {
+            await saveDraftSnapshot(activeId, projectRef.current);
+          } catch (cause) {
+            if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+          }
+        }
       }
       startupReady.current = true;
+      startupSettled = true;
+      if (editor.current) editor.current.contentDOM.contentEditable = "true";
       markDraftsLoaded();
-      void createdClient
-        .warmUp("background")
-        .then(() => {
-          if (cancelled) return;
-          setWasmReady(true);
-          runAction.current();
-        })
-        .catch((cause: unknown) => {
-          if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
-        });
+      runInitialProject();
     })();
 
     return () => {
@@ -962,27 +1049,6 @@ export default function Playground() {
   }, []);
 
   useEffect(() => {
-    const dialog = commandPaletteDialog.current;
-    if (!dialog) return;
-    if (commandPaletteOpen && !dialog.open) dialog.showModal();
-    else if (!commandPaletteOpen && dialog.open) dialog.close();
-  }, [commandPaletteOpen]);
-
-  useEffect(() => {
-    const dialog = examplesDialog.current;
-    if (!dialog) return;
-    if (examplesOpen && !dialog.open) dialog.showModal();
-    else if (!examplesOpen && dialog.open) dialog.close();
-  }, [examplesOpen]);
-
-  useEffect(() => {
-    const dialog = quickOpenDialog.current;
-    if (!dialog) return;
-    if (quickOpen && !dialog.open) dialog.showModal();
-    else if (!quickOpen && dialog.open) dialog.close();
-  }, [quickOpen]);
-
-  useEffect(() => {
     const dialog = fileActionDialog.current;
     if (!dialog) return;
     if (fileAction && !dialog.open) dialog.showModal();
@@ -1006,6 +1072,7 @@ export default function Playground() {
   const onEditorReady = useCallback(
     (view: EditorView | undefined) => {
       editor.current = view;
+      if (view && !startupReady.current) view.contentDOM.contentEditable = "false";
       if (
         view &&
         projectRef.current.activePath === "main.mcl" &&
@@ -1737,182 +1804,47 @@ export default function Playground() {
                 <a href="/playground/capabilities/">対応機能</a>
               </div>
             </details>
-            <details className="playground-more playground-settings">
-              <summary>設定</summary>
-              <div className="playground-more-menu">
-                <label className="playground-setting">
-                  配色
-                  <select
-                    value={editorSettings.theme}
-                    onChange={(event) => {
-                      const theme = event.currentTarget.value as EditorSettings["theme"];
-                      setEditorSettings((settings) => ({
-                        ...settings,
-                        theme,
-                      }));
-                    }}
-                  >
-                    <option value="system">システム</option>
-                    <option value="light">ライト</option>
-                    <option value="dark">ダーク</option>
-                  </select>
-                </label>
-                <label className="playground-setting">
-                  インデント幅
-                  <select
-                    value={editorSettings.tabSize}
-                    onChange={(event) => {
-                      const tabSize = Number(event.currentTarget.value) as 2 | 4;
-                      setEditorSettings((settings) => ({
-                        ...settings,
-                        tabSize,
-                      }));
-                    }}
-                  >
-                    <option value={2}>2</option>
-                    <option value={4}>4</option>
-                  </select>
-                </label>
-                <label className="playground-setting">
-                  文字サイズ
-                  <input
-                    type="range"
-                    min={12}
-                    max={20}
-                    step={2}
-                    value={editorSettings.fontSize}
-                    aria-label="文字サイズ"
-                    onChange={(event) => {
-                      const fontSize = Number(
-                        event.currentTarget.value,
-                      ) as EditorSettings["fontSize"];
-                      setEditorSettings((settings) => ({
-                        ...settings,
-                        fontSize,
-                      }));
-                    }}
-                  />
-                  <output>{editorSettings.fontSize}px</output>
-                </label>
-                <label className="playground-setting">
-                  <input
-                    type="checkbox"
-                    checked={editorSettings.lineWrapping}
-                    onChange={(event) => {
-                      const lineWrapping = event.currentTarget.checked;
-                      setEditorSettings((settings) => ({
-                        ...settings,
-                        lineWrapping,
-                      }));
-                    }}
-                  />
-                  折り返し
-                </label>
-                <label className="playground-setting">
-                  <input
-                    type="checkbox"
-                    checked={editorSettings.lineNumbers}
-                    onChange={(event) => {
-                      const lineNumbers = event.currentTarget.checked;
-                      setEditorSettings((settings) => ({
-                        ...settings,
-                        lineNumbers,
-                      }));
-                    }}
-                  />
-                  行番号
-                </label>
-                <label className="playground-setting">
-                  <input
-                    type="checkbox"
-                    checked={editorSettings.vim}
-                    onChange={(event) => {
-                      const vim = event.currentTarget.checked;
-                      setEditorSettings((settings) => ({
-                        ...settings,
-                        vim,
-                      }));
-                    }}
-                  />
-                  Vim
-                </label>
-              </div>
-            </details>
+            <PlaygroundSettingsDialog
+              settings={editorSettings}
+              onChange={(settings) => setEditorSettings(settings)}
+            />
           </div>
         </div>
       </header>
-      <dialog
-        ref={examplesDialog}
-        className="playground-examples-dialog"
-        aria-labelledby="playground-examples-title"
-        onCancel={() => setExamplesOpen(false)}
-      >
-        <header className="playground-dialog-header">
-          <h2 id="playground-examples-title">サンプル</h2>
-          <button type="button" onClick={() => setExamplesOpen(false)} aria-label="閉じる">
-            ×
-          </button>
-        </header>
-        <QuickAccessList
-          label="サンプルを検索"
-          placeholder="名前やカテゴリで検索"
-          emptyMessage="一致するサンプルはありません"
-          items={[
-            {
-              value: "configMap",
-              label: "ConfigMap",
-              group: "基本",
-              keywords: ["基本", "変数", "manifest"],
-              onSelect: () => void selectSample("configMap"),
-            },
-            {
-              value: "deployment",
-              label: "Deployment",
-              group: "基本",
-              keywords: ["基本", "kubernetes", "manifest"],
-              onSelect: () => void selectSample("deployment"),
-            },
-            ...examples.map((entry) => ({
-              value: entry.slug,
-              label: entry.title,
-              group: entry.category,
-              keywords: [entry.category, entry.slug],
-              onSelect: () => void selectSample(entry.slug),
-            })),
-          ]}
-        />
-      </dialog>
+      <PlaygroundQuickAccessDialogs
+        examplesOpen={examplesOpen}
+        onCloseExamples={() => setExamplesOpen(false)}
+        exampleItems={[
+          {
+            value: "configMap",
+            label: "ConfigMap",
+            group: "基本",
+            keywords: ["基本", "変数", "manifest"],
+            onSelect: () => void selectSample("configMap"),
+          },
+          {
+            value: "deployment",
+            label: "Deployment",
+            group: "基本",
+            keywords: ["基本", "kubernetes", "manifest"],
+            onSelect: () => void selectSample("deployment"),
+          },
+          ...examples.map((entry) => ({
+            value: entry.slug,
+            label: entry.title,
+            group: entry.category,
+            keywords: [entry.category, entry.slug],
+            onSelect: () => void selectSample(entry.slug),
+          })),
+        ]}
+        quickOpen={quickOpen}
+        onCloseQuickOpen={() => setQuickOpen(false)}
+        quickOpenItems={quickOpenItems}
+        commandPaletteOpen={commandPaletteOpen}
+        onCloseCommandPalette={() => setCommandPaletteOpen(false)}
+        commandItems={commandItems}
+      />
       {loadingProject && <p role="status">読み込み中</p>}
-      {quickOpen && (
-        <dialog
-          ref={quickOpenDialog}
-          className="playground-quick-open"
-          aria-label="ファイルを開く"
-          onCancel={() => setQuickOpen(false)}
-        >
-          <QuickAccessList
-            label="ファイルへ移動"
-            placeholder="ファイル名を入力"
-            emptyMessage="一致するファイルはありません"
-            items={quickOpenItems}
-          />
-        </dialog>
-      )}
-      {commandPaletteOpen && (
-        <dialog
-          ref={commandPaletteDialog}
-          className="playground-quick-open"
-          aria-label="コマンド"
-          onCancel={() => setCommandPaletteOpen(false)}
-        >
-          <QuickAccessList
-            label="コマンド"
-            placeholder="コマンドを検索"
-            emptyMessage="一致するコマンドはありません"
-            items={commandItems}
-          />
-        </dialog>
-      )}
       <nav className="playground-mobile-views" aria-label="表示">
         <button
           type="button"
@@ -1943,8 +1875,17 @@ export default function Playground() {
           問題{diagnostics.length > 0 ? ` ${diagnostics.length}` : ""}
         </button>
       </nav>
-      <Group className="playground-panels" orientation={orientation} data-mobile-view={mobileView}>
-        <Panel className="playground-editor-panel" defaultSize="55" minSize="25">
+      <Group
+        className="playground-panels"
+        groupRef={panelGroup}
+        defaultLayout={defaultPanelLayout}
+        onLayoutChanged={(layout, meta) => {
+          if (meta.isUserInteraction) saveLayoutPreference({ orientation, layout });
+        }}
+        orientation={orientation}
+        data-mobile-view={mobileView}
+      >
+        <Panel id="editor" className="playground-editor-panel" defaultSize="60" minSize="25">
           <div className="playground-editor-filebar">
             <button
               type="button"
@@ -2013,65 +1954,80 @@ export default function Playground() {
                 disabled={!draftsLoaded || busy || loadingProject}
               />
             )}
-            <MclEditor
-              key={`${editorAttempt}:${projectGeneration}`}
-              path={activePath}
-              paths={projectPaths}
-              source={activeSource}
-              settings={editorSettings}
-              onReady={onEditorReady}
-              onWorkspaceEditApplierReady={(applier) => {
-                workspaceEditApplier.current = applier;
-              }}
-              onDocumentChange={onDocumentChange}
-              onError={onEditorError}
-              diagnostics={diagnostics}
-              onRun={() => void run()}
-              onFormat={() => void formatSource()}
-              onComplete={(path, position) =>
-                client.current
-                  ? client.current.complete(
-                      sourceForPath(path),
-                      path,
-                      position,
-                      languageServiceFiles(),
-                    )
-                  : Promise.resolve([])
-              }
-              onDefinition={(path, position) =>
-                client.current
-                  ? client.current.definition(
-                      sourceForPath(path),
-                      path,
-                      position,
-                      languageServiceFiles(),
-                    )
-                  : Promise.resolve(null)
-              }
-              onHover={(path, position) =>
-                client.current
-                  ? client.current.hover(
-                      sourceForPath(path),
-                      path,
-                      position,
-                      languageServiceFiles(),
-                    )
-                  : Promise.resolve(null)
-              }
-              onNavigate={navigateToDefinition}
-              onNavigateToYaml={navigateToYaml}
-              onShowProblems={() => {
-                setMobileView("problems");
-                setShowProblems(true);
-                setShowDiff(false);
-              }}
-              onFindReferences={() => void findSymbolReferences()}
-              onRenameSymbol={openSymbolRename}
-            />
+            {activePath.endsWith(".mcl") ? (
+              <MclEditor
+                key={`${editorAttempt}:${projectGeneration}`}
+                path={activePath}
+                paths={projectPaths}
+                source={activeSource}
+                settings={editorSettings}
+                editorStates={mclEditorStates.current}
+                onReady={onEditorReady}
+                onWorkspaceEditApplierReady={(applier) => {
+                  workspaceEditApplier.current = applier;
+                }}
+                onDocumentChange={onDocumentChange}
+                onError={onEditorError}
+                diagnostics={diagnostics}
+                onRun={() => void run()}
+                onFormat={() => void formatSource()}
+                onComplete={(path, position) =>
+                  client.current
+                    ? client.current.complete(
+                        sourceForPath(path),
+                        path,
+                        position,
+                        languageServiceFiles(),
+                      )
+                    : Promise.resolve([])
+                }
+                onDefinition={(path, position) =>
+                  client.current
+                    ? client.current.definition(
+                        sourceForPath(path),
+                        path,
+                        position,
+                        languageServiceFiles(),
+                      )
+                    : Promise.resolve(null)
+                }
+                onHover={(path, position) =>
+                  client.current
+                    ? client.current.hover(
+                        sourceForPath(path),
+                        path,
+                        position,
+                        languageServiceFiles(),
+                      )
+                    : Promise.resolve(null)
+                }
+                onNavigate={navigateToDefinition}
+                onNavigateToYaml={navigateToYaml}
+                onShowProblems={() => {
+                  setMobileView("problems");
+                  setShowProblems(true);
+                  setShowDiff(false);
+                }}
+                onFindReferences={() => void findSymbolReferences()}
+                onRenameSymbol={openSymbolRename}
+              />
+            ) : (
+              <TextProjectEditor
+                key={`${editorAttempt}:${projectGeneration}`}
+                path={activePath}
+                source={activeSource}
+                settings={editorSettings}
+                editorStates={textEditorStates.current}
+                onReady={onEditorReady}
+                onDocumentChange={onDocumentChange}
+                onError={onEditorError}
+                onRun={() => void run()}
+              />
+            )}
           </div>
         </Panel>
         <Separator className="playground-resize-handle" aria-label="エディターと結果の配置を変更" />
-        <Panel className="playground-output-panel" defaultSize="45" minSize="25">
+        <Panel id="output" className="playground-output-panel" defaultSize="40" minSize="25">
           <div className="playground-result-panel">
             <div className="playground-result-toolbar">
               <div className="playground-result-tabs" role="group" aria-label="結果表示">
@@ -2137,9 +2093,14 @@ export default function Playground() {
               <button
                 type="button"
                 className="playground-layout-toggle"
-                onClick={() =>
-                  setOrientation((current) => (current === "vertical" ? "horizontal" : "vertical"))
-                }
+                onClick={() => {
+                  const nextOrientation = orientation === "vertical" ? "horizontal" : "vertical";
+                  setOrientation(nextOrientation);
+                  saveLayoutPreference({
+                    orientation: nextOrientation,
+                    layout: panelGroup.current?.getLayout() ?? defaultPanelLayout,
+                  });
+                }}
                 aria-label={orientation === "vertical" ? "左右に並べる" : "上下に並べる"}
                 title={orientation === "vertical" ? "左右に並べる" : "上下に並べる"}
               >
@@ -2166,8 +2127,21 @@ export default function Playground() {
         </Panel>
       </Group>
       <footer className="playground-statusbar" aria-label="プロジェクトの状態">
-        <span className={wasmReady ? "playground-status-ready" : "playground-status-loading"}>
-          <span aria-hidden="true">●</span> {wasmReady ? "WASM" : "WASM読み込み中"}
+        <span
+          className={
+            wasmStatus === "ready" ? "playground-status-ready" : "playground-status-loading"
+          }
+        >
+          <span aria-hidden="true">●</span>{" "}
+          {wasmStatus === "waiting"
+            ? "WASM準備中"
+            : {
+                fetching: "WASMダウンロード中",
+                compiling: "WASMコンパイル中",
+                initializing: "WASM初期化中",
+                ready: "WASM",
+                error: "WASMエラー",
+              }[wasmStatus]}
         </span>
         <span>{diagnostics.length}件の問題</span>
         <span>{Object.keys(projectFiles).length + 1}ファイル</span>

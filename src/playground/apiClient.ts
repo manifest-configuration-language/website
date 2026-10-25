@@ -3,6 +3,8 @@ import {
   MclRuntimeError,
   type MclProject,
   type ProjectFiles,
+  type RuntimeOperationEvent,
+  type RuntimeStatus,
 } from "@manifest-configuration-language/browser";
 import type {
   PlaygroundClient,
@@ -51,8 +53,15 @@ function toError(error: unknown): PlaygroundDiagnostic {
   };
 }
 
-export function createPlaygroundClient(): PlaygroundClient {
-  const runtime = createMclRuntime({ operationTimeoutMs });
+export function createPlaygroundClient(
+  onRuntimeStatus?: (status: RuntimeStatus) => void,
+  onRuntimeOperation?: (event: RuntimeOperationEvent) => void,
+): PlaygroundClient {
+  const runtime = createMclRuntime({
+    operationTimeoutMs,
+    onStatus: ({ status }) => onRuntimeStatus?.(status),
+    onOperation: (event) => onRuntimeOperation?.(event),
+  });
   const activeControllers = new Set<AbortController>();
   let projectSession: MclProject | undefined;
 

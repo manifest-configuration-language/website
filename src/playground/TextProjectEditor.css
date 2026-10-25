@@ -1,0 +1,9 @@
+.playground-app .text-project-editor {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.playground-app .text-project-editor .cm-editor {
+  height: 100%;
+}

@@ -16,7 +16,13 @@ import {
   type Diagnostic,
 } from "@codemirror/lint";
 import { mclLanguageSupport } from "@manifest-configuration-language/language";
-import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
+import {
+  Annotation,
+  Compartment,
+  EditorState,
+  StateEffect,
+  type Extension,
+} from "@codemirror/state";
 import { EditorView, drawSelection, keymap, lineNumbers } from "@codemirror/view";
 import { history, indentWithTab, toggleComment } from "@codemirror/commands";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
@@ -121,6 +127,7 @@ type Props = {
   paths: string[];
   source: string;
   settings: EditorSettings;
+  editorStates?: Map<string, EditorState>;
   onReady: (view: EditorView | undefined) => void;
   onWorkspaceEditApplierReady: (applier: ApplyWorkspaceEdits | undefined) => void;
   onDocumentChange: (source: string, path: string) => boolean | void;
@@ -188,6 +195,7 @@ export function MclEditor({
   paths,
   source,
   settings,
+  editorStates,
   onReady,
   onWorkspaceEditApplierReady,
   onDocumentChange,
@@ -211,7 +219,8 @@ export function MclEditor({
   const definitionRequest = useRef(0);
   const hoverRequest = useRef(0);
   const documentGeneration = useRef(0);
-  const states = useRef(new Map<string, EditorState>());
+  const states = useRef(editorStates ?? new Map<string, EditorState>());
+  if (editorStates && states.current !== editorStates) states.current = editorStates;
   const extensions = useRef<Extension[]>([]);
   const gutter = useRef(new Compartment());
   const wrapping = useRef(new Compartment());
@@ -414,7 +423,11 @@ export function MclEditor({
         ]),
         languageServices.definitionMouseHandler,
       ];
-      const initialState = EditorState.create({ doc: source, extensions: extensions.current });
+      const cachedState = states.current.get(path);
+      const initialState =
+        cachedState?.doc.toString() === source
+          ? cachedState.update({ effects: StateEffect.reconfigure.of(extensions.current) }).state
+          : EditorState.create({ doc: source, extensions: extensions.current });
       states.current.set(path, initialState);
       const initialLine = initialState.doc.lineAt(initialState.selection.main.head);
       setCursorPosition({
@@ -523,11 +536,11 @@ export function MclEditor({
     hoverRequest.current += 1;
     states.current.set(currentPath.current, view.state);
     currentPath.current = path;
+    const cachedState = states.current.get(path);
     const nextState =
-      states.current.get(path) ??
-      EditorState.create({ doc: source, extensions: extensions.current }).update({
-        effects: settingsEffects(settingsRef.current),
-      }).state;
+      cachedState?.doc.toString() === source
+        ? cachedState.update({ effects: StateEffect.reconfigure.of(extensions.current) }).state
+        : EditorState.create({ doc: source, extensions: extensions.current });
     states.current.set(path, nextState);
     view.setState(nextState);
     const line = nextState.doc.lineAt(nextState.selection.main.head);

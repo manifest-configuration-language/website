@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { playgroundLocale } from "./playgroundI18n";
 import type { StoredProject } from "./usePlaygroundPersistence";
-import { createSharedProjectPayload } from "./projectShare";
+import { createProjectFragmentURL, createSharedProjectPayload } from "./projectShare";
 import { createShortShare } from "./projectShareApi";
 
 type CurrentRef<T> = { current: T };
@@ -26,12 +26,29 @@ export function usePlaygroundSharing({
   const { t } = useTranslation();
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [shareURL, setShareURL] = useState("");
+  const [shareError, setShareError] = useState("");
 
-  const openShareDialog = useCallback(() => setShareDialogOpen(true), []);
+  const openShareDialog = useCallback(() => {
+    setShareURL("");
+    setShareError("");
+    setShareDialogOpen(true);
+  }, []);
   const closeShareDialog = useCallback(() => setShareDialogOpen(false), []);
 
   const shareProject = useCallback(async () => {
+    if (shareURL) {
+      try {
+        await navigator.clipboard.writeText(shareURL);
+        onNotice(t("shareLinkCopied"));
+      } catch {
+        onNotice(t("shareCopyFailed"));
+        return false;
+      }
+      return true;
+    }
     setSharing(true);
+    setShareError("");
     const draftId = activeDraftIdRef.current;
     const snapshot = projectRef.current;
     try {
@@ -44,19 +61,44 @@ export function usePlaygroundSharing({
       const shareURL = new URL(window.location.href);
       shareURL.hash = "";
       shareURL.searchParams.delete("example");
-      const created = await createShortShare(payload, t, AbortSignal.timeout(15_000));
-      shareURL.pathname = `/playground/s/${created.id}`;
-      shareURL.searchParams.delete("s");
-      await navigator.clipboard.writeText(shareURL.href);
+      let expiresAt: string | undefined;
+      let usedFragment = false;
+      try {
+        const created = await createShortShare(payload, t, AbortSignal.timeout(15_000));
+        shareURL.pathname = `/playground/s/${created.id}`;
+        shareURL.searchParams.delete("s");
+        expiresAt = created.expiresAt;
+      } catch {
+        try {
+          const fallbackURL = await createProjectFragmentURL(payload, shareURL);
+          shareURL.href = fallbackURL.href;
+          usedFragment = true;
+        } catch (cause) {
+          setShareError(
+            cause instanceof Error && cause.message === "Shared project is too large for a URL link"
+              ? t("shareFallbackTooLarge")
+              : t("shareLinkGenerationFailed"),
+          );
+          return false;
+        }
+      }
+      setShareURL(shareURL.href);
       if (activeDraftIdRef.current === draftId && projectRef.current === snapshot)
         history.replaceState(null, "", shareURL);
-      onNotice(
-        t("shareLinkCopiedUntil", {
-          date: new Intl.DateTimeFormat(playgroundLocale, { dateStyle: "long" }).format(
-            new Date(created.expiresAt),
-          ),
-        }),
-      );
+      try {
+        await navigator.clipboard.writeText(shareURL.href);
+        onNotice(
+          expiresAt
+            ? t("shareLinkCopiedUntil", {
+                date: new Intl.DateTimeFormat(playgroundLocale, { dateStyle: "long" }).format(
+                  new Date(expiresAt),
+                ),
+              })
+            : t(usedFragment ? "shareLinkFragment" : "shareLinkCopied"),
+        );
+      } catch {
+        onNotice(t("shareCopyFailed"));
+      }
       return true;
     } catch (cause) {
       onError(cause);
@@ -64,7 +106,15 @@ export function usePlaygroundSharing({
     } finally {
       setSharing(false);
     }
-  }, [activeDraftIdRef, onError, onNotice, projectRef, saveDraftSnapshot, t]);
+  }, [activeDraftIdRef, onError, onNotice, projectRef, saveDraftSnapshot, shareURL, t]);
 
-  return { shareDialogOpen, sharing, openShareDialog, closeShareDialog, shareProject };
+  return {
+    shareDialogOpen,
+    sharing,
+    shareURL,
+    shareError,
+    openShareDialog,
+    closeShareDialog,
+    shareProject,
+  };
 }

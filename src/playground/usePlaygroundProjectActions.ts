@@ -56,7 +56,6 @@ type Options = {
   initialSource: string;
   persistence: PersistenceActions;
   projectRef: { readonly current: PlaygroundProject };
-  samples: Record<string, string>;
   downloadBlob: (blob: Blob, filename: string) => void;
   setDeleteProjectOpen: (open: boolean) => void;
   setError: (message: string) => void;
@@ -103,7 +102,6 @@ export function usePlaygroundProjectActions({
   initialSource,
   persistence,
   projectRef,
-  samples,
   downloadBlob,
   setDeleteProjectOpen,
   setError,
@@ -130,15 +128,6 @@ export function usePlaygroundProjectActions({
   }
 
   async function selectSample(selected: string) {
-    const builtin = samples[selected];
-    if (builtin !== undefined) {
-      applyProject(
-        { source: builtin, files: {} },
-        { name: selected === "configMap" ? "ConfigMap" : "Deployment" },
-      );
-      setExamplesOpen(false);
-      return;
-    }
     const example = examples.find((entry) => entry.slug === selected);
     if (!example) return;
 

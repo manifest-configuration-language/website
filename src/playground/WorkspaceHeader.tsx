@@ -4,6 +4,7 @@ import type { EditorSettings } from "./MclEditor";
 import { ProjectFileInput } from "./ProjectFileInput";
 import { PlaygroundSettingsDialog } from "./PlaygroundSettingsDialog";
 import { ProjectName } from "./ProjectName";
+import { ProjectDraftPicker } from "./ProjectDraftPicker";
 import type { DraftMetadata } from "./usePlaygroundPersistence";
 import type { LoadedProject } from "./types";
 import { formatAriaShortcut, formatShortcut } from "./keyboardShortcuts";
@@ -140,21 +141,12 @@ export function WorkspaceHeader({
           <details className="playground-more">
             <summary>{t("projectMenu")}</summary>
             <div className="playground-more-menu">
-              <label className="playground-project-picker">
-                <span>{t("openProject")}</span>
-                <select
-                  aria-label={t("openProject")}
-                  value={draftId}
-                  disabled={!draftsLoaded || busy || loadingProject}
-                  onChange={(event) => onOpenDraft(event.currentTarget.value)}
-                >
-                  {drafts.map((draft) => (
-                    <option key={draft.id} value={draft.id}>
-                      {draft.name === "作業" ? t("unnamedProject") : draft.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <ProjectDraftPicker
+                activeDraftId={draftId}
+                drafts={drafts}
+                disabled={!draftsLoaded || busy || loadingProject}
+                onOpenDraft={onOpenDraft}
+              />
               <div className="playground-project-actions">
                 <Button
                   onPress={onCreateDraft}

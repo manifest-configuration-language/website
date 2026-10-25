@@ -41,6 +41,7 @@ import type {
 } from "./types";
 import type { PlaygroundShortcuts } from "./keyboardShortcuts";
 import { createEditorLanguageServices } from "./editorLanguage";
+import initialSource from "../content/docs/examples/resources/configmap/main.mcl?raw";
 import "./playgroundPanels.css";
 
 const workspaceEditAnnotation = Annotation.define<boolean>();
@@ -85,17 +86,7 @@ export type EditorSettings = {
   shortcuts: PlaygroundShortcuts;
 };
 
-export const initialSource = `let appName = "catalog"
-let configMap =
-  apiVersion: "v1"
-  kind: "ConfigMap"
-  metadata:
-    name: appName
-  data:
-    mode: "development"
-
-emit configMap
-`;
+export { initialSource };
 
 function editorTheme(theme: EditorSettings["theme"]): Extension {
   const dark =

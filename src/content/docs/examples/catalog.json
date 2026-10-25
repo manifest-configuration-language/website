@@ -1,4 +1,34 @@
 {
+  "resources/configmap": {
+    "title": {
+      "ja": "ConfigMap",
+      "en": "ConfigMap"
+    },
+    "description": {
+      "ja": "変数とオブジェクトを定義し、ConfigMapを生成します。",
+      "en": "Define variables and objects to generate a ConfigMap."
+    },
+    "tags": ["Kubernetes", "ConfigMap", "beginner"],
+    "difficulty": {
+      "ja": "入門",
+      "en": "Introductory"
+    }
+  },
+  "resources/deployment": {
+    "title": {
+      "ja": "Deployment",
+      "en": "Deployment"
+    },
+    "description": {
+      "ja": "複数のオブジェクトと参照を組み合わせてDeploymentを生成します。",
+      "en": "Combine objects and references to generate a Deployment."
+    },
+    "tags": ["Kubernetes", "Deployment", "reference"],
+    "difficulty": {
+      "ja": "初級",
+      "en": "Beginner"
+    }
+  },
   "adapters/helm": {
     "title": {
       "ja": "Helm Chart",

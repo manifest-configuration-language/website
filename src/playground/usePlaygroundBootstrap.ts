@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { RefObject } from "react";
 import type { EditorView } from "@codemirror/view";
 import type { TFunction } from "i18next";
-import { parseSharedProjectPayload } from "./projectShare";
+import { parseProjectFragment, parseSharedProjectPayload } from "./projectShare";
 import { loadShortShare } from "./projectShareApi";
 import { loadExampleFiles } from "./usePlaygroundProjectActions";
 import type { ExampleSpec } from "./usePlaygroundProjectActions";
@@ -121,6 +121,10 @@ export function usePlaygroundBootstrap({
       const shortShareId = currentURL.pathname.match(
         /^\/playground\/s\/([A-Za-z0-9_-]{22})\/?$/,
       )?.[1];
+      const projectFragment =
+        currentURL.pathname === "/playground/" && currentURL.hash.startsWith("#project=")
+          ? currentURL.hash
+          : undefined;
       if (cancelled) return;
       if (!draftsRef.current.some((draft) => draft.id === activeId))
         activateDraft(activeId, latest.current.t("defaultProjectName"));
@@ -159,6 +163,16 @@ export function usePlaygroundBootstrap({
                 ),
               );
             }
+          } else if (projectFragment) {
+            importedName = latest.current.t("sharedProjectName");
+            try {
+              imported = await parseProjectFragment(projectFragment);
+            } catch {
+              throw new Error(latest.current.t("projectLinkInvalid"));
+            }
+            const url = new URL(window.location.href);
+            url.hash = "";
+            history.replaceState(null, "", url);
           } else {
             const url = new URL(window.location.href);
             exampleSlug = url.searchParams.get("example") ?? undefined;

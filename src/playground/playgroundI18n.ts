@@ -8,6 +8,12 @@ export const resources = {
       share: "Share",
       openExamples: "Examples",
       copyShareLink: "Copy share link",
+      shareLinkLabel: "Share URL",
+      shareLinkFragment: "Share link created",
+      shareCopyFailed: "Select the URL to copy it.",
+      shareFallbackTooLarge: "Project is too large for a share link.",
+      shareLinkGenerationFailed: "Could not create a share link.",
+      projectLinkInvalid: "Invalid project link.",
       shareAccessNotice: "Anyone with the link can view this snapshot.",
       shareLinkCopiedUntil: "Share link copied (available until {{date}})",
       shareLinkCopied: "Share link copied",
@@ -32,6 +38,9 @@ export const resources = {
       commandSearch: "Search commands",
       projectMenu: "Project",
       openProject: "Open project",
+      searchProjects: "Search projects",
+      searchProjectNames: "Search project names",
+      noProjectsMatch: "No matching projects",
       unnamedProject: "Untitled project",
       projectCapabilities: "Language features",
       loadingProject: "Loading project",
@@ -60,10 +69,6 @@ export const resources = {
       examplesGroupConfiguration: "Structure",
       examplesGroupAdapters: "Adapters",
       examplesGroupValidation: "Validation",
-      exampleConfigMapDescription:
-        "Define a value, build a Kubernetes resource, and emit it as YAML.",
-      exampleDeploymentDescription:
-        "Create a Deployment with a named container port and matching pod labels.",
       commandRun: "Run",
       commandFormat: "Format source",
       commandToggleComment: "Toggle comment",
@@ -278,6 +283,12 @@ export const resources = {
       share: "共有",
       openExamples: "サンプル",
       copyShareLink: "共有リンクをコピー",
+      shareLinkLabel: "共有URL",
+      shareLinkFragment: "共有リンクを作成しました",
+      shareCopyFailed: "URLを選択してコピーしてください",
+      shareFallbackTooLarge: "プロジェクトが大きすぎて共有リンクを作成できません",
+      shareLinkGenerationFailed: "共有リンクを作成できませんでした",
+      projectLinkInvalid: "プロジェクトのリンクが正しくありません",
       shareAccessNotice: "リンクを知っている人はこのスナップショットを閲覧できます。",
       shareLinkCopiedUntil: "共有リンクをコピーしました（{{date}}まで有効）",
       shareLinkCopied: "共有リンクをコピーしました",
@@ -302,6 +313,9 @@ export const resources = {
       commandSearch: "コマンドを検索",
       projectMenu: "プロジェクト",
       openProject: "プロジェクトを開く",
+      searchProjects: "プロジェクトを検索",
+      searchProjectNames: "プロジェクト名を検索",
+      noProjectsMatch: "一致するプロジェクトはありません",
       unnamedProject: "無題のプロジェクト",
       projectCapabilities: "対応機能",
       loadingProject: "読み込み中",
@@ -328,9 +342,6 @@ export const resources = {
       examplesGroupConfiguration: "構成",
       examplesGroupAdapters: "Adapter",
       examplesGroupValidation: "検証",
-      exampleConfigMapDescription:
-        "値を定義し、Kubernetesリソースを組み立ててYAMLとして出力します。",
-      exampleDeploymentDescription: "コンテナーポートとPodラベルを設定したDeploymentを作成します。",
       commandRun: "実行",
       commandFormat: "コードを整形",
       commandToggleComment: "コメントを切り替え",
@@ -549,6 +560,12 @@ declare global {
       share: string;
       openExamples: string;
       copyShareLink: string;
+      shareLinkLabel: string;
+      shareLinkFragment: string;
+      shareCopyFailed: string;
+      shareFallbackTooLarge: string;
+      shareLinkGenerationFailed: string;
+      projectLinkInvalid: string;
       shareAccessNotice: string;
       shareLinkCopiedUntil: string;
       shareLinkCopied: string;
@@ -573,6 +590,9 @@ declare global {
       commandSearch: string;
       projectMenu: string;
       openProject: string;
+      searchProjects: string;
+      searchProjectNames: string;
+      noProjectsMatch: string;
       unnamedProject: string;
       projectCapabilities: string;
       loadingProject: string;
@@ -601,8 +621,6 @@ declare global {
       examplesGroupConfiguration: string;
       examplesGroupAdapters: string;
       examplesGroupValidation: string;
-      exampleConfigMapDescription: string;
-      exampleDeploymentDescription: string;
       commandRun: string;
       commandFormat: string;
       commandToggleComment: string;

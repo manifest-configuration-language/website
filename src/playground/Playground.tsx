@@ -46,36 +46,6 @@ function downloadBlob(blob: Blob, filename: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-const samples = {
-  configMap: initialSource,
-  deployment: `let port = node:
-  name: "http"
-  containerPort: 8080
-let deployment = node:
-  apiVersion: "apps/v1"
-  kind: "Deployment"
-  metadata:
-    name: "sample-api"
-    labels:
-      app: "sample-api"
-  spec:
-    selector:
-      matchLabels:
-        app: "sample-api"
-    template:
-      metadata:
-        labels:
-          app: "sample-api"
-      spec:
-        containers:
-          - name: "api"
-            image: "example.test.walnuts.dev/api:v1"
-            ports:
-              - port
-emit deployment
-`,
-};
-
 type ExampleLocale = "en" | "ja";
 
 function sharedProjectError(cause: unknown, tooLargeMessage: string): string {
@@ -237,14 +207,21 @@ export default function Playground() {
     (cause: unknown) => setError(sharedProjectError(cause, t("sharedProjectTooLarge"))),
     [t],
   );
-  const { shareDialogOpen, sharing, openShareDialog, closeShareDialog, shareProject } =
-    usePlaygroundSharing({
-      activeDraftIdRef,
-      projectRef,
-      saveDraftSnapshot,
-      onNotice: setNotice,
-      onError: handleShareError,
-    });
+  const {
+    shareDialogOpen,
+    sharing,
+    shareURL,
+    shareError,
+    openShareDialog,
+    closeShareDialog,
+    shareProject,
+  } = usePlaygroundSharing({
+    activeDraftIdRef,
+    projectRef,
+    saveDraftSnapshot,
+    onNotice: setNotice,
+    onError: handleShareError,
+  });
 
   const editablePaths = useMemo(
     () => [
@@ -463,7 +440,6 @@ export default function Playground() {
       setActiveDraft,
     },
     projectRef,
-    samples,
     downloadBlob,
     setDeleteProjectOpen,
     setError,
@@ -474,7 +450,6 @@ export default function Playground() {
   const quickAccess = usePlaygroundQuickAccess({
     t,
     examples,
-    samples,
     paths: projectPaths,
     files: projectFiles,
     recentPaths,
@@ -776,10 +751,13 @@ export default function Playground() {
         <PlaygroundShareDialog
           open={shareDialogOpen}
           sharing={sharing}
+          shareURL={shareURL}
+          shareError={shareError}
           onClose={closeShareDialog}
           onShare={() => {
+            const copyingExistingLink = Boolean(shareURL);
             void shareProject().then((shared) => {
-              if (shared) closeShareDialog();
+              if (shared && copyingExistingLink) closeShareDialog();
             });
           }}
         />

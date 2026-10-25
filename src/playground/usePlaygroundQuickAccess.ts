@@ -13,7 +13,6 @@ type CommandActions = Omit<
 type Options = {
   t: TFunction<"starlight">;
   examples: ExampleSpec[];
-  samples: { configMap: string; deployment: string };
   paths: string[];
   files: Record<string, ProjectFile>;
   recentPaths: string[];
@@ -32,7 +31,6 @@ type Options = {
 export function usePlaygroundQuickAccess({
   t,
   examples,
-  samples,
   paths,
   files,
   recentPaths,
@@ -101,26 +99,8 @@ export function usePlaygroundQuickAccess({
   );
 
   const exampleItems: QuickAccessItem[] = useMemo(
-    () => [
-      {
-        value: "configMap",
-        label: "ConfigMap",
-        group: t("examplesGroupBasics"),
-        keywords: [t("examplesGroupBasics"), "variables", "manifest"],
-        description: t("exampleConfigMapDescription"),
-        preview: samples.configMap.split("\n").slice(0, 6).join("\n"),
-        onSelect: () => void selectSample("configMap"),
-      },
-      {
-        value: "deployment",
-        label: "Deployment",
-        group: t("examplesGroupBasics"),
-        keywords: [t("examplesGroupBasics"), "kubernetes", "manifest"],
-        description: t("exampleDeploymentDescription"),
-        preview: samples.deployment.split("\n").slice(0, 7).join("\n"),
-        onSelect: () => void selectSample("deployment"),
-      },
-      ...examples.map((entry) => ({
+    () =>
+      examples.map((entry) => ({
         value: entry.slug,
         label: entry.title,
         group: entry.category,
@@ -131,8 +111,7 @@ export function usePlaygroundQuickAccess({
         preview: entry.preview,
         onSelect: () => void selectSample(entry.slug),
       })),
-    ],
-    [examples, samples.configMap, samples.deployment, selectSample, t],
+    [examples, selectSample],
   );
 
   const commandItems = useMemo(

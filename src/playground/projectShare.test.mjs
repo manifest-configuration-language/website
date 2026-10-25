@@ -6,6 +6,23 @@ import {
   parseProjectFragment,
 } from "./projectShare.ts";
 
+if (!Uint8Array.prototype.toBase64) {
+  Object.defineProperty(Uint8Array.prototype, "toBase64", {
+    value({ alphabet = "base64", omitPadding = false } = {}) {
+      const encoded = Buffer.from(this).toString(alphabet);
+      return omitPadding ? encoded.replace(/=+$/, "") : encoded;
+    },
+  });
+}
+
+if (!Uint8Array.fromBase64) {
+  Object.defineProperty(Uint8Array, "fromBase64", {
+    value(value, { alphabet = "base64" } = {}) {
+      return new Uint8Array(Buffer.from(value, alphabet));
+    },
+  });
+}
+
 it("round-trips UTF-8 and binary project files through a bounded fragment URL", async () => {
   const project = {
     source: 'import "modules/app.mcl"\nemit app',

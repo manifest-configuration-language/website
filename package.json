@@ -7,7 +7,7 @@
     "predev": "node scripts/prepare-playground-examples.mjs",
     "dev": "astro dev",
     "prebuild": "node scripts/prepare-playground-examples.mjs && node scripts/fetch-mcl-reference.mjs",
-    "build": "astro build",
+    "build": "astro build && node scripts/compress-wasm.mjs",
     "preview": "astro preview",
     "precheck": "node scripts/prepare-playground-examples.mjs",
     "check": "astro check",

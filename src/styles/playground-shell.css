@@ -612,9 +612,10 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
     min-height: 3.25rem;
     flex: 0 0 auto;
     flex-direction: row;
+    justify-content: space-between;
     align-items: center;
     gap: 0.15rem;
-    overflow-x: auto;
+    overflow: hidden;
     padding: 0.3rem 0.45rem;
     border-right: 0;
     border-bottom: 1px solid var(--sl-color-gray-5);
@@ -624,6 +625,10 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
     flex: 0 0 auto;
     padding: 0.4rem 0.55rem;
     white-space: nowrap;
+  }
+
+  .playground-site-nav a:not(.playground-site-brand):not([aria-current="page"]) {
+    display: none;
   }
 
   .playground-site-nav .playground-site-brand {

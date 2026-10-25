@@ -18,32 +18,26 @@ import { MclEditor, initialSource, type ApplyWorkspaceEdits } from "./MclEditor"
 import { ProjectTabs } from "./ProjectTabs";
 import { TextProjectEditor } from "./TextProjectEditor";
 import {
-  createSharedProjectPayload,
   decodeSharedProject,
   encodeSharedProject,
   parseSharedProjectPayload,
 } from "./projectShare";
-import { createShortShare, loadShortShare } from "./projectShareApi";
+import { loadShortShare } from "./projectShareApi";
 import { isValidProjectFileSet, isValidProjectPath, projectLimits } from "./projectValidation.js";
 import { PlaygroundResult } from "./PlaygroundResult";
 import { PlaygroundSettingsDialog } from "./PlaygroundSettingsDialog";
 import { PlaygroundEditorDialogs } from "./PlaygroundEditorDialogs";
 import { ProjectFileInput } from "./ProjectFileInput";
-import type {
-  PlaygroundDefinitionLocation,
-  PlaygroundDiagnostic,
-  PlaygroundReference,
-  PlaygroundRenameEdit,
-  PlaygroundReply,
-  PlaygroundSourceMap,
-  ProjectFile,
-} from "./types";
+import type { PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
 import { writeProjectArchive } from "./projectZip";
 import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
 import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
+import { renamePreviewEntries, usePlaygroundLanguageActions } from "./usePlaygroundLanguageActions";
 import { type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
+import { PlaygroundShareDialog } from "./PlaygroundShareDialog";
+import { usePlaygroundSharing, type SharedRecoveryState } from "./usePlaygroundSharing";
 import "./symbolRenamePreview.css";
 import {
   clearSharedDraftRecovery,
@@ -53,14 +47,31 @@ import {
   saveSharedDraftRecovery,
   usePlaygroundPersistence,
 } from "./usePlaygroundPersistence";
-import type {
-  SharedDraftRecovery,
-  SharedDraftRecoveryPatch,
-  StoredProject,
-} from "./usePlaygroundPersistence";
+import type { SharedDraftRecoveryPatch, StoredProject } from "./usePlaygroundPersistence";
 
 const layoutPreferenceKey = "mcl-playground-layout-v1";
 const defaultPanelLayout: Layout = { editor: 60, output: 40 };
+const runtimeMeasurementPrefix = "mcl.playground.";
+const runtimeMeasurementLimit = 100;
+
+function recordRuntimeMeasurement(
+  name: string,
+  start: number,
+  duration: number,
+  detail: Record<string, string | number | undefined>,
+) {
+  performance.measure(name, {
+    start: Math.max(0, start),
+    duration,
+    detail,
+  });
+  const entries = performance
+    .getEntriesByType("measure")
+    .filter((entry) => entry.name.startsWith(runtimeMeasurementPrefix))
+    .sort((left, right) => left.startTime - right.startTime);
+  for (const entry of entries.slice(0, Math.max(0, entries.length - runtimeMeasurementLimit)))
+    performance.clearMeasures(entry.name);
+}
 
 type LayoutPreference = {
   orientation: "horizontal" | "vertical";
@@ -136,17 +147,6 @@ emit deployment
 
 type ExampleSpec = { category: string; title: string; slug: string; asset: string };
 type FileAction = { kind: "create" } | { kind: "rename" | "delete"; path: string };
-type PendingSymbolRename = {
-  edits: PlaygroundRenameEdit[];
-  sources: Record<string, string>;
-  revision: number;
-};
-type RenamePreviewEntry = {
-  path: string;
-  line: number;
-  before: string;
-  after: string;
-};
 type RenderState = {
   reply?: PlaygroundReply;
   latestSuccess?: PlaygroundReply;
@@ -322,81 +322,6 @@ function sharedProjectError(cause: unknown, creating: boolean): string {
   return message;
 }
 
-function outputPositionForSource(
-  sourceMap: PlaygroundSourceMap,
-  source: EditorView,
-  path: string,
-): { line: number; character: number } | undefined {
-  const cursor = source.state.selection.main.head;
-  const sourceLine = source.state.doc.lineAt(cursor);
-  const position = { line: sourceLine.number - 1, character: cursor - sourceLine.from };
-  const candidates = sourceMap.entries.flatMap((entry) => {
-    const origins = entry.sources.filter(
-      (origin) =>
-        origin.kind === "mcl" && origin.path === path && positionInRange(position, origin.range),
-    );
-    if (origins.length === 0) return [];
-    if (
-      entry.sources.length !== 1 ||
-      origins[0].multiplicity !== "unique" ||
-      origins[0].occurrences !== 1
-    )
-      return [undefined];
-    return [entry.output.start];
-  });
-  if (candidates.length !== 1 || candidates[0] === undefined) return undefined;
-  return candidates[0];
-}
-
-function positionInRange(
-  position: { line: number; character: number },
-  range: PlaygroundSourceMap["entries"][number]["output"],
-): boolean {
-  const afterStart =
-    position.line > range.start.line ||
-    (position.line === range.start.line && position.character >= range.start.character);
-  const beforeEnd =
-    position.line < range.end.line ||
-    (position.line === range.end.line && position.character < range.end.character);
-  return afterStart && beforeEnd;
-}
-
-function sourceOffsetAt(source: string, position: { line: number; character: number }) {
-  let offset = 0;
-  for (let line = 0; line < position.line; line += 1) {
-    const newline = source.indexOf("\n", offset);
-    if (newline < 0) return undefined;
-    offset = newline + 1;
-  }
-  const lineEnd = source.indexOf("\n", offset);
-  const contentEnd = lineEnd < 0 ? source.length : lineEnd;
-  if (position.character < 0 || offset + position.character > contentEnd) return undefined;
-  return offset + position.character;
-}
-
-function renamePreviewEntries(
-  edits: PlaygroundRenameEdit[],
-  sources: Record<string, string>,
-): RenamePreviewEntry[] | undefined {
-  const entries = edits.map((edit) => {
-    const source = sources[edit.path];
-    if (source === undefined) return undefined;
-    const from = sourceOffsetAt(source, edit.range.start);
-    const to = sourceOffsetAt(source, edit.range.end);
-    if (from === undefined || to === undefined || from > to) return undefined;
-    return {
-      path: edit.path,
-      line: edit.range.start.line + 1,
-      before: source.slice(from, to),
-      after: edit.newText,
-    };
-  });
-  if (entries.some((entry) => entry === undefined)) return undefined;
-  return (entries as RenamePreviewEntry[]).sort(
-    (left, right) => left.path.localeCompare(right.path) || left.line - right.line,
-  );
-}
-
 export default function Playground() {
   const examples = exampleCatalog as unknown as ExampleSpec[];
   const {
@@ -416,12 +341,11 @@ export default function Playground() {
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
   const revision = useRef(0);
   const runAction = useRef<() => void>(() => {});
-  const sharedRecovery = useRef<{ metadata: SharedDraftRecovery; base: StoredProject } | undefined>(
-    undefined,
-  );
+  const sharedRecovery = useRef<SharedRecoveryState | undefined>(undefined);
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
   const panelGroup = useGroupRef();
   const startupReady = useRef(false);
+  const runtimeMeasurementSequence = useRef(0);
   const [renderState, dispatchRender] = useReducer(renderStateReducer, initialRenderState);
   const reply = renderState.reply;
   const staleYaml = renderState.stale ? renderState.latestSuccess?.result?.yaml : undefined;
@@ -454,13 +378,6 @@ export default function Playground() {
   const [fileAction, setFileAction] = useState<FileAction>();
   const [filePathInput, setFilePathInput] = useState("");
   const [fileActionError, setFileActionError] = useState("");
-  const [symbolRenameOpen, setSymbolRenameOpen] = useState(false);
-  const [symbolRenameInput, setSymbolRenameInput] = useState("");
-  const [symbolRenameError, setSymbolRenameError] = useState("");
-  const [pendingSymbolRename, setPendingSymbolRename] = useState<PendingSymbolRename>();
-  const [symbolReferences, setSymbolReferences] = useState<PlaygroundReference[]>([]);
-  const [symbolReferencesError, setSymbolReferencesError] = useState("");
-  const [symbolReferencesOpen, setSymbolReferencesOpen] = useState(false);
 
   const reportPersistenceError = useCallback(
     (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)),
@@ -484,6 +401,19 @@ export default function Playground() {
     loadLegacyProject,
     markDraftsLoaded,
   } = usePlaygroundPersistence(project, reportPersistenceError);
+  const handleShareError = useCallback(
+    (cause: unknown) => setError(sharedProjectError(cause, true)),
+    [],
+  );
+  const { shareDialogOpen, sharing, openShareDialog, closeShareDialog, shareProject } =
+    usePlaygroundSharing({
+      activeDraftIdRef,
+      projectRef,
+      sharedRecovery,
+      saveDraftSnapshot,
+      onNotice: setNotice,
+      onError: handleShareError,
+    });
 
   const handleLintResult = useCallback((result: PlaygroundReply) => {
     const currentDiagnostics = result.ok
@@ -519,6 +449,50 @@ export default function Playground() {
   );
   const currentSourceMap =
     reply?.ok && reply.revision === revision.current ? reply.result?.sourceMap : undefined;
+  const languageActions = usePlaygroundLanguageActions({
+    editor,
+    client,
+    project: projectRef,
+    revision,
+    workspaceEditApplier,
+    mclPaths,
+    activePath,
+    currentSourceMap,
+    reply,
+    languageServiceFiles,
+    sourceForPath,
+    selectFile,
+    goToEditorPosition,
+    replaceProjectState,
+    finishProjectMutation,
+    setMobileView,
+    setTargetOutputPosition,
+    setShowProblems,
+    setShowDiff,
+    onNotice: setNotice,
+    onError: setError,
+  });
+  const {
+    symbolRenameOpen,
+    symbolRenameInput,
+    symbolRenameError,
+    pendingSymbolRename,
+    symbolReferences,
+    symbolReferencesError,
+    symbolReferencesOpen,
+    setSymbolRenameInput,
+    closeSymbolReferences,
+    navigateToDefinition,
+    goToDefinitionAtCursor,
+    findSymbolReferences,
+    navigateToSourceMapLocation,
+    navigateToYaml,
+    renameSymbol,
+    applySymbolRename,
+    openSymbolRename,
+    closeSymbolRename,
+    resetSymbolRename,
+  } = languageActions;
   const projectPaths = useMemo(
     () => ["main.mcl", ...Object.keys(projectFiles).sort()],
     [projectFiles],
@@ -544,7 +518,7 @@ export default function Playground() {
       keywords: [reference.path, sourceLine],
       onSelect: () => {
         navigateToDefinition(reference);
-        setSymbolReferencesOpen(false);
+        closeSymbolReferences();
       },
     };
   });
@@ -603,7 +577,7 @@ export default function Playground() {
       : []),
     {
       name: "共有",
-      action: () => void shareProject(),
+      action: openShareDialog,
     },
     {
       name: "ファイルを開く",
@@ -788,18 +762,30 @@ export default function Playground() {
   useEffect(() => {
     let cancelled = false;
     const createdClient = createPlaygroundClient(
-      (status) => {
-        if (!cancelled) setWasmStatus(status);
-      },
-      ({ operation, durationMs, outcome }) => {
+      (event) => {
         if (cancelled) return;
-        const name = `mcl.playground.${operation}.${outcome}`;
+        setWasmStatus(event.status);
+        if (event.initializationDurationMs === undefined) return;
+        const name = `${runtimeMeasurementPrefix}worker.initialization.${event.status}.${++runtimeMeasurementSequence.current}`;
         const end = performance.now();
-        performance.clearMeasures(name);
-        performance.measure(name, {
-          start: Math.max(0, end - durationMs),
-          duration: durationMs,
-          detail: { operation, outcome },
+        recordRuntimeMeasurement(
+          name,
+          end - event.initializationDurationMs,
+          event.initializationDurationMs,
+          { status: event.status, workerGeneration: event.workerGeneration },
+        );
+      },
+      (event) => {
+        if (cancelled) return;
+        const name = `${runtimeMeasurementPrefix}${event.operation}.${event.outcome}.${++runtimeMeasurementSequence.current}`;
+        const end = performance.now();
+        recordRuntimeMeasurement(name, end - event.durationMs, event.durationMs, {
+          operation: event.operation,
+          outcome: event.outcome,
+          queueWaitMs: event.queueWaitMs,
+          executionDurationMs: event.executionDurationMs,
+          wasmDurationMs: event.wasmDurationMs,
+          workerGeneration: event.workerGeneration,
         });
       },
     );
@@ -1302,54 +1288,6 @@ export default function Playground() {
     }
   }
 
-  async function shareProject() {
-    const draftId = activeDraftIdRef.current;
-    const snapshot = projectRef.current;
-    try {
-      await saveDraftSnapshot(draftId, snapshot);
-      const payload = createSharedProjectPayload({
-        source: snapshot.source,
-        files: snapshot.files,
-        activePath: snapshot.activePath,
-      });
-      let shareURL: URL;
-      let shareNotice = "共有URLをコピーしました";
-      try {
-        const created = await createShortShare(payload, AbortSignal.timeout(15_000));
-        shareURL = new URL(window.location.href);
-        shareURL.hash = "";
-        shareURL.searchParams.delete("example");
-        shareURL.searchParams.set("s", created.id);
-        clearSharedDraftRecovery(draftId);
-        sharedRecovery.current = undefined;
-        const expiration = new Intl.DateTimeFormat("ja-JP", { dateStyle: "long" }).format(
-          new Date(created.expiresAt),
-        );
-        shareNotice = `共有URLをコピーしました（${expiration}まで有効。URLを知る人は閲覧できます）`;
-      } catch {
-        const fragment = await encodeSharedProject(snapshot);
-        shareURL = new URL(window.location.href);
-        shareURL.searchParams.delete("s");
-        shareURL.hash = fragment.slice(1);
-        const metadata = { draftId, fragment, activePath: snapshot.activePath };
-        resetSharedDraftRecovery(metadata);
-        sharedRecovery.current = {
-          metadata,
-          base: {
-            source: snapshot.source,
-            files: snapshot.files,
-            activePath: snapshot.activePath,
-          },
-        };
-      }
-      await navigator.clipboard.writeText(shareURL.href);
-      history.replaceState(null, "", shareURL);
-      setNotice(shareNotice);
-    } catch (cause) {
-      setError(sharedProjectError(cause, true));
-    }
-  }
-
   async function copyOutput() {
     const yaml = staleYaml ?? reply?.result?.yaml;
     if (yaml === undefined) return;
@@ -1381,204 +1319,6 @@ export default function Playground() {
       return;
     }
     goToEditorPosition(diagnostic);
-  }
-
-  function navigateToDefinition(location: PlaygroundDefinitionLocation) {
-    if (!mclPaths.includes(location.path)) return;
-    setMobileView("editor");
-    const navigation: PlaygroundDiagnostic = {
-      code: "MCL-NAVIGATION",
-      message: "",
-      severity: "info",
-      path: location.path,
-      line: location.range.start.line + 1,
-      column: location.range.start.character + 1,
-    };
-    if (location.path !== projectRef.current.activePath) {
-      selectFile(location.path, navigation);
-      return;
-    }
-    goToEditorPosition(navigation);
-  }
-
-  async function goToDefinitionAtCursor() {
-    const view = editor.current;
-    const playground = client.current;
-    const path = projectRef.current.activePath;
-    if (!view || !playground || !path.endsWith(".mcl")) return;
-
-    const cursor = view.state.selection.main.head;
-    const sourceLine = view.state.doc.lineAt(cursor);
-    const position = { line: sourceLine.number - 1, character: cursor - sourceLine.from };
-    const currentRevision = revision.current;
-    setError("");
-    setNotice("");
-    try {
-      const location = await playground.definition(
-        view.state.doc.toString(),
-        path,
-        position,
-        languageServiceFiles(),
-      );
-      if (currentRevision !== revision.current || editor.current !== view) return;
-      if (location) navigateToDefinition(location);
-      else setNotice("この位置に定義はありません");
-    } catch (cause) {
-      if (currentRevision !== revision.current || editor.current !== view) return;
-      setError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
-  async function findSymbolReferences() {
-    const view = editor.current;
-    const playground = client.current;
-    const path = projectRef.current.activePath;
-    if (!view || !playground || !path.endsWith(".mcl")) return;
-
-    const cursor = view.state.selection.main.head;
-    const sourceLine = view.state.doc.lineAt(cursor);
-    const position = { line: sourceLine.number - 1, character: cursor - sourceLine.from };
-    const source = view.state.doc.toString();
-    const currentRevision = revision.current;
-    setSymbolReferencesError("");
-    setSymbolReferences([]);
-    try {
-      const references = await playground.references(
-        source,
-        path,
-        position,
-        languageServiceFiles(),
-      );
-      if (currentRevision !== revision.current || editor.current !== view) return;
-      setSymbolReferences(references.filter((reference) => mclPaths.includes(reference.path)));
-      setSymbolReferencesOpen(true);
-    } catch (cause) {
-      if (currentRevision !== revision.current || editor.current !== view) return;
-      setSymbolReferencesError(cause instanceof Error ? cause.message : String(cause));
-      setSymbolReferencesOpen(true);
-    }
-  }
-
-  function navigateToSourceMapLocation(path: string, line: number, character: number) {
-    if (!mclPaths.includes(path)) return;
-    const navigation: PlaygroundDiagnostic = {
-      code: "MCL-SOURCE-MAP",
-      message: "",
-      severity: "info",
-      path,
-      line: line + 1,
-      column: character + 1,
-    };
-    setMobileView("editor");
-    if (path !== projectRef.current.activePath) {
-      selectFile(path, navigation);
-      return;
-    }
-    goToEditorPosition(navigation);
-  }
-
-  function navigateToYaml() {
-    const view = editor.current;
-    if (!view || !currentSourceMap || !activePath.endsWith(".mcl")) return;
-    const position = outputPositionForSource(currentSourceMap, view, activePath);
-    if (!position) return;
-    setTargetOutputPosition({ ...position, requestId: reply!.requestId });
-    setShowProblems(false);
-    setShowDiff(false);
-    setMobileView("output");
-  }
-
-  async function renameSymbol(event: SyntheticEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const view = editor.current;
-    const playground = client.current;
-    const path = projectRef.current.activePath;
-    const newName = symbolRenameInput.trim();
-    if (!view || !playground || !path.endsWith(".mcl") || !newName) return;
-
-    const cursor = view.state.selection.main.head;
-    const sourceLine = view.state.doc.lineAt(cursor);
-    const position = { line: sourceLine.number - 1, character: cursor - sourceLine.from };
-    const source = view.state.doc.toString();
-    const currentRevision = revision.current;
-    setSymbolRenameError("");
-    try {
-      const edits = await playground.rename(
-        source,
-        path,
-        position,
-        newName,
-        languageServiceFiles(),
-      );
-      if (currentRevision !== revision.current || editor.current !== view) return;
-      if (edits.length === 0) {
-        setSymbolRenameError("この位置に変更可能なシンボルがありません。");
-        return;
-      }
-      if (edits.some((edit) => !mclPaths.includes(edit.path))) {
-        setSymbolRenameError("変更対象にプロジェクト内のMCLファイル以外が含まれています。");
-        return;
-      }
-      const applyEdits = workspaceEditApplier.current;
-      if (!applyEdits) {
-        setSymbolRenameError("エディターの準備が完了していません。");
-        return;
-      }
-      const sources: Record<string, string> = Object.create(null);
-      for (const edit of edits) {
-        sources[edit.path] =
-          edit.path === path ? view.state.doc.toString() : sourceForPath(edit.path);
-      }
-      const preview = renamePreviewEntries(edits, sources);
-      if (!preview) {
-        setSymbolRenameError("変更位置を確認できません。");
-        return;
-      }
-      setPendingSymbolRename({ edits, sources, revision: currentRevision });
-    } catch (cause) {
-      setSymbolRenameError(cause instanceof Error ? cause.message : String(cause));
-    }
-  }
-
-  async function applySymbolRename() {
-    const pending = pendingSymbolRename;
-    const applyEdits = workspaceEditApplier.current;
-    if (!pending || !applyEdits) return;
-    if (pending.revision !== revision.current) {
-      setSymbolRenameError("ソースが変更されています。もう一度プレビューしてください。");
-      setPendingSymbolRename(undefined);
-      return;
-    }
-
-    const applied = applyEdits(pending.edits, pending.sources);
-    if (!applied.ok) {
-      setSymbolRenameError(applied.error);
-      setPendingSymbolRename(undefined);
-      return;
-    }
-
-    const currentProject = projectRef.current;
-    let nextSource = currentProject.source;
-    const nextFiles = Object.assign(Object.create(null), currentProject.files) as Record<
-      string,
-      ProjectFile
-    >;
-    for (const [editedPath, content] of Object.entries(applied.documents)) {
-      if (editedPath === "main.mcl") nextSource = content;
-      else nextFiles[editedPath] = { encoding: "utf8", content };
-    }
-    replaceProjectState(nextSource, nextFiles, currentProject.activePath);
-    await finishProjectMutation();
-    setSymbolRenameOpen(false);
-    setPendingSymbolRename(undefined);
-    setNotice("シンボル名を変更しました");
-  }
-
-  function openSymbolRename() {
-    setSymbolRenameError("");
-    setSymbolRenameInput("");
-    setPendingSymbolRename(undefined);
-    setSymbolRenameOpen(true);
   }
 
   function sourceForPath(path: string) {
@@ -1762,10 +1502,10 @@ export default function Playground() {
                   </button>
                   <button
                     type="button"
-                    onClick={shareProject}
+                    onClick={openShareDialog}
                     disabled={!draftsLoaded || busy || loadingProject}
                   >
-                    共有リンクをコピー
+                    共有方法
                   </button>
                 </div>
                 <ProjectFileInput
@@ -1820,6 +1560,16 @@ export default function Playground() {
         commandPaletteOpen={commandPaletteOpen}
         onCloseCommandPalette={() => setCommandPaletteOpen(false)}
         commandItems={commandItems}
+      />
+      <PlaygroundShareDialog
+        open={shareDialogOpen}
+        sharing={sharing}
+        onClose={closeShareDialog}
+        onShare={(mode) => {
+          void shareProject(mode).then((shared) => {
+            if (shared) closeShareDialog();
+          });
+        }}
       />
       {loadingProject && <p role="status">読み込み中</p>}
       <nav className="playground-mobile-views" aria-label="表示">
@@ -2143,14 +1893,8 @@ export default function Playground() {
         symbolRenameError={symbolRenameError}
         symbolRenameInput={symbolRenameInput}
         onSymbolRenameInputChange={setSymbolRenameInput}
-        onCloseSymbolRename={() => {
-          setSymbolRenameOpen(false);
-          setPendingSymbolRename(undefined);
-        }}
-        onResetSymbolRename={() => {
-          setPendingSymbolRename(undefined);
-          setSymbolRenameError("");
-        }}
+        onCloseSymbolRename={closeSymbolRename}
+        onResetSymbolRename={resetSymbolRename}
         onApplySymbolRename={() => void applySymbolRename()}
         onSubmitSymbolRename={(event) => void renameSymbol(event)}
         busy={busy}
@@ -2158,7 +1902,7 @@ export default function Playground() {
         symbolReferencesOpen={symbolReferencesOpen}
         symbolReferencesError={symbolReferencesError}
         symbolReferenceItems={symbolReferenceItems}
-        onCloseSymbolReferences={() => setSymbolReferencesOpen(false)}
+        onCloseSymbolReferences={closeSymbolReferences}
       />
       {editorError && (
         <p role="alert">

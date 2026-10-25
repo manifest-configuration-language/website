@@ -4,7 +4,7 @@ import {
   type MclProject,
   type ProjectFiles,
   type RuntimeOperationEvent,
-  type RuntimeStatus,
+  type RuntimeStatusEvent,
 } from "@manifest-configuration-language/browser";
 import type {
   PlaygroundClient,
@@ -15,6 +15,18 @@ import type {
 import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;
+
+type PlaygroundRuntimeStatusEvent = RuntimeStatusEvent & {
+  workerGeneration?: number;
+  initializationDurationMs?: number;
+};
+
+type PlaygroundRuntimeOperationEvent = RuntimeOperationEvent & {
+  queueWaitMs?: number;
+  executionDurationMs?: number;
+  wasmDurationMs?: number;
+  workerGeneration?: number;
+};
 
 function toProjectFiles(
   source: string,
@@ -54,12 +66,12 @@ function toError(error: unknown): PlaygroundDiagnostic {
 }
 
 export function createPlaygroundClient(
-  onRuntimeStatus?: (status: RuntimeStatus) => void,
-  onRuntimeOperation?: (event: RuntimeOperationEvent) => void,
+  onRuntimeStatus?: (event: PlaygroundRuntimeStatusEvent) => void,
+  onRuntimeOperation?: (event: PlaygroundRuntimeOperationEvent) => void,
 ): PlaygroundClient {
   const runtime = createMclRuntime({
     operationTimeoutMs,
-    onStatus: ({ status }) => onRuntimeStatus?.(status),
+    onStatus: (event) => onRuntimeStatus?.(event),
     onOperation: (event) => onRuntimeOperation?.(event),
   });
   const activeControllers = new Set<AbortController>();

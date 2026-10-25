@@ -11,7 +11,7 @@ mise run install
 mise run dev
 ```
 
-`@manifest-configuration-language/browser`の固定バージョンがPlaygroundのWASMと対応する`wasm_exec.js`を供給します。`@manifest-configuration-language/language`はTextMate GrammarとCodeMirror LanguageSupportを提供します。依存バージョンは`package.json`と`pnpm-lock.yaml`で管理し、Renovateのnpm更新で追従します。ビルドではアセットを事前圧縮せず、Caddyが`Accept-Encoding`に応じてzstdまたはgzipでオンザフライ圧縮します。
+`@manifest-configuration-language/browser`の固定バージョンがPlaygroundのWASMと対応する`wasm_exec.js`を供給します。`@manifest-configuration-language/language`はTextMate GrammarとCodeMirror LanguageSupportを提供します。依存バージョンは`package.json`と`pnpm-lock.yaml`で管理し、Renovateのnpm更新で追従します。ビルド時にWASMをBrotli圧縮し、Caddyが`Accept-Encoding`に応じて事前圧縮ファイルを配信します。その他の応答はzstdまたはgzipでオンザフライ圧縮します。
 
 WebsiteのビルドではMCLのGoソースを取得せず、Goコンパイラも使いません。
 
@@ -26,7 +26,7 @@ docker build -t mcl-website:latest .
 docker run --rm -p 8080:8080 mcl-website:latest
 ```
 
-`http://localhost:8080/`でサイトを開きます。Caddyは静的ファイルを非rootで配信し、Playgroundは初回操作時にBrowser SDKのWorkerとWASMを読み込みます。Caddyはクライアントが対応する場合にzstd、gzip、非圧縮のいずれかで応答します。
+`http://localhost:8080/`でサイトを開きます。Caddyは静的ファイルを非rootで配信し、Playgroundは初回操作時にBrowser SDKのWorkerとWASMを読み込みます。WASMのBrotli sidecarが存在する場合、Caddyは対応するクライアントに事前圧縮ファイルを返します。それ以外はzstd、gzip、非圧縮で応答します。
 
 ## コンテナイメージ
 

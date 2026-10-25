@@ -2,7 +2,7 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
-import { I18nProvider } from "react-aria-components";
+import { Button, I18nProvider } from "react-aria-components";
 import type { RuntimeStatus } from "@manifest-configuration-language/browser";
 import { useTranslation } from "react-i18next";
 import { playgroundLocale } from "./playgroundI18n";
@@ -1267,34 +1267,28 @@ export default function Playground() {
         )}
         {loadingProject && <p role="status">{t("loadingProject")}</p>}
         <nav className="playground-mobile-views" aria-label={t("viewMode")}>
-          <button
-            type="button"
-            aria-pressed={mobileView === "editor"}
-            onClick={() => setMobileView("editor")}
-          >
+          <Button aria-pressed={mobileView === "editor"} onPress={() => setMobileView("editor")}>
             {t("editor")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             aria-pressed={mobileView === "output"}
-            onClick={() => {
+            onPress={() => {
               setMobileView("output");
               setShowProblems(false);
             }}
           >
             {t("output")}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             aria-pressed={mobileView === "problems"}
-            onClick={() => {
+            onPress={() => {
               setMobileView("problems");
               setShowProblems(true);
               setShowDiff(false);
             }}
           >
             {t("problemsCount", { count: diagnostics.length })}
-          </button>
+          </Button>
         </nav>
         <Group
           className="playground-panels"
@@ -1449,9 +1443,9 @@ export default function Playground() {
           )}
           <span>{t("problemsCount", { count: diagnostics.length })}</span>
           {pendingInitialImport && (
-            <button type="button" onClick={() => void openDraft(pendingInitialImport.id)}>
+            <Button onPress={() => void openDraft(pendingInitialImport.id)}>
               {t("openImportedProject", { name: pendingInitialImport.name })}
-            </button>
+            </Button>
           )}
           <span>{t("filesCount", { count: Object.keys(projectFiles).length + 1 })}</span>
           <span>{(projectSizeBytes / 1024 / 1024).toFixed(1)} MiB</span>
@@ -1485,14 +1479,14 @@ export default function Playground() {
         {editorError && (
           <p role="alert">
             {editorError}{" "}
-            <button
-              onClick={() => {
+            <Button
+              onPress={() => {
                 setEditorError("");
                 setEditorAttempt((attempt) => attempt + 1);
               }}
             >
               {t("retry")}
-            </button>
+            </Button>
           </p>
         )}
         {error && <p role="alert">{error}</p>}

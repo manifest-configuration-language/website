@@ -245,6 +245,7 @@ export const resources = {
       projectPathsOverlap: "File and directory paths overlap",
       projectUpdateFailed: "Could not update the project",
       fileContentsLabel: "{{path}} contents",
+      clusterScopeLabel: "Cluster-scoped",
     },
   },
   ja: {
@@ -489,6 +490,7 @@ export const resources = {
       projectPathsOverlap: "ファイルとディレクトリのパスが重複しています",
       projectUpdateFailed: "プロジェクトを更新できません",
       fileContentsLabel: "{{path}}の内容",
+      clusterScopeLabel: "クラスタースコープ",
     },
   },
 } as const;
@@ -735,6 +737,7 @@ declare global {
       projectPathsOverlap: string;
       projectUpdateFailed: string;
       fileContentsLabel: string;
+      clusterScopeLabel: string;
     }
   }
 }

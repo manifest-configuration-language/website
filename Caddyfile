@@ -4,6 +4,8 @@
 
 :8080 {
 	root * /srv
+	@playgroundShare path_regexp playgroundShare ^/playground/s/[A-Za-z0-9_-]{22}/?$
+	rewrite @playgroundShare /playground/index.html
 	encode zstd gzip
 	file_server {
 		precompressed br

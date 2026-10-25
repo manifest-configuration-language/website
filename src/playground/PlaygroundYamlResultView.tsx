@@ -1,6 +1,15 @@
-import type { RefObject } from "react";
-import { Command } from "cmdk";
+import { useMemo, useState, type RefObject } from "react";
+import {
+  Button,
+  Disclosure,
+  DisclosureGroup,
+  DisclosurePanel,
+  Heading,
+  Input,
+  SearchField,
+} from "react-aria-components";
 import { useTranslation } from "react-i18next";
+import { parseDocument } from "yaml";
 
 export type YamlResource = {
   key: string;
@@ -52,22 +61,19 @@ export function PlaygroundYamlResultView({
           {stale ? t("staleOutput") : t("latestOutput")}
         </span>
         {selectedResource && (
-          <button type="button" className="playground-resource-clear" onClick={onClearResource}>
+          <Button className="playground-resource-clear" onPress={onClearResource}>
             {t("clearResourceSelection")}
-          </button>
+          </Button>
         )}
-        <button
-          type="button"
+        <Button
           className="playground-resource-toggle"
           aria-pressed={showResources}
-          onClick={onToggleResources}
-          disabled={resources.length === 0}
+          onPress={onToggleResources}
+          isDisabled={resources.length === 0}
         >
           {selectedResource?.label ?? t("resource")}
-        </button>
-        <button type="button" onClick={onSearch}>
-          {t("search")}
-        </button>
+        </Button>
+        <Button onPress={onSearch}>{t("search")}</Button>
       </div>
       <ResourceBrowser resources={resources} onSelect={onSelectResource} hidden={!showResources} />
       {!selectedResource && (
@@ -101,39 +107,125 @@ export function ResourceBrowser({
   showChanges?: boolean;
 }) {
   const { t } = useTranslation();
+  const [query, setQuery] = useState("");
+  const clusterScopeLabel = t("clusterScopeLabel") as string;
+  const groups = useMemo(
+    () => groupResources(resources, clusterScopeLabel),
+    [clusterScopeLabel, resources],
+  );
+  const visibleGroups = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    if (!normalizedQuery) return groups;
+    return groups
+      .map((group) => ({
+        ...group,
+        resources: group.resources.filter((resource) =>
+          [resource.label, resource.kind, resource.namespace, resource.apiVersion]
+            .filter(Boolean)
+            .some((value) => value?.toLocaleLowerCase().includes(normalizedQuery)),
+        ),
+      }))
+      .filter((group) => group.resources.length > 0);
+  }, [groups, query]);
   return (
     <div className="playground-resource-browser" hidden={hidden}>
-      <Command label={t("resourceSearch")} loop>
-        <Command.Input aria-label={t("resourceSearch")} placeholder={t("searchResources")} />
-        <Command.List>
-          <Command.Empty>{t("noResourcesMatch")}</Command.Empty>
-          {resources.map((resource) => (
-            <Command.Item
-              key={resource.key}
-              value={resource.label}
-              keywords={[resource.apiVersion, resource.namespace].filter((value): value is string =>
-                Boolean(value),
-              )}
-              onSelect={() => onSelect(resource)}
-            >
-              <span className="playground-resource-name">{resource.label}</span>
-              <span className="playground-resource-details">
-                {showChanges
-                  ? resource.previous && resource.current
-                    ? resource.previous.yaml === resource.current.yaml
-                      ? t("unchanged")
-                      : t("changed")
-                    : resource.current
-                      ? t("added")
-                      : t("deleted")
-                  : [resource.apiVersion, resource.namespace].filter(Boolean).join(" · ")}
-              </span>
-            </Command.Item>
+      <SearchField
+        aria-label={t("resourceSearch")}
+        className="playground-resource-search"
+        value={query}
+        onChange={setQuery}
+      >
+        <Input placeholder={t("searchResources")} />
+        {query && (
+          <Button aria-label={t("close")} onPress={() => setQuery("")}>
+            ×
+          </Button>
+        )}
+      </SearchField>
+      {visibleGroups.length === 0 ? (
+        <p className="playground-resource-empty">{t("noResourcesMatch")}</p>
+      ) : (
+        <DisclosureGroup
+          className="playground-resource-groups"
+          aria-label={t("resource")}
+          defaultExpandedKeys={new Set(visibleGroups.map((group) => group.key))}
+        >
+          {visibleGroups.map((group) => (
+            <Disclosure key={group.key} id={group.key} className="playground-resource-group">
+              <Heading className="playground-resource-group-heading" level={3}>
+                <Button slot="trigger" className="playground-resource-group-trigger">
+                  <span>{group.kind}</span>
+                  <span className="playground-resource-details">{group.namespace}</span>
+                </Button>
+              </Heading>
+              <DisclosurePanel className="playground-resource-group-items">
+                {group.resources.map((resource) => (
+                  <Button
+                    key={resource.key}
+                    className="playground-resource-item"
+                    onPress={() => onSelect(resource)}
+                  >
+                    <span className="playground-resource-name">{resource.label}</span>
+                    <span className="playground-resource-details">
+                      {showChanges
+                        ? resource.previous && resource.current
+                          ? resource.previous.yaml === resource.current.yaml
+                            ? t("unchanged")
+                            : t("changed")
+                          : resource.current
+                            ? t("added")
+                            : t("deleted")
+                        : resource.apiVersion}
+                    </span>
+                  </Button>
+                ))}
+              </DisclosurePanel>
+            </Disclosure>
           ))}
-        </Command.List>
-      </Command>
+        </DisclosureGroup>
+      )}
     </div>
   );
+}
+
+type GroupedResource = YamlResource & { kind: string };
+type ResourceGroup = {
+  key: string;
+  kind: string;
+  namespace: string;
+  resources: GroupedResource[];
+};
+
+function groupResources(resources: YamlResource[], clusterScopeLabel: string): ResourceGroup[] {
+  const groups = new Map<string, ResourceGroup>();
+  for (const resource of resources) {
+    const data = resource.current?.yaml ?? resource.previous?.yaml ?? resource.yaml;
+    let yamlKind: unknown;
+    try {
+      yamlKind = parseDocument(data, { schema: "core", stringKeys: true }).get("kind");
+    } catch {
+      yamlKind = undefined;
+    }
+    const kind = resource.label.includes("/")
+      ? resource.label.slice(0, resource.label.indexOf("/"))
+      : typeof yamlKind === "string" && yamlKind.length > 0
+        ? yamlKind
+        : resource.label;
+    const namespace = resource.namespace || clusterScopeLabel;
+    const key = JSON.stringify([kind, namespace]);
+    const groupedResource = { ...resource, kind };
+    const group = groups.get(key);
+    if (group) group.resources.push(groupedResource);
+    else groups.set(key, { key, kind, namespace, resources: [groupedResource] });
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      resources: group.resources.toSorted((left, right) => left.label.localeCompare(right.label)),
+    }))
+    .toSorted((left, right) =>
+      `${left.kind}\0${left.namespace}`.localeCompare(`${right.kind}\0${right.namespace}`),
+    );
 }
 
 function YamlNavigation({
@@ -150,9 +242,9 @@ function YamlNavigation({
   return (
     <nav className="yaml-document-nav" aria-label={t("yamlDocument")} hidden={hidden}>
       {resources.map((resource) => (
-        <button type="button" key={resource.key} onClick={() => onSelect(resource.line)}>
+        <Button key={resource.key} onPress={() => onSelect(resource.line)}>
           {resource.label}
-        </button>
+        </Button>
       ))}
     </nav>
   );

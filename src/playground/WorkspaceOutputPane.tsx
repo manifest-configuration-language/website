@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Button } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 
 type Props = {
@@ -46,61 +47,56 @@ export function WorkspaceOutputPane({
     <div className="playground-result-panel">
       <div className="playground-result-toolbar">
         <div className="playground-result-tabs" role="group" aria-label={t("results")}>
-          <button
-            type="button"
+          <Button
             aria-pressed={!showProblems && !showDiff && !showReferences}
-            onClick={() => {
+            onPress={() => {
               onCloseReferences();
               onShowProblemsChange(false);
               onShowDiffChange(false);
             }}
           >
             YAML
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             aria-pressed={!showReferences && showProblems}
-            onClick={() => {
+            onPress={() => {
               onCloseReferences();
               onShowProblemsChange(true);
               onShowDiffChange(false);
             }}
           >
             {t("problemsCount", { count: diagnosticsCount })}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             aria-pressed={!showReferences && showDiff}
-            onClick={() => {
+            onPress={() => {
               onCloseReferences();
               onShowProblemsChange(false);
               onShowDiffChange(true);
             }}
-            disabled={!canShowDiff}
+            isDisabled={!canShowDiff}
           >
             {t("diff")}
-          </button>
+          </Button>
           {showReferences && (
-            <button type="button" aria-pressed="true" onClick={onOpenReferences}>
+            <Button aria-pressed="true" onPress={onOpenReferences}>
               {t("referencesCount", { count: referenceCount })}
-            </button>
+            </Button>
           )}
         </div>
-        <button type="button" onClick={onCopyOutput} disabled={!canCopyOutput}>
+        <Button onPress={onCopyOutput} isDisabled={!canCopyOutput}>
           {t("copy")}
-        </button>
-        <button type="button" onClick={onDownloadOutput} disabled={!canDownloadOutput}>
+        </Button>
+        <Button onPress={onDownloadOutput} isDisabled={!canDownloadOutput}>
           {t("download")}
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           className="playground-layout-toggle"
-          onClick={onToggleOrientation}
+          onPress={onToggleOrientation}
           aria-label={orientation === "vertical" ? t("arrangeSideBySide") : t("arrangeStacked")}
-          title={orientation === "vertical" ? t("arrangeSideBySide") : t("arrangeStacked")}
         >
           {orientation === "vertical" ? t("arrangeHorizontal") : t("arrangeVertical")}
-        </button>
+        </Button>
       </div>
       {children}
     </div>

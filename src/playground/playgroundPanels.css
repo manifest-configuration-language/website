@@ -182,46 +182,107 @@
   display: none;
 }
 
-.playground-resource-browser [cmdk-root] {
+.playground-resource-browser {
   display: flex;
   height: 100%;
   min-height: 0;
   flex-direction: column;
 }
 
-.playground-resource-browser [cmdk-input] {
-  width: 100%;
+.playground-resource-search {
+  display: flex;
   flex: 0 0 auto;
+  gap: 0.5rem;
   padding: 0.55rem 0.8rem;
-  border: 0;
   border-bottom: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-resource-search input {
+  width: 100%;
+  border: 0;
   background: var(--sl-color-bg);
   color: var(--sl-color-text);
   font: inherit;
 }
 
-.playground-resource-browser [cmdk-list] {
+.playground-resource-search button {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.25rem;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-text);
+  font: inherit;
+}
+
+.playground-resource-groups {
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
-  padding: 0.35rem;
 }
 
-.playground-resource-browser [cmdk-item] {
+.playground-resource-group {
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+
+.playground-resource-group-heading {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.playground-resource-group-trigger {
   display: flex;
-  min-height: 2.8rem;
+  width: 100%;
+  min-height: 2.5rem;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.45rem 0.65rem;
-  border-radius: 0.35rem;
+  padding: 0.45rem 0.75rem;
+  border: 0;
+  background: transparent;
   color: var(--sl-color-text);
+  font: inherit;
+  text-align: start;
+}
+
+.playground-resource-group-trigger:hover,
+.playground-resource-group-trigger:focus-visible {
+  background: var(--sl-color-gray-6);
+}
+
+.playground-resource-group-items {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0 0.35rem 0.35rem;
+}
+
+.playground-resource-item {
+  display: flex;
+  width: 100%;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: var(--sl-color-text);
+  font: inherit;
+  text-align: start;
   cursor: pointer;
 }
 
-.playground-resource-browser [cmdk-item][aria-selected="true"] {
+.playground-resource-item:hover,
+.playground-resource-item:focus-visible {
   background: var(--sl-color-gray-6);
   color: var(--sl-color-text-accent);
+}
+
+.playground-resource-empty {
+  padding: 1rem;
+  color: var(--sl-color-gray-2);
+  text-align: center;
 }
 
 .playground-resource-name {
@@ -280,12 +341,6 @@
   font: inherit;
   font-size: 0.75rem;
   cursor: pointer;
-}
-
-.playground-resource-browser [cmdk-empty] {
-  padding: 1rem;
-  color: var(--sl-color-gray-2);
-  text-align: center;
 }
 
 .playground-result-content .playground-output {

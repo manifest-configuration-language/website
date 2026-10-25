@@ -45,7 +45,8 @@ export function usePlaygroundSharing({
       shareURL.hash = "";
       shareURL.searchParams.delete("example");
       const created = await createShortShare(payload, t, AbortSignal.timeout(15_000));
-      shareURL.searchParams.set("s", created.id);
+      shareURL.pathname = `/playground/s/${created.id}`;
+      shareURL.searchParams.delete("s");
       await navigator.clipboard.writeText(shareURL.href);
       if (activeDraftIdRef.current === draftId && projectRef.current === snapshot)
         history.replaceState(null, "", shareURL);

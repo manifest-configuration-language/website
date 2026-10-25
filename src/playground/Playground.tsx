@@ -10,8 +10,6 @@ import {
 } from "react";
 import type { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
-import { selectNextOccurrence, selectSelectionMatches } from "@codemirror/search";
-import { toggleComment } from "@codemirror/commands";
 import { I18nProvider } from "react-aria-components";
 import type { RuntimeStatus } from "@manifest-configuration-language/browser";
 import { useTranslation } from "react-i18next";
@@ -38,6 +36,7 @@ import { DraftConflictDialog } from "./DraftConflictDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { WorkspaceEditorPane } from "./WorkspaceEditorPane";
+import { createPlaygroundCommandItems } from "./createPlaygroundCommandItems";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import "./symbolRenamePreview.css";
@@ -269,7 +268,9 @@ async function loadExampleFiles(
 
 function clearShareReferenceFromURL() {
   const url = new URL(window.location.href);
-  if (!url.hash.startsWith("#project=") && !url.searchParams.has("s")) return;
+  const isShortSharePath = /^\/playground\/s\/[A-Za-z0-9_-]{22}\/?$/.test(url.pathname);
+  if (!isShortSharePath && !url.hash.startsWith("#project=") && !url.searchParams.has("s")) return;
+  if (isShortSharePath) url.pathname = "/playground/";
   if (url.hash.startsWith("#project=")) url.hash = "";
   url.searchParams.delete("s");
   history.replaceState(null, "", url);
@@ -533,132 +534,34 @@ export default function Playground() {
       },
     };
   });
-  const commands = [
-    { name: t("commandRun"), action: () => void run() },
-    ...(activePath.endsWith(".mcl")
-      ? [{ name: t("commandFormat"), action: () => void formatSource() }]
-      : []),
-    {
-      name: t("commandToggleComment"),
-      action: () => {
-        const view = editor.current;
-        if (!view) return;
-        view.focus();
-        toggleComment(view);
-      },
+  const commandItems = createPlaygroundCommandItems(t, {
+    editor,
+    activePath,
+    hasSourceMap: Boolean(currentSourceMap),
+    run: () => void run(),
+    format: () => void formatSource(),
+    openExamples: () => setExamplesOpen(true),
+    toggleExplorer: () => setExplorerOpen((value) => !value),
+    goToDefinition: () => void goToDefinitionAtCursor(),
+    goToYaml: navigateToYaml,
+    findReferences: openSymbolReferences,
+    renameSymbol: openSymbolRename,
+    share: openShareDialog,
+    openFile: () => setQuickOpen(true),
+    createFile: () => {
+      setFileActionError("");
+      setFilePathInput("");
+      setFileAction({ kind: "create" });
     },
-    {
-      name: t("commandNextOccurrence"),
-      action: () => {
-        const view = editor.current;
-        if (!view) return;
-        view.focus();
-        selectNextOccurrence(view);
-      },
+    newProject: createDraft,
+    showOutput: () => setMobileView("output"),
+    showProblems: () => {
+      setMobileView("problems");
+      setShowProblems(true);
+      setShowDiff(false);
     },
-    {
-      name: t("commandSelectMatches"),
-      action: () => {
-        const view = editor.current;
-        if (!view) return;
-        view.focus();
-        selectSelectionMatches(view);
-      },
-    },
-    { name: t("commandOpenExamples"), action: () => setExamplesOpen(true) },
-    {
-      name: t("commandToggleExplorer"),
-      action: () => setExplorerOpen((value) => !value),
-    },
-    ...(activePath.endsWith(".mcl")
-      ? [{ name: t("commandGoToDefinition"), action: () => void goToDefinitionAtCursor() }]
-      : []),
-    ...(currentSourceMap && activePath.endsWith(".mcl")
-      ? [{ name: t("commandGoToYaml"), action: navigateToYaml }]
-      : []),
-    ...(activePath.endsWith(".mcl")
-      ? [
-          {
-            name: t("commandFindReferences"),
-            action: openSymbolReferences,
-          },
-          {
-            name: t("commandRenameSymbol"),
-            action: openSymbolRename,
-          },
-        ]
-      : []),
-    {
-      name: t("commandShare"),
-      action: openShareDialog,
-    },
-    {
-      name: t("commandOpenFile"),
-      action: () => {
-        setQuickOpen(true);
-      },
-    },
-    {
-      name: t("commandCreateFile"),
-      action: () => {
-        setFileActionError("");
-        setFilePathInput("");
-        setFileAction({ kind: "create" });
-      },
-    },
-    { name: t("commandNewProject"), action: () => createDraft() },
-    { name: t("commandShowOutput"), action: () => setMobileView("output") },
-    {
-      name: t("commandShowProblems"),
-      action: () => {
-        setMobileView("problems");
-        setShowProblems(true);
-        setShowDiff(false);
-      },
-    },
-  ];
-  const commandShortcuts: Record<string, string> = {
-    [t("commandRun")]: "Ctrl/⌘ Enter",
-    [t("commandFormat")]: "Shift+Alt+F",
-    [t("commandToggleComment")]: "Ctrl/⌘ /",
-    [t("commandNextOccurrence")]: "Ctrl/⌘ D",
-    [t("commandSelectMatches")]: "Ctrl/⌘ ⇧ L",
-    [t("commandGoToDefinition")]: "F12",
-    [t("commandFindReferences")]: "Shift+F12",
-    [t("commandRenameSymbol")]: "F2",
-    [t("commandOpenFile")]: "Ctrl/⌘ P",
-    [t("commandToggleExplorer")]: "Ctrl/⌘ ⇧ E",
-    [t("commandShowProblems")]: "Ctrl/⌘ ⇧ M",
-  };
-  const commandKeywords: Record<string, string[]> = {
-    [t("commandRun")]: ["run", "render"],
-    [t("commandFormat")]: ["format", "document"],
-    [t("commandToggleComment")]: ["toggle comment", "line comment", "ctrl slash"],
-    [t("commandNextOccurrence")]: ["select next occurrence", "multi cursor", "ctrl d"],
-    [t("commandSelectMatches")]: ["select all occurrences", "multi cursor", "ctrl shift l"],
-    [t("commandOpenExamples")]: ["examples"],
-    [t("commandGoToDefinition")]: ["definition", "f12"],
-    [t("commandGoToYaml")]: ["source map", "yaml"],
-    [t("commandFindReferences")]: ["references", "shift f12"],
-    [t("commandRenameSymbol")]: ["rename", "f2"],
-    [t("commandShare")]: ["share"],
-    [t("commandOpenFile")]: ["quick open", "open file", "ctrl p"],
-    [t("commandToggleExplorer")]: ["explorer", "files", "ctrl shift e"],
-    [t("commandCreateFile")]: ["new file", "create file"],
-    [t("commandNewProject")]: ["new project"],
-    [t("commandShowOutput")]: ["output"],
-    [t("commandShowProblems")]: ["problems", "diagnostics", "ctrl shift m"],
-  };
-  const commandItems: QuickAccessItem[] = commands.map((command) => ({
-    value: command.name,
-    label: command.name,
-    shortcut: commandShortcuts[command.name],
-    keywords: commandKeywords[command.name],
-    onSelect: () => {
-      setCommandPaletteOpen(false);
-      command.action();
-    },
-  }));
+    closePalette: () => setCommandPaletteOpen(false),
+  });
   const quickOpenItems: QuickAccessItem[] = quickPaths.map((path) => ({
     value: path,
     label: path,
@@ -901,7 +804,10 @@ export default function Playground() {
         activateDraft(activeId, t("defaultProjectName"));
       }
 
-      const shortShareId = new URL(window.location.href).searchParams.get("s");
+      const currentURL = new URL(window.location.href);
+      const shortShareId =
+        currentURL.pathname.match(/^\/playground\/s\/([A-Za-z0-9_-]{22})\/?$/)?.[1] ??
+        currentURL.searchParams.get("s");
       const hasLegacyFragment = window.location.hash.startsWith("#project=");
       try {
         if (shortShareId) {

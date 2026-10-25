@@ -5,9 +5,11 @@ import {
   type DragEvent,
   type InputHTMLAttributes,
 } from "react";
+import { Button } from "react-aria-components";
 import { useTranslation } from "react-i18next";
 import type { LoadedProject } from "./types";
 import { projectLimits } from "./projectValidation.js";
+import { ProjectDropError, readProjectDrop } from "./projectDrop";
 import { readProjectArchive } from "./projectZip";
 import "./ProjectFileInput.css";
 
@@ -43,9 +45,10 @@ export function ProjectFileInput({
   const [loading, setLoading] = useState(false);
   const [dragging, setDragging] = useState(false);
 
-  async function loadFiles(selected: File[], fromArchive = false) {
+  async function loadFiles(selected: File[], fromArchive = false, reservedSelection?: number) {
     if (!selected.length) return;
-    const currentSelection = ++selection.current;
+    const currentSelection = reservedSelection ?? ++selection.current;
+    if (currentSelection !== selection.current) return;
     setLoading(true);
     onLoading(true);
     try {
@@ -74,42 +77,41 @@ export function ProjectFileInput({
     if (!disabled && !loading) setDragging(true);
   }
 
-  function handleDrop(event: DragEvent<HTMLDivElement>) {
+  async function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragging(false);
     if (disabled || loading) return;
-    const files = [...event.dataTransfer.files];
-    if (files.length !== 1 || !files[0].name.toLowerCase().endsWith(".zip")) {
-      onError(t("zipRequiredError"));
-      return;
+    const currentSelection = ++selection.current;
+    try {
+      const imported = await readProjectDrop(event.dataTransfer, projectLimits.projectFiles);
+      if (currentSelection !== selection.current) return;
+      await loadFiles(imported.files, imported.archive, currentSelection);
+    } catch (cause) {
+      if (currentSelection !== selection.current) return;
+      onError(
+        cause instanceof ProjectDropError
+          ? cause.code === "tooManyFiles"
+            ? t("projectTooManyFiles", { count: projectLimits.projectFiles })
+            : cause.code === "zipMustBeAlone"
+              ? t("dropZipMustBeAloneError")
+              : t("dropEmptyError")
+          : t("dropImportError"),
+      );
     }
-    void loadFiles(files, true);
   }
 
   return (
     <section className="playground-project-files" aria-label={t("projectFolder")}>
       <div className="playground-project-file-actions">
-        <button
-          type="button"
-          onClick={() => directoryInput.current?.click()}
-          disabled={disabled || loading}
-        >
+        <Button onPress={() => directoryInput.current?.click()} isDisabled={disabled || loading}>
           {t("openFolder")}
-        </button>
-        <button
-          type="button"
-          onClick={() => archiveInput.current?.click()}
-          disabled={disabled || loading}
-        >
+        </Button>
+        <Button onPress={() => archiveInput.current?.click()} isDisabled={disabled || loading}>
           {t("openZip")}
-        </button>
-        <button
-          type="button"
-          onClick={() => void onExport()}
-          disabled={disabled || loading || fileCount === 0}
-        >
+        </Button>
+        <Button onPress={() => void onExport()} isDisabled={disabled || loading || fileCount === 0}>
           {t("exportZip")}
-        </button>
+        </Button>
         <input
           ref={directoryInput}
           className="playground-project-file-picker"
@@ -137,13 +139,13 @@ export function ProjectFileInput({
         onDragEnter={handleDragOver}
         onDragOver={handleDragOver}
         onDragLeave={() => setDragging(false)}
-        onDrop={handleDrop}
-        aria-label={t("zipDropZone")}
+        onDrop={(event) => void handleDrop(event)}
+        aria-label={t("projectDropZone")}
       >
         <span className="playground-project-dropzone-icon" aria-hidden="true">
           ↓
         </span>
-        <span>{t("dropZipHere")}</span>
+        <span>{t("dropProjectHere")}</span>
       </div>
       <div className="playground-project-summary" aria-live="polite">
         <span>{t("filesCount", { count: fileCount })}</span>

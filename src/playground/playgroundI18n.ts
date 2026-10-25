@@ -154,10 +154,12 @@ export const resources = {
       exportZip: "Export ZIP",
       importFolder: "Import project folder",
       importZip: "Import project ZIP",
-      zipDropZone: "ZIP file drop zone",
-      dropZipHere: "Drop a ZIP file here",
+      projectDropZone: "Project import drop zone",
+      dropProjectHere: "Drop files, folders, or a ZIP",
       projectSizeSummary: "{{size}} / {{limit}}",
-      zipRequiredError: "Drop one ZIP file.",
+      dropZipMustBeAloneError: "Drop a ZIP by itself.",
+      dropEmptyError: "No project files were found.",
+      dropImportError: "Could not read the dropped files.",
       goToDefinitionMissing: "No definition at this position",
       renameSymbolNoTarget: "No renameable symbol at this position.",
       renameSymbolUnsupportedFiles: "Rename is unavailable for unsupported files.",
@@ -399,10 +401,12 @@ export const resources = {
       exportZip: "ZIPを書き出す",
       importFolder: "プロジェクトフォルダーを読み込む",
       importZip: "プロジェクトZIPを読み込む",
-      zipDropZone: "ZIPファイルのドロップ領域",
-      dropZipHere: "ZIPをここにドロップ",
+      projectDropZone: "プロジェクトのドロップ領域",
+      dropProjectHere: "ファイル・フォルダー・ZIPをドロップ",
       projectSizeSummary: "{{size}} / {{limit}}",
-      zipRequiredError: "ZIPファイルを1つドロップしてください。",
+      dropZipMustBeAloneError: "ZIPは単独でドロップしてください。",
+      dropEmptyError: "プロジェクトファイルが見つかりませんでした。",
+      dropImportError: "ドロップしたファイルを読み込めませんでした。",
       goToDefinitionMissing: "この位置に定義はありません",
       renameSymbolNoTarget: "この位置に変更可能なシンボルがありません。",
       renameSymbolUnsupportedFiles:
@@ -650,10 +654,12 @@ declare global {
       exportZip: string;
       importFolder: string;
       importZip: string;
-      zipDropZone: string;
-      dropZipHere: string;
+      projectDropZone: string;
+      dropProjectHere: string;
       projectSizeSummary: string;
-      zipRequiredError: string;
+      dropZipMustBeAloneError: string;
+      dropEmptyError: string;
+      dropImportError: string;
       goToDefinitionMissing: string;
       renameSymbolNoTarget: string;
       renameSymbolUnsupportedFiles: string;

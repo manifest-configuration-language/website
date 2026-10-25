@@ -20,14 +20,12 @@ import exampleCatalog from "./generatedExamples.json";
 import { usePlaygroundProject } from "./usePlaygroundProject";
 import { usePlaygroundExecution } from "./usePlaygroundExecution";
 import { renamePreviewEntries, usePlaygroundLanguageActions } from "./usePlaygroundLanguageActions";
-import { type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
 import { PlaygroundShareDialog } from "./PlaygroundShareDialog";
 import { DraftConflictDialog } from "./DraftConflictDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { WorkspaceLayout } from "./WorkspaceLayout";
-import { createPlaygroundCommandItems } from "./createPlaygroundCommandItems";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import { usePlaygroundLayout } from "./usePlaygroundLayout";
@@ -37,6 +35,7 @@ import { createSourcePositionStore } from "./sourcePositionStore";
 import "./symbolRenamePreview.css";
 import { DraftConflictError, usePlaygroundPersistence } from "./usePlaygroundPersistence";
 import type { StoredProject } from "./usePlaygroundPersistence";
+import { usePlaygroundQuickAccess } from "./usePlaygroundQuickAccess";
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -167,9 +166,7 @@ export default function Playground() {
   const [examplesOpen, setExamplesOpen] = useState(false);
   const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
-  const [quickOpen, setQuickOpen] = useState(false);
   const [recentPaths, setRecentPaths] = useState(["main.mcl"]);
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [mobileView, setMobileView] = useState<"editor" | "output" | "problems">("editor");
   const reportPersistenceError = useCallback((cause: unknown) => {
     if (cause instanceof DraftConflictError) return;
@@ -334,41 +331,6 @@ export default function Playground() {
     () => ["main.mcl", ...Object.keys(projectFiles).sort()],
     [projectFiles],
   );
-  const quickPaths = projectPaths
-    .filter((path) => projectFiles[path]?.encoding === "utf8" || path === "main.mcl")
-    .sort((left, right) => {
-      const leftRecent = recentPaths.indexOf(left);
-      const rightRecent = recentPaths.indexOf(right);
-      if (leftRecent >= 0 || rightRecent >= 0)
-        return (
-          (leftRecent < 0 ? Infinity : leftRecent) - (rightRecent < 0 ? Infinity : rightRecent)
-        );
-      return left.localeCompare(right);
-    });
-  const symbolReferenceItems: QuickAccessItem[] = symbolReferences.map((reference, index) => {
-    const { line, character } = reference.range.start;
-    const sourceLine = sourceForPath(reference.path).split(/\r?\n/)[line]?.trim() ?? "";
-    const location = `${reference.path}:${line + 1}:${character + 1}`;
-    return {
-      value: `${location} ${sourceLine} ${index}`,
-      label: `${location}  ${sourceLine}`,
-      keywords: [reference.path, sourceLine],
-      onSelect: () => {
-        navigateToDefinition(reference);
-        closeSymbolReferences();
-        setShowProblems(false);
-        setShowDiff(false);
-      },
-    };
-  });
-  const quickOpenItems: QuickAccessItem[] = quickPaths.map((path) => ({
-    value: path,
-    label: path,
-    onSelect: () => {
-      setQuickOpen(false);
-      selectFile(path);
-    },
-  }));
   const activeSource =
     activePath === "main.mcl"
       ? project.source
@@ -509,32 +471,55 @@ export default function Playground() {
     setLoadingProject,
     setNotice,
   });
-
-  const commandItems = createPlaygroundCommandItems(t, {
-    editor,
-    activePath,
-    hasSourceMap: Boolean(currentSourceMap),
-    shortcuts: editorSettings.shortcuts,
-    run: () => void run(),
-    format: () => void formatSource(),
+  const quickAccess = usePlaygroundQuickAccess({
+    t,
+    examples,
+    samples,
+    paths: projectPaths,
+    files: projectFiles,
+    recentPaths,
+    sourceForPath,
+    selectFile,
+    selectSample,
+    symbolReferences,
+    navigateToDefinition,
+    closeSymbolReferences,
+    setShowProblems,
+    setShowDiff,
     openExamples: () => setExamplesOpen(true),
-    toggleExplorer: () => setExplorerOpen((value) => !value),
-    goToDefinition: () => void goToDefinitionAtCursor(),
-    goToYaml: navigateToYaml,
-    findReferences: openSymbolReferences,
-    renameSymbol: openSymbolRename,
-    share: openShareDialog,
-    openFile: () => setQuickOpen(true),
-    createFile: requestCreateFile,
-    newProject: createDraft,
-    showOutput: () => setMobileView("output"),
-    showProblems: () => {
-      setMobileView("problems");
-      setShowProblems(true);
-      setShowDiff(false);
+    commandActions: {
+      editor,
+      activePath,
+      hasSourceMap: Boolean(currentSourceMap),
+      shortcuts: editorSettings.shortcuts,
+      run: () => void run(),
+      format: () => void formatSource(),
+      toggleExplorer: () => setExplorerOpen((value) => !value),
+      goToDefinition: () => void goToDefinitionAtCursor(),
+      goToYaml: navigateToYaml,
+      findReferences: openSymbolReferences,
+      renameSymbol: openSymbolRename,
+      share: openShareDialog,
+      createFile: requestCreateFile,
+      newProject: createDraft,
+      showOutput: () => setMobileView("output"),
+      showProblems: () => {
+        setMobileView("problems");
+        setShowProblems(true);
+        setShowDiff(false);
+      },
     },
-    closePalette: () => setCommandPaletteOpen(false),
   });
+  const {
+    commandItems,
+    commandPaletteOpen,
+    exampleItems,
+    quickOpen,
+    quickOpenItems,
+    setCommandPaletteOpen,
+    setQuickOpen,
+    symbolReferenceItems,
+  } = quickAccess;
 
   const { runInitialProjectIfReady } = usePlaygroundClient({
     client,
@@ -780,37 +765,7 @@ export default function Playground() {
         <PlaygroundQuickAccessDialogs
           examplesOpen={examplesOpen}
           onCloseExamples={() => setExamplesOpen(false)}
-          exampleItems={[
-            {
-              value: "configMap",
-              label: "ConfigMap",
-              group: t("examplesGroupBasics"),
-              keywords: [t("examplesGroupBasics"), "variables", "manifest"],
-              description: t("exampleConfigMapDescription"),
-              preview: samples.configMap.split("\n").slice(0, 6).join("\n"),
-              onSelect: () => void selectSample("configMap"),
-            },
-            {
-              value: "deployment",
-              label: "Deployment",
-              group: t("examplesGroupBasics"),
-              keywords: [t("examplesGroupBasics"), "kubernetes", "manifest"],
-              description: t("exampleDeploymentDescription"),
-              preview: samples.deployment.split("\n").slice(0, 7).join("\n"),
-              onSelect: () => void selectSample("deployment"),
-            },
-            ...examples.map((entry) => ({
-              value: entry.slug,
-              label: entry.title,
-              group: entry.category,
-              keywords: [entry.category, entry.slug, ...entry.tags],
-              description: entry.description,
-              tags: entry.tags,
-              difficulty: entry.difficulty,
-              preview: entry.preview,
-              onSelect: () => void selectSample(entry.slug),
-            })),
-          ]}
+          exampleItems={exampleItems}
           quickOpen={quickOpen}
           onCloseQuickOpen={() => setQuickOpen(false)}
           quickOpenItems={quickOpenItems}

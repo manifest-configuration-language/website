@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   bracketMatching,
   defaultHighlightStyle,
@@ -214,6 +215,7 @@ export function MclEditor({
   onFindReferences,
   onRenameSymbol,
 }: Props) {
+  const { t } = useTranslation();
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
@@ -622,16 +624,19 @@ export function MclEditor({
         : "TEXT";
 
   return (
-    <section className="playground-code-surface" aria-label="エディター">
+    <section className="playground-code-surface" aria-label={t("editorSurface")}>
       <header className="playground-code-header">
-        <span className="playground-code-heading">編集</span>
+        <span className="playground-code-heading">{t("edit")}</span>
         <span className="playground-code-file" title={path}>
           {path}
         </span>
         <span className="playground-code-language">{languageLabel}</span>
         <span
           className="playground-editor-position"
-          aria-label={`行 ${cursorPosition.line}、列 ${cursorPosition.column}`}
+          aria-label={t("editorPosition", {
+            line: cursorPosition.line,
+            column: cursorPosition.column,
+          })}
         >
           Ln {cursorPosition.line}, Col {cursorPosition.column}
         </span>

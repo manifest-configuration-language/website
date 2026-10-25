@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "react-aria-components";
+import { useTranslation } from "react-i18next";
 import "./ProjectName.css";
 
 type Props = {
@@ -8,6 +10,7 @@ type Props = {
 };
 
 export function ProjectName({ name, disabled = false, onSave }: Props) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(name);
   const input = useRef<HTMLInputElement>(null);
@@ -37,7 +40,7 @@ export function ProjectName({ name, disabled = false, onSave }: Props) {
       <input
         ref={input}
         className="playground-project-name-input"
-        aria-label="プロジェクト名"
+        aria-label={t("projectName")}
         value={value}
         maxLength={80}
         onChange={(event) => setValue(event.currentTarget.value)}
@@ -56,17 +59,17 @@ export function ProjectName({ name, disabled = false, onSave }: Props) {
     );
 
   return (
-    <button
+    <Button
       type="button"
       className="playground-project-name"
-      aria-label={`プロジェクト名: ${name}。クリックして変更`}
-      disabled={disabled}
+      aria-label={t("renameProjectHint", { name })}
+      isDisabled={disabled}
       onClick={() => {
         cancelled.current = false;
         setEditing(true);
       }}
     >
       {name}
-    </button>
+    </Button>
   );
 }

@@ -42,6 +42,9 @@ type Props = {
   fontSize: number;
   showDiff: boolean;
   showProblems: boolean;
+  showResources: boolean;
+  onToggleResources: () => void;
+  onShowResourcesChange: (show: boolean) => void;
   showReferences: boolean;
   referenceItems: QuickAccessItem[];
   referenceError: string;
@@ -60,6 +63,9 @@ export function PlaygroundResult({
   fontSize,
   showDiff,
   showProblems,
+  showResources,
+  onToggleResources,
+  onShowResourcesChange,
   showReferences,
   referenceItems,
   referenceError,
@@ -74,7 +80,6 @@ export function PlaygroundResult({
   onSourceCandidatesRef.current = onSourceCandidates;
   const currentYaml = reply?.ok ? reply.result?.yaml : undefined;
   const sourceMap = staleYaml === undefined && reply?.ok ? reply.result?.sourceMap : undefined;
-  const [showResources, setShowResources] = useState(false);
   const [selectedResourceKey, setSelectedResourceKey] = useState<string>();
   const displayedYaml = staleYaml ?? currentYaml;
   const sourceMapDocument = useMemo(
@@ -96,7 +101,6 @@ export function PlaygroundResult({
     previousYaml !== undefined && currentYaml !== undefined && previousYaml !== currentYaml;
 
   useEffect(() => {
-    setShowResources(false);
     setSelectedResourceKey(undefined);
   }, [currentYaml, staleYaml]);
 
@@ -277,7 +281,7 @@ export function PlaygroundResult({
 
   function selectResource(resource: YamlResource) {
     setSelectedResourceKey(resource.key);
-    setShowResources(false);
+    onShowResourcesChange(false);
   }
 
   function location(diagnostic: PlaygroundDiagnostic) {
@@ -345,7 +349,7 @@ export function PlaygroundResult({
           selectedResource={selectedResource}
           showResources={showResources}
           outputHost={outputHost}
-          onToggleResources={() => setShowResources((shown) => !shown)}
+          onToggleResources={onToggleResources}
           onSelectResource={selectResource}
           onClearResource={() => setSelectedResourceKey(undefined)}
           onSearch={() => outputEditor.current && openSearchPanel(outputEditor.current)}
@@ -380,11 +384,11 @@ export function PlaygroundResult({
           resources={diffResources}
           selectedResource={selectedDiffResource}
           showResources={showResources}
-          onToggleResources={() => setShowResources((shown) => !shown)}
+          onToggleResources={onToggleResources}
           onSelectResource={selectResource}
           onResetResource={() => {
             setSelectedResourceKey(undefined);
-            setShowResources(false);
+            onShowResourcesChange(false);
           }}
         />
       )}

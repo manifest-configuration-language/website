@@ -1,4 +1,6 @@
-import { useEffect, useRef } from "react";
+import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
+import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
 
 type Props = {
@@ -13,17 +15,31 @@ type Props = {
   commandItems: QuickAccessItem[];
 };
 
-function useModalDialog(open: boolean) {
-  const dialog = useRef<HTMLDialogElement>(null);
+type QuickAccessModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  label: string;
+  className: string;
+  children: ReactNode;
+};
 
-  useEffect(() => {
-    const element = dialog.current;
-    if (!element) return;
-    if (open && !element.open) element.showModal();
-    else if (!open && element.open) element.close();
-  }, [open]);
-
-  return dialog;
+function QuickAccessModal({ isOpen, onClose, label, className, children }: QuickAccessModalProps) {
+  return (
+    <ModalOverlay
+      className="playground-modal-overlay"
+      isOpen={isOpen}
+      isDismissable
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Modal>
+        <Dialog className={className} aria-label={label}>
+          {children}
+        </Dialog>
+      </Modal>
+    </ModalOverlay>
+  );
 }
 
 export function PlaygroundQuickAccessDialogs({
@@ -37,61 +53,55 @@ export function PlaygroundQuickAccessDialogs({
   onCloseCommandPalette,
   commandItems,
 }: Props) {
-  const examplesDialog = useModalDialog(examplesOpen);
-  const quickOpenDialog = useModalDialog(quickOpen);
-  const commandPaletteDialog = useModalDialog(commandPaletteOpen);
+  const { t } = useTranslation();
 
   return (
     <>
-      <dialog
-        ref={examplesDialog}
+      <QuickAccessModal
+        isOpen={examplesOpen}
+        onClose={onCloseExamples}
+        label={t("examplesTitle")}
         className="playground-examples-dialog"
-        aria-labelledby="playground-examples-title"
-        onCancel={onCloseExamples}
       >
         <header className="playground-dialog-header">
-          <h2 id="playground-examples-title">サンプル</h2>
-          <button type="button" onClick={onCloseExamples} aria-label="閉じる">
+          <Heading slot="title">{t("examplesTitle")}</Heading>
+          <Button type="button" onPress={onCloseExamples} aria-label={t("close")}>
             ×
-          </button>
+          </Button>
         </header>
         <QuickAccessList
-          label="サンプルを検索"
-          placeholder="名前やカテゴリで検索"
-          emptyMessage="一致するサンプルはありません"
+          label={t("searchExamples")}
+          placeholder={t("searchNameOrCategory")}
+          emptyMessage={t("noExamplesFound")}
           items={exampleItems}
         />
-      </dialog>
-      {quickOpen && (
-        <dialog
-          ref={quickOpenDialog}
-          className="playground-quick-open"
-          aria-label="ファイルを開く"
-          onCancel={onCloseQuickOpen}
-        >
-          <QuickAccessList
-            label="ファイルへ移動"
-            placeholder="ファイル名を入力"
-            emptyMessage="一致するファイルはありません"
-            items={quickOpenItems}
-          />
-        </dialog>
-      )}
-      {commandPaletteOpen && (
-        <dialog
-          ref={commandPaletteDialog}
-          className="playground-quick-open"
-          aria-label="コマンド"
-          onCancel={onCloseCommandPalette}
-        >
-          <QuickAccessList
-            label="コマンド"
-            placeholder="コマンドを検索"
-            emptyMessage="一致するコマンドはありません"
-            items={commandItems}
-          />
-        </dialog>
-      )}
+      </QuickAccessModal>
+      <QuickAccessModal
+        isOpen={quickOpen}
+        onClose={onCloseQuickOpen}
+        label={t("openFile")}
+        className="playground-quick-open"
+      >
+        <QuickAccessList
+          label={t("goToFile")}
+          placeholder={t("enterFilename")}
+          emptyMessage={t("noFilesFound")}
+          items={quickOpenItems}
+        />
+      </QuickAccessModal>
+      <QuickAccessModal
+        isOpen={commandPaletteOpen}
+        onClose={onCloseCommandPalette}
+        label={t("commandPalette")}
+        className="playground-quick-open"
+      >
+        <QuickAccessList
+          label={t("commandPalette")}
+          placeholder={t("searchCommand")}
+          emptyMessage={t("noCommandsFound")}
+          items={commandItems}
+        />
+      </QuickAccessModal>
     </>
   );
 }

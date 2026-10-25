@@ -22,6 +22,7 @@ export type StoredProject = {
   files: Record<string, ProjectFile>;
   activePath?: string;
 };
+export type DraftSaveStatus = "saving" | "saved" | "error";
 export type DraftMetadata = { id: string; name: string; updatedAt: number };
 function isDraftMetadataList(value: unknown): value is DraftMetadata[] {
   return (
@@ -68,11 +69,13 @@ export function usePlaygroundPersistence(
   const [editorSettings, setEditorSettings] = useState<EditorSettings>(defaultEditorSettings);
   const [editorSettingsLoaded, setEditorSettingsLoaded] = useState(false);
   const [activeDraftId, setActiveDraftId] = useState("");
+  const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>("saved");
   const [drafts, setDrafts] = useState<DraftMetadata[]>([]);
   const [draftsLoaded, setDraftsLoaded] = useState(false);
   const activeDraftIdRef = useRef("");
   const draftsRef = useRef<DraftMetadata[]>([]);
   const writeQueue = useRef(Promise.resolve());
+  const saveSequence = useRef(0);
 
   const enqueueWrite = useCallback((write: () => Promise<void>) => {
     const next = writeQueue.current.then(write, write);
@@ -107,27 +110,37 @@ export function usePlaygroundPersistence(
   const saveDraftSnapshot = useCallback(
     async (id: string, value: StoredProject) => {
       if (!id) return;
+      const sequence = ++saveSequence.current;
+      setSaveStatus("saving");
       const [draft] = updateDraftMetadata(id, undefined, false);
       if (!draft) return;
-      await enqueueWrite(async () => {
-        await ensurePlaygroundStorageMigrated();
-        await playgroundDatabase.transaction(
-          "rw",
-          playgroundDatabase.drafts,
-          playgroundDatabase.projects,
-          async () => {
-            const current = await playgroundDatabase.drafts.get(id);
-            await playgroundDatabase.drafts.put({ ...current, ...draft });
-            await playgroundDatabase.projects.put({ id, project: value });
-          },
-        );
-      });
+      try {
+        await enqueueWrite(async () => {
+          await ensurePlaygroundStorageMigrated();
+          await playgroundDatabase.transaction(
+            "rw",
+            playgroundDatabase.drafts,
+            playgroundDatabase.projects,
+            async () => {
+              const current = await playgroundDatabase.drafts.get(id);
+              await playgroundDatabase.drafts.put({ ...current, ...draft });
+              await playgroundDatabase.projects.put({ id, project: value });
+            },
+          );
+        });
+        if (sequence === saveSequence.current) setSaveStatus("saved");
+      } catch (cause) {
+        if (sequence === saveSequence.current) setSaveStatus("error");
+        throw cause;
+      }
     },
     [enqueueWrite, updateDraftMetadata],
   );
 
   useEffect(() => {
     if (!draftsLoaded || !activeDraftId) return;
+    ++saveSequence.current;
+    setSaveStatus("saving");
     const timer = setTimeout(() => {
       void saveDraftSnapshot(activeDraftId, project).catch((cause: unknown) => onError(cause));
     }, 300);
@@ -236,6 +249,7 @@ export function usePlaygroundPersistence(
 
   return {
     editorSettings,
+    saveStatus,
     setEditorSettings,
     editorSettingsLoaded,
     activeDraftId,

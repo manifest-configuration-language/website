@@ -1,4 +1,6 @@
-import { useEffect, useRef, type SyntheticEvent } from "react";
+import { useTranslation } from "react-i18next";
+import { Button, Dialog, Heading, Modal, ModalOverlay } from "react-aria-components";
+import type { SyntheticEvent } from "react";
 
 type FileAction = { kind: "create" } | { kind: "rename" | "delete"; path: string };
 
@@ -52,132 +54,139 @@ export function PlaygroundEditorDialogs({
   busy,
   loadingProject,
 }: Props) {
-  const fileActionDialog = useRef<HTMLDialogElement>(null);
-  const symbolRenameDialog = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = fileActionDialog.current;
-    if (!dialog) return;
-    if (fileAction && !dialog.open) dialog.showModal();
-    else if (!fileAction && dialog.open) dialog.close();
-  }, [fileAction]);
-
-  useEffect(() => {
-    const dialog = symbolRenameDialog.current;
-    if (!dialog) return;
-    if (symbolRenameOpen && !dialog.open) dialog.showModal();
-    else if (!symbolRenameOpen && dialog.open) dialog.close();
-  }, [symbolRenameOpen]);
+  const { t } = useTranslation();
+  const fileActionTitle =
+    fileAction?.kind === "delete"
+      ? t("deleteFileTitle")
+      : fileAction?.kind === "rename"
+        ? t("renameFileTitle")
+        : t("createFileTitle");
 
   return (
     <>
-      <dialog
-        ref={fileActionDialog}
-        className="playground-file-action"
-        aria-labelledby="playground-file-action-title"
-        onCancel={onCloseFileAction}
+      <ModalOverlay
+        className="playground-aria-overlay"
+        isOpen={Boolean(fileAction)}
+        isDismissable={!busy && !loadingProject}
+        onOpenChange={(open) => {
+          if (!open) onCloseFileAction();
+        }}
       >
-        {fileAction?.kind === "delete" ? (
-          <>
-            <h2 id="playground-file-action-title">ファイルの削除</h2>
-            <p>{fileAction.path}を削除しますか？</p>
-            {fileActionError && <p role="alert">{fileActionError}</p>}
-            <div className="playground-file-action-buttons">
-              <button type="button" onClick={onCloseFileAction}>
-                キャンセル
-              </button>
-              <button
-                type="button"
-                className="playground-file-action-danger"
-                onClick={onConfirmDeleteFile}
-              >
-                削除
-              </button>
-            </div>
-          </>
-        ) : (
-          <form onSubmit={onSubmitFileAction}>
-            <h2 id="playground-file-action-title">
-              {fileAction?.kind === "rename" ? "ファイル名の変更" : "新規ファイル"}
-            </h2>
-            <label>
-              <span>ファイルパス</span>
-              <input
-                autoFocus
-                value={filePathInput}
-                onChange={(event) => onFilePathInputChange(event.currentTarget.value)}
-                placeholder="values.yaml"
-                required
-                maxLength={512}
-              />
-            </label>
-            {fileActionError && <p role="alert">{fileActionError}</p>}
-            <div className="playground-file-action-buttons">
-              <button type="button" onClick={onCloseFileAction}>
-                キャンセル
-              </button>
-              <button type="submit">{fileAction?.kind === "rename" ? "変更" : "作成"}</button>
-            </div>
-          </form>
-        )}
-      </dialog>
-      <dialog
-        ref={symbolRenameDialog}
-        className="playground-file-action"
-        aria-labelledby="playground-symbol-rename-title"
-        onCancel={onCloseSymbolRename}
+        <Modal className="playground-aria-modal">
+          <Dialog aria-label={fileActionTitle} className="playground-file-action">
+            {fileAction?.kind === "delete" ? (
+              <section>
+                <Heading slot="title">{t("deleteFileTitle")}</Heading>
+                <p>{t("deleteFilePrompt", { path: fileAction.path })}</p>
+                {fileActionError && <p role="alert">{fileActionError}</p>}
+                <div className="playground-file-action-buttons">
+                  <Button type="button" onPress={onCloseFileAction}>
+                    {t("cancel")}
+                  </Button>
+                  <Button
+                    type="button"
+                    className="playground-file-action-danger"
+                    onPress={onConfirmDeleteFile}
+                  >
+                    {t("deleteFile")}
+                  </Button>
+                </div>
+              </section>
+            ) : (
+              <form onSubmit={onSubmitFileAction}>
+                <Heading slot="title">{fileActionTitle}</Heading>
+                <label>
+                  <span>{t("filePathLabel")}</span>
+                  <input
+                    autoFocus
+                    value={filePathInput}
+                    onChange={(event) => onFilePathInputChange(event.currentTarget.value)}
+                    placeholder="values.yaml"
+                    required
+                    maxLength={512}
+                  />
+                </label>
+                {fileActionError && <p role="alert">{fileActionError}</p>}
+                <div className="playground-file-action-buttons">
+                  <Button type="button" onPress={onCloseFileAction}>
+                    {t("cancel")}
+                  </Button>
+                  <Button type="submit">
+                    {fileAction?.kind === "rename" ? t("renameFile") : t("createFile")}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
+      <ModalOverlay
+        className="playground-aria-overlay"
+        isOpen={symbolRenameOpen}
+        isDismissable={!busy && !loadingProject}
+        onOpenChange={(open) => {
+          if (!open) onCloseSymbolRename();
+        }}
       >
-        {hasPendingRename ? (
-          <section>
-            <h2 id="playground-symbol-rename-title">変更箇所</h2>
-            <ul className="playground-symbol-rename-preview">
-              {renamePreview?.map((entry, index) => (
-                <li key={`${entry.path}:${entry.line}:${index}`}>
-                  <span className="playground-symbol-rename-location">
-                    {entry.path}:{entry.line}
-                  </span>
-                  <div className="playground-symbol-rename-change">
-                    <del aria-label="変更前">{entry.before}</del>
-                    <ins aria-label="変更後">{entry.after}</ins>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
-            <div className="playground-file-action-buttons">
-              <button type="button" onClick={onResetSymbolRename}>
-                名前を再入力
-              </button>
-              <button type="button" disabled={busy || loadingProject} onClick={onApplySymbolRename}>
-                名前を変更
-              </button>
-            </div>
-          </section>
-        ) : (
-          <form onSubmit={onSubmitSymbolRename}>
-            <h2 id="playground-symbol-rename-title">シンボル名の変更</h2>
-            <label>
-              <span>新しい名前</span>
-              <input
-                autoFocus
-                value={symbolRenameInput}
-                onChange={(event) => onSymbolRenameInputChange(event.currentTarget.value)}
-                required
-                maxLength={256}
-              />
-            </label>
-            {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
-            <div className="playground-file-action-buttons">
-              <button type="button" onClick={onCloseSymbolRename}>
-                キャンセル
-              </button>
-              <button type="submit" disabled={busy || loadingProject}>
-                変更箇所を確認
-              </button>
-            </div>
-          </form>
-        )}
-      </dialog>
+        <Modal className="playground-aria-modal">
+          <Dialog aria-label={t("renameSymbolTitle")} className="playground-file-action">
+            {hasPendingRename ? (
+              <section>
+                <Heading slot="title">{t("renameChangesTitle")}</Heading>
+                <ul className="playground-symbol-rename-preview">
+                  {renamePreview?.map((entry, index) => (
+                    <li key={`${entry.path}:${entry.line}:${index}`}>
+                      <span className="playground-symbol-rename-location">
+                        {entry.path}:{entry.line}
+                      </span>
+                      <div className="playground-symbol-rename-change">
+                        <del aria-label={t("beforeChange")}>{entry.before}</del>
+                        <ins aria-label={t("afterChange")}>{entry.after}</ins>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
+                <div className="playground-file-action-buttons">
+                  <Button type="button" onPress={onResetSymbolRename}>
+                    {t("reenterName")}
+                  </Button>
+                  <Button
+                    type="button"
+                    isDisabled={busy || loadingProject}
+                    onPress={onApplySymbolRename}
+                  >
+                    {t("applyRename")}
+                  </Button>
+                </div>
+              </section>
+            ) : (
+              <form onSubmit={onSubmitSymbolRename}>
+                <Heading slot="title">{t("renameSymbolTitle")}</Heading>
+                <label>
+                  <span>{t("newName")}</span>
+                  <input
+                    autoFocus
+                    value={symbolRenameInput}
+                    onChange={(event) => onSymbolRenameInputChange(event.currentTarget.value)}
+                    required
+                    maxLength={256}
+                  />
+                </label>
+                {symbolRenameError && <p role="alert">{symbolRenameError}</p>}
+                <div className="playground-file-action-buttons">
+                  <Button type="button" onPress={onCloseSymbolRename}>
+                    {t("cancel")}
+                  </Button>
+                  <Button type="submit" isDisabled={busy || loadingProject}>
+                    {t("reviewRename")}
+                  </Button>
+                </div>
+              </form>
+            )}
+          </Dialog>
+        </Modal>
+      </ModalOverlay>
     </>
   );
 }

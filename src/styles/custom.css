@@ -23,6 +23,14 @@
   font-weight: 400;
 }
 
+.playground-modal-overlay {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  background: #0008;
+  overflow-y: auto;
+}
+
 .playground-quick-open {
   position: fixed;
   z-index: 20;
@@ -55,10 +63,6 @@
   box-shadow: 0 1rem 3rem #0006;
 }
 
-.playground-examples-dialog::backdrop {
-  background: #0008;
-}
-
 .playground-dialog-header {
   display: flex;
   min-height: 3rem;
@@ -86,10 +90,6 @@
 
 .playground-examples-dialog [cmdk-root] {
   min-width: 0;
-}
-
-.playground-quick-open::backdrop {
-  background: #0008;
 }
 
 .playground-quick-open [cmdk-input],
@@ -590,10 +590,6 @@
   background: var(--sl-color-bg);
   color: var(--sl-color-text);
   box-shadow: 0 1rem 3rem #0006;
-}
-
-.playground-file-action::backdrop {
-  background: #0008;
 }
 
 .playground-file-action h2 {

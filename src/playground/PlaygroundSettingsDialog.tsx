@@ -1,4 +1,5 @@
 import type { EditorSettings } from "./MclEditor";
+import { useTranslation } from "react-i18next";
 
 type Props = {
   settings: EditorSettings;
@@ -6,12 +7,13 @@ type Props = {
 };
 
 export function PlaygroundSettingsDialog({ settings, onChange }: Props) {
+  const { t } = useTranslation();
   return (
     <details className="playground-more playground-settings">
-      <summary>設定</summary>
+      <summary>{t("settings")}</summary>
       <div className="playground-more-menu">
         <label className="playground-setting">
-          配色
+          {t("colorScheme")}
           <select
             value={settings.theme}
             onChange={(event) => {
@@ -19,13 +21,13 @@ export function PlaygroundSettingsDialog({ settings, onChange }: Props) {
               onChange({ ...settings, theme });
             }}
           >
-            <option value="system">システム</option>
-            <option value="light">ライト</option>
-            <option value="dark">ダーク</option>
+            <option value="system">{t("system")}</option>
+            <option value="light">{t("light")}</option>
+            <option value="dark">{t("dark")}</option>
           </select>
         </label>
         <label className="playground-setting">
-          インデント幅
+          {t("indentationWidth")}
           <select
             value={settings.tabSize}
             onChange={(event) => {
@@ -38,14 +40,14 @@ export function PlaygroundSettingsDialog({ settings, onChange }: Props) {
           </select>
         </label>
         <label className="playground-setting">
-          文字サイズ
+          {t("fontSize")}
           <input
             type="range"
             min={12}
             max={20}
             step={2}
             value={settings.fontSize}
-            aria-label="文字サイズ"
+            aria-label={t("fontSize")}
             onChange={(event) => {
               const fontSize = Number(event.currentTarget.value) as EditorSettings["fontSize"];
               onChange({ ...settings, fontSize });
@@ -61,7 +63,7 @@ export function PlaygroundSettingsDialog({ settings, onChange }: Props) {
               onChange({ ...settings, lineWrapping: event.currentTarget.checked })
             }
           />
-          折り返し
+          {t("lineWrapping")}
         </label>
         <label className="playground-setting">
           <input
@@ -71,7 +73,7 @@ export function PlaygroundSettingsDialog({ settings, onChange }: Props) {
               onChange({ ...settings, lineNumbers: event.currentTarget.checked })
             }
           />
-          行番号
+          {t("lineNumbers")}
         </label>
         <label className="playground-setting">
           <input
@@ -79,7 +81,7 @@ export function PlaygroundSettingsDialog({ settings, onChange }: Props) {
             checked={settings.vim}
             onChange={(event) => onChange({ ...settings, vim: event.currentTarget.checked })}
           />
-          Vim
+          {t("vim")}
         </label>
       </div>
     </details>

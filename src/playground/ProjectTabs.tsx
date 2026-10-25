@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef } from "react";
 import { hotkeysCoreFeature, syncDataLoaderFeature } from "@headless-tree/core";
 import { useTree } from "@headless-tree/react";
+import { Button } from "react-aria-components";
+import { useTranslation } from "react-i18next";
 import type { ProjectFile } from "./types";
 import "./ProjectTabs.css";
 
@@ -76,6 +78,7 @@ export function ProjectTabs({
   onDelete,
   disabled = false,
 }: Props) {
+  const { t } = useTranslation();
   const nodes = useMemo(() => createFileTree(paths, files), [paths, files]);
   const expandedItems = useMemo(
     () => [...nodes.values()].filter((node) => !node.file).map((node) => node.path || rootItemId),
@@ -114,14 +117,14 @@ export function ProjectTabs({
   }, [tree, nodes, expandedItems]);
 
   return (
-    <nav className="project-explorer" aria-label="プロジェクトファイル">
+    <nav className="project-explorer" aria-label={t("fileTreeLabel")}>
       <div className="project-explorer-toolbar">
-        <span>ファイル</span>
-        <button type="button" aria-label="ファイルを作成" disabled={disabled} onClick={onCreate}>
-          ＋ ファイル
-        </button>
+        <span>{t("files")}</span>
+        <Button aria-label={t("createFile")} isDisabled={disabled} onPress={onCreate}>
+          + {t("files")}
+        </Button>
       </div>
-      <div {...tree.getContainerProps("プロジェクトファイル")} className="project-explorer-tree">
+      <div {...tree.getContainerProps(t("fileTreeLabel"))} className="project-explorer-tree">
         {tree.getItems().map((item) => {
           const node = item.getItemData();
           const canSelect = node.file && node.selectable;
@@ -129,40 +132,34 @@ export function ProjectTabs({
 
           return (
             <div className="project-file-row" key={item.getId()}>
-              <button
+              <Button
                 {...props}
-                type="button"
                 className={`project-file-open${node.file ? "" : " project-file-folder"}`}
                 style={{ paddingInlineStart: `calc(0.5rem + ${item.getItemMeta().level}rem)` }}
                 aria-current={canSelect && node.path === activePath ? "page" : undefined}
-                aria-disabled={disabled || (node.file && !node.selectable) || undefined}
-                title={node.path || undefined}
+                isDisabled={disabled || (node.file && !node.selectable)}
               >
                 <span className="project-file-indicator" aria-hidden="true">
                   {node.file ? "" : item.isExpanded() ? "▾" : "▸"}
                 </span>
                 <span className="project-file-name">{node.name}</span>
-              </button>
+              </Button>
               {node.file && node.path !== "main.mcl" && (
                 <span className="project-file-actions">
-                  <button
-                    type="button"
-                    aria-label={`${node.path}の名前を変更`}
-                    title="名前を変更"
-                    disabled={disabled}
-                    onClick={() => onRename(node.path)}
+                  <Button
+                    aria-label={t("renameFileFor", { path: node.path })}
+                    isDisabled={disabled}
+                    onPress={() => onRename(node.path)}
                   >
-                    名前変更
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`${node.path}を削除`}
-                    title="削除"
-                    disabled={disabled}
-                    onClick={() => onDelete(node.path)}
+                    {t("renameFile")}
+                  </Button>
+                  <Button
+                    aria-label={t("deleteFileFor", { path: node.path })}
+                    isDisabled={disabled}
+                    onPress={() => onDelete(node.path)}
                   >
-                    削除
-                  </button>
+                    {t("deleteFile")}
+                  </Button>
                 </span>
               )}
             </div>

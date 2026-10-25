@@ -549,6 +549,18 @@ body:has(.playground-app) .right-sidebar-container {
   color: var(--sl-color-orange-high);
 }
 
+.playground-app .playground-save-saving {
+  color: var(--sl-color-orange-high);
+}
+
+.playground-app .playground-save-saved {
+  color: var(--sl-color-green-high);
+}
+
+.playground-app .playground-save-error {
+  color: var(--sl-color-red-high);
+}
+
 .playground-app .playground-statusbar .playground-status-path {
   min-width: 0;
   margin-inline-start: auto;

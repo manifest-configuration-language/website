@@ -80,6 +80,8 @@ function recordRuntimeMeasurement(
 type LayoutPreference = {
   orientation: "horizontal" | "vertical";
   layout: Layout;
+  openPaths?: string[];
+  outputView?: "yaml" | "resources" | "problems" | "diff";
 };
 
 function readLayoutPreference(): LayoutPreference | undefined {
@@ -102,18 +104,33 @@ function readLayoutPreference(): LayoutPreference | undefined {
     )
       return undefined;
 
+    const openPaths = Array.isArray(preference.openPaths)
+      ? preference.openPaths.filter((path): path is string => typeof path === "string")
+      : undefined;
+    const outputView =
+      preference.outputView === "yaml" ||
+      preference.outputView === "resources" ||
+      preference.outputView === "problems" ||
+      preference.outputView === "diff"
+        ? preference.outputView
+        : undefined;
+
     return {
       orientation: preference.orientation,
       layout: { editor: layout.editor, output: layout.output },
+      ...(openPaths ? { openPaths } : {}),
+      ...(outputView ? { outputView } : {}),
     };
   } catch {
     return undefined;
   }
 }
 
-function saveLayoutPreference(preference: LayoutPreference) {
+function saveLayoutPreference(preference: Partial<LayoutPreference>) {
   try {
-    localStorage.setItem(layoutPreferenceKey, JSON.stringify(preference));
+    const stored = JSON.parse(localStorage.getItem(layoutPreferenceKey) ?? "null");
+    const current = stored && typeof stored === "object" ? stored : {};
+    localStorage.setItem(layoutPreferenceKey, JSON.stringify({ ...current, ...preference }));
   } catch {
     // Layout preferences are optional when browser storage is unavailable.
   }
@@ -304,6 +321,8 @@ export default function Playground() {
   const previousYaml = renderState.previousYaml;
   const [showDiff, setShowDiff] = useState(false);
   const [showProblems, setShowProblems] = useState(false);
+  const [showResources, setShowResources] = useState(false);
+  const workspacePreferenceLoaded = useRef(false);
   const [targetOutputPosition, setTargetOutputPosition] = useState<
     { line: number; character: number; requestId: number } | undefined
   >();
@@ -342,6 +361,7 @@ export default function Playground() {
   );
   const {
     editorSettings,
+    saveStatus,
     setEditorSettings,
     activeDraftId,
     activeDraftIdRef,
@@ -501,10 +521,12 @@ export default function Playground() {
     };
   });
   const commands = [
-    { name: "実行", action: () => void run() },
-    ...(activePath.endsWith(".mcl") ? [{ name: "整形", action: () => void formatSource() }] : []),
+    { name: t("commandRun"), action: () => void run() },
+    ...(activePath.endsWith(".mcl")
+      ? [{ name: t("commandFormat"), action: () => void formatSource() }]
+      : []),
     {
-      name: "コメントを切り替え",
+      name: t("commandToggleComment"),
       action: () => {
         const view = editor.current;
         if (!view) return;
@@ -513,7 +535,7 @@ export default function Playground() {
       },
     },
     {
-      name: "次の一致を選択",
+      name: t("commandNextOccurrence"),
       action: () => {
         const view = editor.current;
         if (!view) return;
@@ -522,7 +544,7 @@ export default function Playground() {
       },
     },
     {
-      name: "すべての一致を選択",
+      name: t("commandSelectMatches"),
       action: () => {
         const view = editor.current;
         if (!view) return;
@@ -530,51 +552,51 @@ export default function Playground() {
         selectSelectionMatches(view);
       },
     },
-    { name: "サンプルを開く", action: () => setExamplesOpen(true) },
+    { name: t("commandOpenExamples"), action: () => setExamplesOpen(true) },
     {
-      name: "ファイル一覧を切り替え",
+      name: t("commandToggleExplorer"),
       action: () => setExplorerOpen((value) => !value),
     },
     ...(activePath.endsWith(".mcl")
-      ? [{ name: "定義へ移動", action: () => void goToDefinitionAtCursor() }]
+      ? [{ name: t("commandGoToDefinition"), action: () => void goToDefinitionAtCursor() }]
       : []),
     ...(currentSourceMap && activePath.endsWith(".mcl")
-      ? [{ name: "YAMLの対応箇所へ移動", action: navigateToYaml }]
+      ? [{ name: t("commandGoToYaml"), action: navigateToYaml }]
       : []),
     ...(activePath.endsWith(".mcl")
       ? [
           {
-            name: "参照箇所を検索",
+            name: t("commandFindReferences"),
             action: openSymbolReferences,
           },
           {
-            name: "シンボル名を変更",
+            name: t("commandRenameSymbol"),
             action: openSymbolRename,
           },
         ]
       : []),
     {
-      name: "共有",
+      name: t("commandShare"),
       action: openShareDialog,
     },
     {
-      name: "ファイルを開く",
+      name: t("commandOpenFile"),
       action: () => {
         setQuickOpen(true);
       },
     },
     {
-      name: "ファイルを作成",
+      name: t("commandCreateFile"),
       action: () => {
         setFileActionError("");
         setFilePathInput("");
         setFileAction({ kind: "create" });
       },
     },
-    { name: "新しいプロジェクト", action: () => createDraft() },
-    { name: "出力を表示", action: () => setMobileView("output") },
+    { name: t("commandNewProject"), action: () => createDraft() },
+    { name: t("commandShowOutput"), action: () => setMobileView("output") },
     {
-      name: "問題を表示",
+      name: t("commandShowProblems"),
       action: () => {
         setMobileView("problems");
         setShowProblems(true);
@@ -583,15 +605,15 @@ export default function Playground() {
     },
   ];
   const commandShortcuts: Record<string, string> = {
-    実行: "Ctrl/⌘ Enter",
-    整形: "Shift+Alt+F",
-    コメントを切り替え: "Ctrl/⌘ /",
-    次の一致を選択: "Ctrl/⌘ D",
-    すべての一致を選択: "Ctrl/⌘ ⇧ L",
-    定義へ移動: "F12",
-    参照箇所を検索: "Shift+F12",
-    シンボル名を変更: "F2",
-    ファイルを開く: "Ctrl/⌘ P",
+    [t("commandRun")]: "Ctrl/⌘ Enter",
+    [t("commandFormat")]: "Shift+Alt+F",
+    [t("commandToggleComment")]: "Ctrl/⌘ /",
+    [t("commandNextOccurrence")]: "Ctrl/⌘ D",
+    [t("commandSelectMatches")]: "Ctrl/⌘ ⇧ L",
+    [t("commandGoToDefinition")]: "F12",
+    [t("commandFindReferences")]: "Shift+F12",
+    [t("commandRenameSymbol")]: "F2",
+    [t("commandOpenFile")]: "Ctrl/⌘ P",
     ファイル一覧を切り替え: "Ctrl/⌘ ⇧ E",
     問題を表示: "Ctrl/⌘ ⇧ M",
   };
@@ -660,6 +682,23 @@ export default function Playground() {
     return files;
   }
 
+  const applyWorkspacePreference = useCallback(
+    (files: Record<string, ProjectFile>, activePath: string, fresh: boolean) => {
+      const preference = fresh ? undefined : readLayoutPreference();
+      const availablePaths = new Set(["main.mcl", ...Object.keys(files)]);
+      const openPaths = preference?.openPaths?.filter(
+        (path) =>
+          availablePaths.has(path) && (path === "main.mcl" || files[path]?.encoding === "utf8"),
+      );
+      setOpenPaths(openPaths?.length ? [...new Set([activePath, ...openPaths])] : [activePath]);
+      setShowProblems(!fresh && preference?.outputView === "problems");
+      setShowResources(!fresh && preference?.outputView === "resources");
+      setShowDiff(false);
+      workspacePreferenceLoaded.current = true;
+    },
+    [],
+  );
+
   const applyProject = useCallback(
     (project: StoredProject, options: { newDraft?: boolean; name?: string } = {}) => {
       const requestedPath = project.activePath;
@@ -698,7 +737,7 @@ export default function Playground() {
       dispatchRender({ type: "project-replaced" });
       setShowDiff(false);
       projectContentRevision.current += 1;
-      setOpenPaths([nextPath]);
+      applyWorkspacePreference(project.files, nextPath, options.newDraft !== false);
       void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
         (cause: unknown) => {
           setError(cause instanceof Error ? cause.message : String(cause));
@@ -712,8 +751,27 @@ export default function Playground() {
       if (startupReady.current) scheduleLint(project.source, currentRevision);
       return true;
     },
-    [activateDraft, projectRef, replaceProjectState, saveDraftSnapshot, scheduleLint],
+    [
+      activateDraft,
+      applyWorkspacePreference,
+      projectRef,
+      replaceProjectState,
+      saveDraftSnapshot,
+      scheduleLint,
+    ],
   );
+
+  useEffect(() => {
+    if (!workspacePreferenceLoaded.current) return;
+    const outputView = showDiff
+      ? "diff"
+      : showProblems
+        ? "problems"
+        : showResources
+          ? "resources"
+          : "yaml";
+    saveLayoutPreference({ openPaths, outputView });
+  }, [openPaths, showDiff, showProblems, showResources]);
 
   useEffect(() => {
     const preference = readLayoutPreference();
@@ -896,6 +954,8 @@ export default function Playground() {
       if (restored) {
         const applied = applyProject(restored, { newDraft: false });
         if (applied && hasLegacyFragment) clearLegacyShareFragment();
+      } else {
+        applyWorkspacePreference(projectRef.current.files, projectRef.current.activePath, false);
       }
       startupReady.current = true;
       startupSettled = true;
@@ -912,6 +972,7 @@ export default function Playground() {
     };
   }, [
     activateDraft,
+    applyWorkspacePreference,
     applyProject,
     examples,
     loadActiveDraftId,
@@ -941,7 +1002,7 @@ export default function Playground() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      if (document.querySelector("dialog[open]")) return;
+      if (document.querySelector('[aria-modal="true"]')) return;
       if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
         return;
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "p") {
@@ -1363,12 +1424,12 @@ export default function Playground() {
       <section
         ref={workspace}
         className="playground"
-        aria-label="MCLプレイグラウンド"
+        aria-label={t("workspaceLabel")}
         aria-busy={loadingProject}
       >
         <header className="playground-header">
           <div className="playground-brand">
-            <a href="/" aria-label="MCLドキュメント">
+            <a href="/" aria-label={t("docsHome")}>
               MCL
             </a>
             <span aria-hidden="true" className="playground-brand-separator">
@@ -1385,10 +1446,10 @@ export default function Playground() {
             />
           </div>
           <div className="playground-toolbar">
-            <div className="playground-primary-actions" role="group" aria-label="編集操作">
+            <div className="playground-primary-actions" role="group" aria-label={t("editActions")}>
               {busy || renderPending ? (
                 <button type="button" onClick={cancel}>
-                  中断
+                  {t("stop")}
                 </button>
               ) : (
                 <>
@@ -1413,7 +1474,7 @@ export default function Playground() {
                       !activePath.endsWith(".mcl")
                     }
                   >
-                    コードを整形
+                    {t("formatSource")}
                   </button>
                 </>
               )}
@@ -1440,23 +1501,23 @@ export default function Playground() {
                 onClick={() => setCommandPaletteOpen(true)}
                 aria-keyshortcuts="Control+Shift+P Meta+Shift+P"
               >
-                コマンド検索
+                {t("commandSearch")}
                 <kbd>Ctrl/⌘ ⇧ P</kbd>
               </button>
               <details className="playground-more">
-                <summary>プロジェクト</summary>
+                <summary>{t("projectMenu")}</summary>
                 <div className="playground-more-menu">
                   <label className="playground-project-picker">
-                    <span>プロジェクトを開く</span>
+                    <span>{t("openProject")}</span>
                     <select
-                      aria-label="プロジェクトを開く"
+                      aria-label={t("openProject")}
                       value={activeDraftId}
                       disabled={!draftsLoaded || busy || loadingProject}
                       onChange={(event) => void openDraft(event.currentTarget.value)}
                     >
                       {drafts.map((draft) => (
                         <option key={draft.id} value={draft.id}>
-                          {draft.name === "作業" ? "無題のプロジェクト" : draft.name}
+                          {draft.name === "作業" ? t("unnamedProject") : draft.name}
                         </option>
                       ))}
                     </select>
@@ -1467,21 +1528,21 @@ export default function Playground() {
                       onClick={createDraft}
                       disabled={!draftsLoaded || busy || loadingProject}
                     >
-                      新しいプロジェクト
+                      {t("commandNewProject")}
                     </button>
                     <button
                       type="button"
                       onClick={duplicateDraft}
                       disabled={!draftsLoaded || busy || loadingProject}
                     >
-                      プロジェクトを複製
+                      {t("duplicateProject")}
                     </button>
                     <button
                       type="button"
                       onClick={() => void deleteCurrentDraft()}
                       disabled={!draftsLoaded || busy || loadingProject}
                     >
-                      プロジェクトを削除
+                      {t("deleteProject")}
                     </button>
                   </div>
                   <ProjectFileInput
@@ -1494,7 +1555,7 @@ export default function Playground() {
                     onExport={exportProject}
                     disabled={!draftsLoaded || busy || loadingProject || Boolean(editorError)}
                   />
-                  <a href="/playground/capabilities/">対応機能</a>
+                  <a href="/playground/capabilities/">{t("projectCapabilities")}</a>
                 </div>
               </details>
               <PlaygroundSettingsDialog
@@ -1511,15 +1572,15 @@ export default function Playground() {
             {
               value: "configMap",
               label: "ConfigMap",
-              group: "基本",
-              keywords: ["基本", "変数", "manifest"],
+              group: t("examplesGroupBasics"),
+              keywords: [t("examplesGroupBasics"), "variables", "manifest"],
               onSelect: () => void selectSample("configMap"),
             },
             {
               value: "deployment",
               label: "Deployment",
-              group: "基本",
-              keywords: ["基本", "kubernetes", "manifest"],
+              group: t("examplesGroupBasics"),
+              keywords: [t("examplesGroupBasics"), "kubernetes", "manifest"],
               onSelect: () => void selectSample("deployment"),
             },
             ...examples.map((entry) => ({
@@ -1565,14 +1626,14 @@ export default function Playground() {
             }}
           />
         )}
-        {loadingProject && <p role="status">読み込み中</p>}
-        <nav className="playground-mobile-views" aria-label="表示">
+        {loadingProject && <p role="status">{t("loadingProject")}</p>}
+        <nav className="playground-mobile-views" aria-label={t("viewMode")}>
           <button
             type="button"
             aria-pressed={mobileView === "editor"}
             onClick={() => setMobileView("editor")}
           >
-            エディター
+            {t("editor")}
           </button>
           <button
             type="button"
@@ -1582,7 +1643,7 @@ export default function Playground() {
               setShowProblems(false);
             }}
           >
-            出力
+            {t("output")}
           </button>
           <button
             type="button"
@@ -1593,7 +1654,7 @@ export default function Playground() {
               setShowDiff(false);
             }}
           >
-            問題{diagnostics.length > 0 ? ` ${diagnostics.length}` : ""}
+            {t("problemsCount", { count: diagnostics.length })}
           </button>
         </nav>
         <Group
@@ -1611,14 +1672,14 @@ export default function Playground() {
               <button
                 type="button"
                 className="playground-explorer-toggle"
-                aria-label={explorerOpen ? "ファイル一覧を閉じる" : "ファイル一覧を開く"}
+                aria-label={explorerOpen ? t("closeExplorer") : t("openExplorer")}
                 aria-pressed={explorerOpen}
                 onClick={() => setExplorerOpen((value) => !value)}
-                title={explorerOpen ? "ファイル一覧を閉じる" : "ファイル一覧を開く"}
+                title={explorerOpen ? t("closeExplorer") : t("openExplorer")}
               >
                 ▤
               </button>
-              <div className="playground-file-tabs" role="group" aria-label="開いているファイル">
+              <div className="playground-file-tabs" role="group" aria-label={t("openFiles")}>
                 {openPaths.map((path) => (
                   <div className="playground-file-tab" key={path}>
                     <button
@@ -1633,8 +1694,8 @@ export default function Playground() {
                       <button
                         type="button"
                         className="playground-file-tab-close"
-                        aria-label={`${path}を閉じる`}
-                        title="閉じる"
+                        aria-label={t("closeFile", { path })}
+                        title={t("close")}
                         onClick={() => {
                           const index = openPaths.indexOf(path);
                           const remaining = openPaths.filter((entry) => entry !== path);
@@ -1656,8 +1717,8 @@ export default function Playground() {
                 className="playground-new-file"
                 onClick={requestCreateFile}
                 disabled={!draftsLoaded || busy || loadingProject}
-                title="ファイルを作成"
-                aria-label="ファイルを作成"
+                title={t("createFile")}
+                aria-label={t("createFile")}
               >
                 +
               </button>
@@ -1748,14 +1809,11 @@ export default function Playground() {
               )}
             </div>
           </Panel>
-          <Separator
-            className="playground-resize-handle"
-            aria-label="エディターと結果の配置を変更"
-          />
+          <Separator className="playground-resize-handle" aria-label={t("resizePanels")} />
           <Panel id="output" className="playground-output-panel" defaultSize="40" minSize="25">
             <div className="playground-result-panel">
               <div className="playground-result-toolbar">
-                <div className="playground-result-tabs" role="group" aria-label="結果表示">
+                <div className="playground-result-tabs" role="group" aria-label={t("results")}>
                   <button
                     type="button"
                     aria-pressed={!showProblems && !showDiff && !symbolReferencesOpen}
@@ -1763,6 +1821,7 @@ export default function Playground() {
                       closeSymbolReferences();
                       setShowProblems(false);
                       setShowDiff(false);
+                      setShowResources(false);
                     }}
                   >
                     YAML
@@ -1774,9 +1833,10 @@ export default function Playground() {
                       closeSymbolReferences();
                       setShowProblems(true);
                       setShowDiff(false);
+                      setShowResources(false);
                     }}
                   >
-                    問題{diagnostics.length > 0 ? ` ${diagnostics.length}` : ""}
+                    {t("problemsCount", { count: diagnostics.length })}
                   </button>
                   <button
                     type="button"
@@ -1785,6 +1845,7 @@ export default function Playground() {
                       closeSymbolReferences();
                       setShowProblems(false);
                       setShowDiff(true);
+                      setShowResources(false);
                     }}
                     disabled={
                       staleYaml !== undefined ||
@@ -1793,7 +1854,7 @@ export default function Playground() {
                       previousYaml === reply.result?.yaml
                     }
                   >
-                    差分
+                    {t("diff")}
                   </button>
                   {symbolReferencesOpen && (
                     <button type="button" aria-pressed="true" onClick={openSymbolReferences}>
@@ -1837,10 +1898,12 @@ export default function Playground() {
                       layout: panelGroup.current?.getLayout() ?? defaultPanelLayout,
                     });
                   }}
-                  aria-label={orientation === "vertical" ? "左右に並べる" : "上下に並べる"}
-                  title={orientation === "vertical" ? "左右に並べる" : "上下に並べる"}
+                  aria-label={
+                    orientation === "vertical" ? t("arrangeSideBySide") : t("arrangeStacked")
+                  }
+                  title={orientation === "vertical" ? t("arrangeSideBySide") : t("arrangeStacked")}
                 >
-                  {orientation === "vertical" ? "左右" : "上下"}
+                  {orientation === "vertical" ? t("arrangeHorizontal") : t("arrangeVertical")}
                 </button>
               </div>
               <PlaygroundResult
@@ -1852,6 +1915,9 @@ export default function Playground() {
                 fontSize={editorSettings.fontSize}
                 showDiff={showDiff}
                 showProblems={showProblems}
+                showResources={showResources}
+                onToggleResources={() => setShowResources((shown) => !shown)}
+                onShowResourcesChange={setShowResources}
                 showReferences={symbolReferencesOpen}
                 referenceItems={symbolReferenceItems}
                 referenceError={symbolReferencesError}
@@ -1861,12 +1927,18 @@ export default function Playground() {
                 onSourceCandidates={handleSourceCandidates}
               />
               {showProblems && draftsLoaded && diagnostics.length === 0 && (
-                <p className="playground-no-problems">問題はありません</p>
+                <p className="playground-no-problems">{t("noProblems")}</p>
               )}
             </div>
           </Panel>
         </Group>
-        <footer className="playground-statusbar" aria-label="プロジェクトの状態">
+        <footer className="playground-statusbar" aria-label={t("projectStatus")}>
+          <span
+            className={`playground-save-status playground-save-${saveStatus}`}
+            aria-live="polite"
+          >
+            {{ saving: t("saveSaving"), saved: t("saveSaved"), error: t("saveError") }[saveStatus]}
+          </span>
           <span
             className={
               wasmStatus === "ready" ? "playground-status-ready" : "playground-status-loading"
@@ -1888,8 +1960,8 @@ export default function Playground() {
               {t("retry")}
             </button>
           )}
-          <span>{diagnostics.length}件の問題</span>
-          <span>{Object.keys(projectFiles).length + 1}ファイル</span>
+          <span>{t("problemsCount", { count: diagnostics.length })}</span>
+          <span>{t("filesCount", { count: Object.keys(projectFiles).length + 1 })}</span>
           <span>{(projectSizeBytes / 1024 / 1024).toFixed(1)} MiB</span>
           <span className="playground-status-path">{activePath}</span>
         </footer>

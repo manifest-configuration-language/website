@@ -1,8 +1,8 @@
 .playground-app {
   display: flex;
   width: 100%;
-  height: calc(100dvh - var(--sl-nav-height, 4rem) - 9rem);
-  min-height: 34rem;
+  height: calc(100dvh - var(--sl-nav-height, 4rem) - 1rem);
+  min-height: 24rem;
   overflow: hidden;
   --playground-editor-selection: #d5ebdc;
   --playground-editor-active-line: #f4f8f5;
@@ -36,6 +36,20 @@
   width: 100%;
   box-sizing: border-box;
   isolation: isolate;
+}
+
+.sl-container:has(.playground-app) {
+  width: 100%;
+  max-width: none;
+  padding-inline: clamp(0.5rem, 1vw, 1rem);
+}
+
+.sl-container:has(.playground-app) .content-panel {
+  padding-block-start: 0;
+}
+
+.sl-container:has(.playground-app) .content-panel h1 {
+  display: none;
 }
 
 .playground-app .playground {
@@ -519,8 +533,8 @@
 
 @media (max-width: 48rem) {
   .playground-app {
-    height: calc(100dvh - var(--sl-nav-height, 4rem) - 8rem);
-    min-height: 30rem;
+    height: calc(100dvh - var(--sl-nav-height, 4rem) - 0.5rem);
+    min-height: 24rem;
   }
 
   .playground-app > astro-island {

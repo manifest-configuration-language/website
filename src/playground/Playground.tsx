@@ -1509,6 +1509,13 @@ export default function Playground() {
             )}
             <button
               type="button"
+              onClick={openShareDialog}
+              disabled={!draftsLoaded || busy || loadingProject}
+            >
+              共有
+            </button>
+            <button
+              type="button"
               onClick={() => setExamplesOpen(true)}
               disabled={!draftsLoaded || busy || loadingProject}
               aria-haspopup="dialog"
@@ -1551,13 +1558,6 @@ export default function Playground() {
                     disabled={!draftsLoaded || busy || loadingProject}
                   >
                     新しいプロジェクト
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openShareDialog}
-                    disabled={!draftsLoaded || busy || loadingProject}
-                  >
-                    共有方法
                   </button>
                 </div>
                 <ProjectFileInput

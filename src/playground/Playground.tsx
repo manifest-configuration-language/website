@@ -31,7 +31,7 @@ import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import { usePlaygroundLayout } from "./usePlaygroundLayout";
 import { usePlaygroundKeyboardShortcuts } from "./usePlaygroundKeyboardShortcuts";
 import { usePlaygroundFileActions } from "./usePlaygroundFileActions";
-import { createSourcePositionStore } from "./sourcePositionStore";
+import { usePlaygroundEditorIntegration } from "./usePlaygroundEditorIntegration";
 import "./symbolRenamePreview.css";
 import { DraftConflictError, usePlaygroundPersistence } from "./usePlaygroundPersistence";
 import type { StoredProject } from "./usePlaygroundPersistence";
@@ -117,7 +117,6 @@ export default function Playground() {
   const [targetOutputPosition, setTargetOutputPosition] = useState<
     { line: number; character: number; requestId: number } | undefined
   >();
-  const sourcePositionStore = useRef(createSourcePositionStore()).current;
   const [sourceMapCandidates, setSourceMapCandidates] = useState<SourceMapLocationCandidate[]>([]);
   const [diagnostics, setDiagnostics] = useState<PlaygroundDiagnostic[]>([]);
   const [error, setError] = useState("");
@@ -237,6 +236,23 @@ export default function Playground() {
     () => editablePaths.filter((path) => path.endsWith(".mcl")),
     [editablePaths],
   );
+  const editorIntegration = usePlaygroundEditorIntegration({
+    client,
+    editor,
+    project: projectRef,
+    startupReady,
+    pendingNavigation,
+    editablePaths,
+    setFileContent,
+    selectProjectFile,
+    notifyInitialContentChanged,
+    notifySourceChanged,
+    setError,
+    setEditorError,
+    setOpenPaths,
+    setRecentPaths,
+    setMobileView,
+  });
   const currentSourceMap =
     reply?.ok && renderedContentRevision.current === projectContentRevision.current
       ? reply.result?.sourceMap
@@ -251,10 +267,10 @@ export default function Playground() {
     activePath,
     currentSourceMap,
     reply,
-    languageServiceFiles,
-    sourceForPath,
-    selectFile,
-    goToEditorPosition,
+    languageServiceFiles: editorIntegration.languageServiceFiles,
+    sourceForPath: editorIntegration.sourceForPath,
+    selectFile: editorIntegration.selectFile,
+    goToEditorPosition: editorIntegration.goToEditorPosition,
     replaceProjectState,
     finishProjectMutation,
     setMobileView,
@@ -285,11 +301,6 @@ export default function Playground() {
     closeSymbolRename,
     resetSymbolRename,
   } = languageActions;
-  const handleEditorSelectionChange = useCallback(
-    (path: string, line: number, character: number) =>
-      sourcePositionStore.set({ path, line, character }),
-    [sourcePositionStore],
-  );
   const handleSourceCandidates = useCallback(
     (candidates: SourceMapLocationCandidate[]) => {
       if (candidates.length === 1 && candidates[0]?.unambiguous) {
@@ -340,15 +351,6 @@ export default function Playground() {
     setRecentPaths,
     setError,
   });
-
-  function languageServiceFiles(): Record<string, ProjectFile> {
-    const files = Object.assign(Object.create(null), projectRef.current.files) as Record<
-      string,
-      ProjectFile
-    >;
-    files["main.mcl"] = { encoding: "utf8", content: projectRef.current.source };
-    return files;
-  }
 
   const applyProject = useCallback(
     (
@@ -453,8 +455,8 @@ export default function Playground() {
     paths: projectPaths,
     files: projectFiles,
     recentPaths,
-    sourceForPath,
-    selectFile,
+    sourceForPath: editorIntegration.sourceForPath,
+    selectFile: editorIntegration.selectFile,
     selectSample,
     symbolReferences,
     navigateToDefinition,
@@ -536,9 +538,9 @@ export default function Playground() {
   }, [editorSettings.theme]);
 
   useEffect(() => {
-    if (!activePath.endsWith(".mcl")) sourcePositionStore.set(undefined);
+    if (!activePath.endsWith(".mcl")) editorIntegration.sourcePositionStore.set(undefined);
     setSourceMapCandidates([]);
-  }, [activePath, sourcePositionStore]);
+  }, [activePath, editorIntegration.sourcePositionStore]);
 
   usePlaygroundKeyboardShortcuts({
     shortcuts: editorSettings.shortcuts,
@@ -549,57 +551,6 @@ export default function Playground() {
     setShowProblems,
     setShowDiff,
   });
-
-  const onEditorReady = useCallback(
-    (view: EditorView | undefined) => {
-      editor.current = view;
-      if (view && !startupReady.current) view.contentDOM.contentEditable = "false";
-      if (
-        view &&
-        projectRef.current.activePath === "main.mcl" &&
-        projectRef.current.source !== view.state.doc.toString()
-      ) {
-        const result = setFileContent("main.mcl", view.state.doc.toString());
-        if (!result.ok) {
-          setError(result.error);
-          view.dispatch({
-            changes: {
-              from: 0,
-              to: view.state.doc.length,
-              insert: projectRef.current.source,
-            },
-          });
-        } else {
-          notifyInitialContentChanged();
-        }
-      }
-      const diagnostic = pendingNavigation.current;
-      if (view && diagnostic && (diagnostic.path ?? "main.mcl") === projectRef.current.activePath) {
-        pendingNavigation.current = undefined;
-        goToEditorPosition(diagnostic);
-      }
-    },
-    [notifyInitialContentChanged, projectRef, setFileContent],
-  );
-
-  const onEditorError = useCallback((cause: Error) => {
-    setEditorError(cause.message);
-  }, []);
-
-  const onDocumentChange = useCallback(
-    (source: string, path: string) => {
-      const result = setFileContent(path, source);
-      if (!result.ok) {
-        setError(result.error);
-        return false;
-      }
-      clearShareReferenceFromURL();
-      notifySourceChanged();
-      setError("");
-      return true;
-    },
-    [notifySourceChanged, projectRef, setFileContent],
-  );
 
   async function copyOutput() {
     const yaml = staleYaml ?? reply?.result?.yaml;
@@ -624,64 +575,21 @@ export default function Playground() {
     downloadBlob(new Blob([yaml], { type: "application/yaml;charset=utf-8" }), "manifest.yaml");
   }
 
-  function goToDiagnostic(diagnostic: PlaygroundDiagnostic) {
-    setMobileView("editor");
-    const targetPath = diagnostic.path ?? "main.mcl";
-    if (!editablePaths.includes(targetPath)) return;
-    if (targetPath !== projectRef.current.activePath) {
-      selectFile(targetPath, diagnostic);
-      return;
-    }
-    goToEditorPosition(diagnostic);
-  }
-
-  function sourceForPath(path: string) {
-    if (path === "main.mcl") return projectRef.current.source;
-    const file = projectRef.current.files[path];
-    return file?.encoding === "utf8" ? file.content : "";
-  }
-
-  function goToEditorPosition(diagnostic: PlaygroundDiagnostic) {
-    const view = editor.current;
-    if (!view) return;
-    const line = view.state.doc.line(Math.min(Math.max(diagnostic.line, 1), view.state.doc.lines));
-    const position = Math.min(line.from + Math.max(diagnostic.column - 1, 0), line.to);
-    view.dispatch({ selection: { anchor: position }, scrollIntoView: true });
-    view.focus();
-  }
-
-  function selectFile(path: string, diagnostic?: PlaygroundDiagnostic) {
-    setOpenPaths((previous) => (previous.includes(path) ? previous : [...previous, path]));
-    if (path === projectRef.current.activePath) return;
-    pendingNavigation.current = diagnostic;
-    selectProjectFile(path);
-    setRecentPaths((previous) => [path, ...previous.filter((entry) => entry !== path)]);
-  }
-
   const mclEditorServices = {
-    onReady: onEditorReady,
+    onReady: editorIntegration.onReady,
     onWorkspaceEditApplierReady: (applier: ApplyWorkspaceEdits | undefined) => {
       workspaceEditApplier.current = applier;
     },
-    onDocumentChange,
-    onError: onEditorError,
+    onDocumentChange: editorIntegration.onDocumentChange,
+    onError: editorIntegration.onEditorError,
     diagnostics,
     onRun: () => void run(),
     onFormat: () => void formatSource(),
-    onComplete: (path: string, position: { line: number; character: number }) =>
-      client.current
-        ? client.current.complete(sourceForPath(path), path, position, languageServiceFiles())
-        : Promise.resolve([]),
-    onDefinition: (path: string, position: { line: number; character: number }) =>
-      client.current
-        ? client.current.definition(sourceForPath(path), path, position, languageServiceFiles())
-        : Promise.resolve(null),
-    onHover: (path: string, position: { line: number; character: number }) =>
-      client.current
-        ? client.current.hover(sourceForPath(path), path, position, languageServiceFiles())
-        : Promise.resolve(null),
+    onComplete: editorIntegration.onComplete,
+    onDefinition: editorIntegration.onDefinition,
+    onHover: editorIntegration.onHover,
     onNavigate: navigateToDefinition,
-    onSelectionChange: handleEditorSelectionChange,
+    onSelectionChange: editorIntegration.onSelectionChange,
     onNavigateToYaml: navigateToYaml,
     onShowProblems: () => {
       setMobileView("problems");
@@ -692,9 +600,9 @@ export default function Playground() {
     onRenameSymbol: openSymbolRename,
   };
   const textEditorServices = {
-    onReady: onEditorReady,
-    onDocumentChange,
-    onError: onEditorError,
+    onReady: editorIntegration.onReady,
+    onDocumentChange: editorIntegration.onDocumentChange,
+    onError: editorIntegration.onEditorError,
     onRun: () => void run(),
   };
 
@@ -830,7 +738,7 @@ export default function Playground() {
             mclServices: mclEditorServices,
             textEditorServices,
             onToggleExplorer: () => setExplorerOpen((value) => !value),
-            onSelectFile: selectFile,
+            onSelectFile: editorIntegration.selectFile,
             onCloseFile: (path) => {
               const index = openPaths.indexOf(path);
               const remaining = openPaths.filter((entry) => entry !== path);
@@ -901,8 +809,8 @@ export default function Playground() {
             referenceItems: symbolReferenceItems,
             referenceError: symbolReferencesError,
             targetOutputPosition,
-            onDiagnostic: goToDiagnostic,
-            sourcePositionStore,
+            onDiagnostic: editorIntegration.goToDiagnostic,
+            sourcePositionStore: editorIntegration.sourcePositionStore,
             onSourceCandidates: handleSourceCandidates,
           }}
           showProblems={showProblems}

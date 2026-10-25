@@ -2,8 +2,7 @@ FROM node:24.22.0-alpine@sha256:44fce696f38ba8c987c4db89954051000bbd05ffd8d8659b
 
 WORKDIR /src
 COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN PNPM_PACKAGE=$(node -p "require('./package.json').packageManager.split('+')[0]") \
-    && npm install --global "$PNPM_PACKAGE" --fetch-retries=5 --fetch-timeout=300000 \
+RUN corepack enable pnpm \
     && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build

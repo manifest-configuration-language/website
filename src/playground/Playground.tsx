@@ -23,7 +23,13 @@ import {
   parseSharedProjectPayload,
 } from "./projectShare";
 import { loadShortShare } from "./projectShareApi";
-import { isValidProjectFileSet, isValidProjectPath, projectLimits } from "./projectValidation.js";
+import {
+  isValidProjectFileSet,
+  isValidProjectPath,
+  projectLimits,
+  projectSnapshotError,
+  projectSnapshotErrorMessage,
+} from "./projectValidation.js";
 import { PlaygroundResult } from "./PlaygroundResult";
 import { PlaygroundSettingsDialog } from "./PlaygroundSettingsDialog";
 import { PlaygroundEditorDialogs } from "./PlaygroundEditorDialogs";
@@ -37,6 +43,7 @@ import { renamePreviewEntries, usePlaygroundLanguageActions } from "./usePlaygro
 import { type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
 import { PlaygroundShareDialog } from "./PlaygroundShareDialog";
+import { ProjectName } from "./ProjectName";
 import { usePlaygroundSharing, type SharedRecoveryState } from "./usePlaygroundSharing";
 import "./symbolRenamePreview.css";
 import {
@@ -53,6 +60,15 @@ const layoutPreferenceKey = "mcl-playground-layout-v1";
 const defaultPanelLayout: Layout = { editor: 60, output: 40 };
 const runtimeMeasurementPrefix = "mcl.playground.";
 const runtimeMeasurementLimit = 100;
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 function recordRuntimeMeasurement(
   name: string,
@@ -340,6 +356,8 @@ export default function Playground() {
   const workspaceEditApplier = useRef<ApplyWorkspaceEdits | undefined>(undefined);
   const client = useRef<ReturnType<typeof createPlaygroundClient> | undefined>(undefined);
   const revision = useRef(0);
+  const projectContentRevision = useRef(0);
+  const renderedContentRevision = useRef<number | undefined>(undefined);
   const runAction = useRef<() => void>(() => {});
   const sharedRecovery = useRef<SharedRecoveryState | undefined>(undefined);
   const pendingNavigation = useRef<PlaygroundDiagnostic | undefined>(undefined);
@@ -401,6 +419,8 @@ export default function Playground() {
     loadLegacyProject,
     markDraftsLoaded,
   } = usePlaygroundPersistence(project, reportPersistenceError);
+  const activeDraftName =
+    drafts.find((draft) => draft.id === activeDraftId)?.name ?? "プロジェクト";
   const handleShareError = useCallback(
     (cause: unknown) => setError(sharedProjectError(cause, true)),
     [],
@@ -448,7 +468,9 @@ export default function Playground() {
     [editablePaths],
   );
   const currentSourceMap =
-    reply?.ok && reply.revision === revision.current ? reply.result?.sourceMap : undefined;
+    reply?.ok && renderedContentRevision.current === projectContentRevision.current
+      ? reply.result?.sourceMap
+      : undefined;
   const languageActions = usePlaygroundLanguageActions({
     editor,
     client,
@@ -665,6 +687,7 @@ export default function Playground() {
 
   async function finishProjectMutation() {
     const currentRevision = ++revision.current;
+    projectContentRevision.current += 1;
     setDiagnostics([]);
     dispatchRender({ type: "source-changed" });
     setShowDiff(false);
@@ -716,28 +739,44 @@ export default function Playground() {
 
   const applyProject = useCallback(
     (project: StoredProject, options: { newDraft?: boolean; name?: string } = {}) => {
-      mclEditorStates.current.clear();
-      textEditorStates.current.clear();
-      if (options.newDraft !== false) {
-        clearSharedFragment();
-        clearSharedDraftRecovery(activeDraftIdRef.current);
-        sharedRecovery.current = undefined;
-        void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
-          (cause: unknown) => {
-            setError(cause instanceof Error ? cause.message : String(cause));
-          },
-        );
-        activateDraft(crypto.randomUUID(), options.name ?? "インポート");
-      }
-      dispatchRender({ type: "project-replaced" });
-      setShowDiff(false);
       const requestedPath = project.activePath;
       const nextPath =
         requestedPath &&
         (requestedPath === "main.mcl" || project.files[requestedPath]?.encoding === "utf8")
           ? requestedPath
           : "main.mcl";
-      replaceProjectState(project.source, project.files, nextPath);
+      const validationError = projectSnapshotError({
+        source: project.source,
+        files: project.files,
+        activePath: nextPath,
+      });
+      if (validationError) {
+        setError(projectSnapshotErrorMessage(validationError));
+        return;
+      }
+      if (options.newDraft !== false) {
+        void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
+          (cause: unknown) => {
+            setError(cause instanceof Error ? cause.message : String(cause));
+          },
+        );
+      }
+      const replacement = replaceProjectState(project.source, project.files, nextPath);
+      if (!replacement.ok) {
+        setError(replacement.error);
+        return;
+      }
+      mclEditorStates.current.clear();
+      textEditorStates.current.clear();
+      if (options.newDraft !== false) {
+        clearSharedFragment();
+        clearSharedDraftRecovery(activeDraftIdRef.current);
+        sharedRecovery.current = undefined;
+        activateDraft(crypto.randomUUID(), options.name ?? "インポート");
+      }
+      dispatchRender({ type: "project-replaced" });
+      setShowDiff(false);
+      projectContentRevision.current += 1;
       setOpenPaths([nextPath]);
       void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
         (cause: unknown) => {
@@ -996,7 +1035,8 @@ export default function Playground() {
   ]);
 
   useEffect(() => {
-    const root = document.documentElement;
+    const root = document.querySelector<HTMLElement>(".playground-app");
+    if (!root) return;
     if (editorSettings.theme === "system") root.removeAttribute("data-playground-theme");
     else root.dataset.playgroundTheme = editorSettings.theme;
     return () => root.removeAttribute("data-playground-theme");
@@ -1053,6 +1093,9 @@ export default function Playground() {
               insert: projectRef.current.source,
             },
           });
+        } else {
+          projectContentRevision.current += 1;
+          revision.current += 1;
         }
       }
       const diagnostic = pendingNavigation.current;
@@ -1091,6 +1134,7 @@ export default function Playground() {
         setError(result.error);
         return false;
       }
+      projectContentRevision.current += 1;
       const recovery = sharedRecovery.current;
       if (recovery) {
         const metadata = { ...recovery.metadata, activePath: path };
@@ -1130,6 +1174,7 @@ export default function Playground() {
       if (currentRevision !== revision.current) return;
       setDiagnostics(result.diagnostics ?? (result.error ? [result.error] : []));
       if (result.ok) {
+        renderedContentRevision.current = projectContentRevision.current;
         setShowProblems(false);
         if (focusOutput) setMobileView("output");
         setShowDiff(false);
@@ -1172,6 +1217,7 @@ export default function Playground() {
       const formatted = result.result?.source;
       if (projectRef.current.activePath !== activePath || formatted === undefined) return;
       const original = view.state.doc.toString();
+      if (formatted === original) return;
       let prefix = 0;
       while (
         prefix < original.length &&
@@ -1278,12 +1324,7 @@ export default function Playground() {
         source: projectRef.current.source,
         files: projectRef.current.files,
       });
-      const url = URL.createObjectURL(archive);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = "mcl-project.zip";
-      anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadBlob(archive, "mcl-project.zip");
       setNotice("ZIPを書き出しました");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -1310,12 +1351,7 @@ export default function Playground() {
   function downloadOutput() {
     const yaml = staleYaml ?? reply?.result?.yaml;
     if (yaml === undefined) return;
-    const url = URL.createObjectURL(new Blob([yaml], { type: "application/yaml;charset=utf-8" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "manifest.yaml";
-    anchor.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(new Blob([yaml], { type: "application/yaml;charset=utf-8" }), "manifest.yaml");
   }
 
   function goToDiagnostic(diagnostic: PlaygroundDiagnostic) {
@@ -1429,6 +1465,14 @@ export default function Playground() {
             /
           </span>
           <span>Playground</span>
+          <span aria-hidden="true" className="playground-brand-separator">
+            /
+          </span>
+          <ProjectName
+            name={activeDraftName}
+            disabled={!draftsLoaded || !activeDraftId}
+            onSave={(name) => updateDraftMetadata(activeDraftId, name)}
+          />
         </div>
         <div className="playground-toolbar">
           <div className="playground-primary-actions" role="group" aria-label="編集操作">

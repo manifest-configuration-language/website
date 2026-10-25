@@ -50,6 +50,14 @@ export async function readProject(files) {
   const main = entries.find(({ path }) => path === "main.mcl");
   if (!main) throw new Error("The selected directory must contain main.mcl at its root.");
 
+  if (main.file.size > projectLimits.sourceBytes)
+    throw new Error(`Source exceeds the ${projectLimits.sourceBytes / 1024 / 1024} MiB limit.`);
+  for (const { file } of entries) {
+    if (file.size > projectLimits.projectFileBytes)
+      throw new Error(
+        `Project files cannot exceed ${projectLimits.projectFileBytes / 1024 / 1024} MiB.`,
+      );
+  }
   const bytes = entries.reduce((total, { file }) => total + file.size, 0);
   if (bytes > projectLimits.projectBytes)
     throw new Error(

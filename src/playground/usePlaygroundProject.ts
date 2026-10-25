@@ -1,6 +1,12 @@
 import { useCallback, useRef, useState } from "react";
 import { parser as mclParser } from "@manifest-configuration-language/language";
-import { isValidProjectFileSet, isValidProjectPath, projectLimits } from "./projectValidation.js";
+import {
+  isValidProjectFileSet,
+  isValidProjectPath,
+  projectLimits,
+  projectSnapshotError,
+  projectSnapshotErrorMessage,
+} from "./projectValidation.js";
 import type { ProjectFile } from "./types";
 
 export type PlaygroundProject = {
@@ -113,7 +119,10 @@ function replaceImportPaths(
 }
 
 function fileSize(file: ProjectFile): number {
-  return file.encoding === "utf8" ? encoder.encode(file.content).byteLength : file.bytes.byteLength;
+  if (file?.encoding === "utf8" && typeof file.content === "string")
+    return encoder.encode(file.content).byteLength;
+  if (file?.encoding === "binary" && file.bytes instanceof Uint8Array) return file.bytes.byteLength;
+  return -1;
 }
 
 function projectFileSizes(source: string, files: Record<string, ProjectFile>) {
@@ -128,6 +137,18 @@ function projectFileSizes(source: string, files: Record<string, ProjectFile>) {
   return { fileSizes: sizes, totalBytes };
 }
 
+function copyProjectFiles(files: Record<string, ProjectFile>) {
+  const copied = Object.create(null) as Record<string, ProjectFile>;
+  for (const [path, file] of Object.entries(files)) {
+    if (file?.encoding === "binary" && file.bytes instanceof Uint8Array)
+      copied[path] = { encoding: "binary", bytes: file.bytes.slice() };
+    else if (file?.encoding === "utf8" && typeof file.content === "string")
+      copied[path] = { encoding: "utf8", content: file.content };
+    else copied[path] = file;
+  }
+  return copied;
+}
+
 export function usePlaygroundProject(initialSource: string) {
   const [project, setProject] = useState<PlaygroundProject>(() => ({
     source: initialSource,
@@ -138,16 +159,64 @@ export function usePlaygroundProject(initialSource: string) {
   }));
   const projectRef = useRef(project);
 
-  const commit = useCallback((change: Partial<Omit<PlaygroundProject, "revision">>) => {
-    const next = { ...projectRef.current, ...change, revision: projectRef.current.revision + 1 };
-    projectRef.current = next;
-    setProject(next);
-    return next;
-  }, []);
+  const commit = useCallback(
+    (
+      change: Partial<Pick<PlaygroundProject, "source" | "files" | "activePath">>,
+    ): ProjectMutation => {
+      const current = projectRef.current;
+      if (
+        change.source === undefined &&
+        change.files === undefined &&
+        change.activePath !== undefined
+      ) {
+        if (
+          !isValidProjectPath(change.activePath) ||
+          (change.activePath !== "main.mcl" &&
+            current.files[change.activePath]?.encoding !== "utf8")
+        )
+          return { ok: false, error: "選択できるファイルがありません" };
+        const next = { ...current, activePath: change.activePath, revision: current.revision + 1 };
+        projectRef.current = next;
+        setProject(next);
+        return { ok: true, project: next };
+      }
+      const source = change.source ?? current.source;
+      const files = change.files ?? current.files;
+      const activePath = change.activePath === undefined ? current.activePath : change.activePath;
+      const fileSizes: Record<string, number> = Object.create(null);
+      fileSizes["main.mcl"] = encoder.encode(source).byteLength;
+      let totalBytes = fileSizes["main.mcl"];
+      for (const [path, file] of Object.entries(files)) {
+        const size =
+          current.files[path] === file
+            ? (current.fileSizes[path] ?? fileSize(file))
+            : fileSize(file);
+        fileSizes[path] = size;
+        totalBytes += size;
+      }
+      const next = {
+        ...current,
+        ...change,
+        source,
+        files,
+        activePath,
+        fileSizes,
+        totalBytes,
+        revision: current.revision + 1,
+      };
+      const validationError = projectSnapshotError(next, fileSizes);
+      if (validationError)
+        return { ok: false, error: projectSnapshotErrorMessage(validationError) };
+      projectRef.current = next;
+      setProject(next);
+      return { ok: true, project: next };
+    },
+    [],
+  );
 
   const replace = useCallback(
     (source: string, files: Record<string, ProjectFile>, activePath = "main.mcl") => {
-      return commit({ source, files, activePath, ...projectFileSizes(source, files) });
+      return commit({ source, files: copyProjectFiles(files), activePath });
     },
     [commit],
   );
@@ -155,40 +224,30 @@ export function usePlaygroundProject(initialSource: string) {
   const setFileContent = useCallback(
     (path: string, content: string): ProjectMutation => {
       const current = projectRef.current;
-      const size = encoder.encode(content).byteLength;
-      const previousSize = current.fileSizes[path] ?? 0;
-      const previous = current.files[path];
-      const totalBytes =
-        current.totalBytes - (path === "main.mcl" || previous ? previousSize : 0) + size;
-      if (totalBytes > projectLimits.projectBytes) {
-        return {
-          ok: false,
-          error: `プロジェクトの上限は${projectLimits.projectBytes / (1024 * 1024)} MiBです`,
-        };
-      }
-      const fileSizes = Object.assign(Object.create(null), current.fileSizes) as Record<
-        string,
-        number
-      >;
-      fileSizes[path] = size;
-      if (path === "main.mcl")
-        return { ok: true, project: commit({ source: content, fileSizes, totalBytes }) };
+      if (path !== "main.mcl" && current.files[path]?.encoding !== "utf8")
+        return { ok: false, error: "編集できるファイルがありません" };
+      if (path === "main.mcl") return commit({ source: content });
       const files = Object.assign(Object.create(null), current.files) as Record<
         string,
         ProjectFile
       >;
       files[path] = { encoding: "utf8", content };
-      return { ok: true, project: commit({ files, fileSizes, totalBytes }) };
+      return commit({ files });
     },
     [commit],
   );
 
   const setFiles = useCallback(
-    (files: Record<string, ProjectFile>) =>
-      commit({ files, ...projectFileSizes(projectRef.current.source, files) }),
+    (files: Record<string, ProjectFile>) => commit({ files: copyProjectFiles(files) }),
     [commit],
   );
-  const select = useCallback((activePath: string) => commit({ activePath }), [commit]);
+  const select = useCallback(
+    (activePath: string) => {
+      const result = commit({ activePath });
+      return result.ok ? result.project : projectRef.current;
+    },
+    [commit],
+  );
 
   const createFile = useCallback(
     (path: string): ProjectMutation => {
@@ -211,12 +270,7 @@ export function usePlaygroundProject(initialSource: string) {
         ProjectFile
       >;
       files[path] = { encoding: "utf8", content: "" };
-      const fileSizes = Object.assign(Object.create(null), current.fileSizes) as Record<
-        string,
-        number
-      >;
-      fileSizes[path] = 0;
-      return { ok: true, project: commit({ files, fileSizes, activePath: path }) };
+      return commit({ files, activePath: path });
     },
     [commit],
   );
@@ -272,28 +326,11 @@ export function usePlaygroundProject(initialSource: string) {
           files[renamedSourcePath] = { encoding: "utf8", content: updated };
         }
       }
-      const nextSizes = projectFileSizes(source, files);
-      if (nextSizes.totalBytes > projectLimits.projectBytes)
-        return {
-          ok: false,
-          error: `プロジェクトの上限は${projectLimits.projectBytes / (1024 * 1024)} MiBです`,
-        };
-      const fileSizes = Object.assign(Object.create(null), current.fileSizes) as Record<
-        string,
-        number
-      >;
-      delete fileSizes[path];
-      Object.assign(fileSizes, nextSizes.fileSizes);
-      return {
-        ok: true,
-        project: commit({
-          source,
-          files,
-          fileSizes,
-          totalBytes: nextSizes.totalBytes,
-          activePath: current.activePath === path ? nextPath : current.activePath,
-        }),
-      };
+      return commit({
+        source,
+        files,
+        activePath: current.activePath === path ? nextPath : current.activePath,
+      });
     },
     [commit],
   );
@@ -322,20 +359,10 @@ export function usePlaygroundProject(initialSource: string) {
         ProjectFile
       >;
       delete files[path];
-      const fileSizes = Object.assign(Object.create(null), current.fileSizes) as Record<
-        string,
-        number
-      >;
-      delete fileSizes[path];
-      return {
-        ok: true,
-        project: commit({
-          files,
-          fileSizes,
-          activePath: current.activePath === path ? "main.mcl" : current.activePath,
-          totalBytes: current.totalBytes - current.fileSizes[path],
-        }),
-      };
+      return commit({
+        files,
+        activePath: current.activePath === path ? "main.mcl" : current.activePath,
+      });
     },
     [commit],
   );

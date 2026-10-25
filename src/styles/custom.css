@@ -6,49 +6,12 @@
   margin: 0;
 }
 
-.sl-container:has(.playground) {
-  width: 100%;
-  max-width: none;
-  padding-inline: clamp(0.75rem, 2vw, 2rem);
-}
-
-.sl-container:has(.playground) .content-panel {
-  padding-block-start: 1rem;
-}
-
-.sl-container:has(.playground) .content-panel h1 {
-  display: none;
-}
-
-body:has(.playground) #starlight__sidebar,
-body:has(.playground) .sidebar-pane,
-body:has(.playground) .right-sidebar-container {
-  display: none;
-}
-
-.main-frame:has(.playground) {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .playground-header {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-}
-
-.playground-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  font-size: 1.05rem;
-  font-weight: 650;
-}
-
-.playground-brand a {
-  color: var(--sl-color-text);
-  text-decoration: none;
 }
 
 .playground-runtime {

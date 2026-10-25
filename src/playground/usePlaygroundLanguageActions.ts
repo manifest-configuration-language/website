@@ -11,7 +11,7 @@ import type {
   PlaygroundSourceMap,
   ProjectFile,
 } from "./types";
-import type { PlaygroundProject } from "./usePlaygroundProject";
+import type { PlaygroundProject, ProjectMutation } from "./usePlaygroundProject";
 
 type PendingSymbolRename = {
   edits: PlaygroundRenameEdit[];
@@ -46,7 +46,7 @@ type Args = {
     source: string,
     files: Record<string, ProjectFile>,
     activePath: string,
-  ) => void;
+  ) => ProjectMutation;
   finishProjectMutation: () => Promise<void>;
   setMobileView: (view: "editor" | "output" | "problems") => void;
   setTargetOutputPosition: (position: OutputPosition | undefined) => void;
@@ -346,7 +346,12 @@ export function usePlaygroundLanguageActions({
       if (editedPath === "main.mcl") nextSource = content;
       else nextFiles[editedPath] = { encoding: "utf8", content };
     }
-    replaceProjectState(nextSource, nextFiles, currentProject.activePath);
+    const replacement = replaceProjectState(nextSource, nextFiles, currentProject.activePath);
+    if (!replacement.ok) {
+      setSymbolRenameError(replacement.error);
+      setPendingSymbolRename(undefined);
+      return;
+    }
     await finishProjectMutation();
     setSymbolRenameOpen(false);
     setPendingSymbolRename(undefined);

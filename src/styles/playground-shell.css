@@ -1,32 +1,14 @@
-:root {
-  color-scheme: light;
-  --sl-color-bg: #fff;
-  --sl-color-text: #18181b;
-  --sl-color-gray-2: #52525b;
-  --sl-color-gray-5: #d4d4d8;
-  --sl-color-gray-6: #f4f4f5;
-  --sl-color-accent: #6750a4;
-  --sl-color-text-accent: #6750a4;
+.playground-app {
+  display: flex;
+  width: 100%;
+  height: calc(100dvh - var(--sl-nav-height, 4rem) - 9rem);
+  min-height: 34rem;
+  overflow: hidden;
   --playground-editor-selection: #d5ebdc;
   --playground-editor-active-line: #f4f8f5;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --sl-color-bg: #18181b;
-    --sl-color-text: #f4f4f5;
-    --sl-color-gray-2: #a1a1aa;
-    --sl-color-gray-5: #3f3f46;
-    --sl-color-gray-6: #27272a;
-    --sl-color-accent: #c4b5fd;
-    --sl-color-text-accent: #c4b5fd;
-    --playground-editor-selection: #335140;
-    --playground-editor-active-line: #1e2821;
-  }
-}
-
-html[data-playground-theme="light"] {
+.playground-app[data-playground-theme="light"] {
   color-scheme: light;
   --sl-color-bg: #ffffff;
   --sl-color-text: #202a25;
@@ -35,11 +17,9 @@ html[data-playground-theme="light"] {
   --sl-color-gray-6: #f3f7f4;
   --sl-color-accent: #24734b;
   --sl-color-text-accent: #1d6842;
-  --playground-editor-selection: #d5ebdc;
-  --playground-editor-active-line: #f4f8f5;
 }
 
-html[data-playground-theme="dark"] {
+.playground-app[data-playground-theme="dark"] {
   color-scheme: dark;
   --sl-color-bg: #171d19;
   --sl-color-text: #e5eee8;
@@ -52,74 +32,10 @@ html[data-playground-theme="dark"] {
   --playground-editor-active-line: #1e2821;
 }
 
-html:has(.playground-app),
-body:has(.playground-app) {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  margin: 0;
-  overflow: hidden;
-}
-
-body:has(.playground-app) {
-  background: var(--sl-color-bg);
-  color: var(--sl-color-text);
-  font-family: "Noto Sans JP", "Yu Gothic UI", system-ui, sans-serif;
-}
-
-body:has(.playground-app) #starlight__sidebar,
-body:has(.playground-app) .sidebar-pane,
-body:has(.playground-app) .right-sidebar-container,
-body:has(.playground-app) .header,
-body:has(.playground-app) .mobile-starlight__sidebar-toggle {
-  display: none !important;
-}
-
 .playground-app {
-  position: fixed;
-  z-index: 1000;
-  inset: 0;
-  display: flex;
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--sl-color-bg);
   box-sizing: border-box;
   isolation: isolate;
-}
-
-.playground-site-nav {
-  display: flex;
-  flex: 0 0 13rem;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  padding: 1rem 0.75rem;
-  border-right: 1px solid var(--sl-color-gray-5);
-  background: var(--sl-color-gray-6);
-  box-sizing: border-box;
-}
-
-.playground-site-nav a {
-  display: block;
-  padding: 0.55rem 0.7rem;
-  border-radius: 0.4rem;
-  color: var(--sl-color-text);
-  text-decoration: none;
-}
-
-.playground-site-nav a:hover,
-.playground-site-nav a[aria-current="page"] {
-  background: color-mix(in srgb, var(--sl-color-accent) 14%, transparent);
-  color: var(--sl-color-accent);
-}
-
-.playground-site-nav .playground-site-brand {
-  margin-bottom: 0.75rem;
-  font-size: 1.25rem;
-  font-weight: 700;
 }
 
 .playground-app .playground {
@@ -603,36 +519,8 @@ body:has(.playground-app) .mobile-starlight__sidebar-toggle {
 
 @media (max-width: 48rem) {
   .playground-app {
-    flex-direction: column;
-  }
-
-  .playground-site-nav {
-    width: 100%;
-    min-width: 0;
-    min-height: 3.25rem;
-    flex: 0 0 auto;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.15rem;
-    overflow: hidden;
-    padding: 0.3rem 0.45rem;
-    border-right: 0;
-    border-bottom: 1px solid var(--sl-color-gray-5);
-  }
-
-  .playground-site-nav a {
-    flex: 0 0 auto;
-    padding: 0.4rem 0.55rem;
-    white-space: nowrap;
-  }
-
-  .playground-site-nav a:not(.playground-site-brand):not([aria-current="page"]) {
-    display: none;
-  }
-
-  .playground-site-nav .playground-site-brand {
-    margin: 0 0.35rem 0 0;
+    height: calc(100dvh - var(--sl-nav-height, 4rem) - 8rem);
+    min-height: 30rem;
   }
 
   .playground-app > astro-island {

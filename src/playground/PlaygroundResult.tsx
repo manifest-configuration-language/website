@@ -7,6 +7,7 @@ import { openSearchPanel, searchKeymap } from "@codemirror/search";
 import { keymap } from "@codemirror/view";
 import { parseAllDocuments } from "yaml";
 import type { PlaygroundDiagnostic, PlaygroundReply, PlaygroundSourceMap } from "./types";
+import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundYamlResultView, type YamlResource } from "./PlaygroundYamlResultView";
 import { PlaygroundDiffResultView } from "./PlaygroundDiffResultView";
 
@@ -19,6 +20,9 @@ type Props = {
   fontSize: number;
   showDiff: boolean;
   showProblems: boolean;
+  showReferences: boolean;
+  referenceItems: QuickAccessItem[];
+  referenceError: string;
   targetOutputPosition?: { line: number; character: number; requestId: number };
   onDiagnostic: (diagnostic: PlaygroundDiagnostic) => void;
   onSourceLocation: (path: string, line: number, character: number) => void;
@@ -33,6 +37,9 @@ export function PlaygroundResult({
   fontSize,
   showDiff,
   showProblems,
+  showReferences,
+  referenceItems,
+  referenceError,
   targetOutputPosition,
   onDiagnostic,
   onSourceLocation,
@@ -81,7 +88,7 @@ export function PlaygroundResult({
   useEffect(() => {
     const parent = outputHost.current;
     const text = selectedResource?.yaml ?? displayedYaml;
-    if (!parent || text === undefined || showProblems || showDiff) return;
+    if (!parent || text === undefined || showProblems || showDiff || showReferences) return;
     const view = new EditorView({
       parent,
       state: EditorState.create({
@@ -157,6 +164,7 @@ export function PlaygroundResult({
     sourceMapDocument,
     showProblems,
     showDiff,
+    showReferences,
   ]);
 
   useEffect(() => {
@@ -165,6 +173,7 @@ export function PlaygroundResult({
       !view ||
       !targetOutputPosition ||
       staleYaml !== undefined ||
+      showReferences ||
       !reply?.ok ||
       targetOutputPosition.requestId !== reply.requestId
     )
@@ -194,6 +203,7 @@ export function PlaygroundResult({
     reply,
     showProblems,
     showDiff,
+    showReferences,
     selectedResource,
     sourceMapDocument,
   ]);
@@ -223,18 +233,40 @@ export function PlaygroundResult({
 
   return (
     <>
-      {showProblems && reply && !reply.ok && reply.error && diagnostics.length === 0 && (
-        <p role="alert">
-          <button
-            className="diagnostic"
-            disabled={!canNavigate(reply.error)}
-            onClick={() => onDiagnostic(reply.error!)}
-          >
-            {reply.error.code}: {reply.error.message} ({location(reply.error)})
-          </button>
-        </p>
+      {showReferences && (
+        <section
+          className="playground-reference-results playground-resource-browser"
+          aria-label="参照箇所"
+        >
+          {referenceError ? (
+            <p role="alert">{referenceError}</p>
+          ) : (
+            <QuickAccessList
+              label="参照を検索"
+              placeholder="ファイル名またはコードを検索"
+              emptyMessage="参照が見つかりません"
+              items={referenceItems}
+            />
+          )}
+        </section>
       )}
-      {showProblems && diagnostics.length > 0 && (
+      {!showReferences &&
+        showProblems &&
+        reply &&
+        !reply.ok &&
+        reply.error &&
+        diagnostics.length === 0 && (
+          <p role="alert">
+            <button
+              className="diagnostic"
+              disabled={!canNavigate(reply.error)}
+              onClick={() => onDiagnostic(reply.error!)}
+            >
+              {reply.error.code}: {reply.error.message} ({location(reply.error)})
+            </button>
+          </p>
+        )}
+      {!showReferences && showProblems && diagnostics.length > 0 && (
         <ul className="playground-diagnostics">
           {diagnostics.map((diagnostic, index) => (
             <li key={`${diagnostic.code}-${diagnostic.line}-${index}`}>
@@ -249,7 +281,7 @@ export function PlaygroundResult({
           ))}
         </ul>
       )}
-      {!showProblems && !showDiff && (staleYaml !== undefined || reply?.ok) && (
+      {!showProblems && !showDiff && !showReferences && (staleYaml !== undefined || reply?.ok) && (
         <PlaygroundYamlResultView
           stale={staleYaml !== undefined}
           resources={resources}
@@ -265,6 +297,7 @@ export function PlaygroundResult({
       )}
       {!showProblems &&
         !showDiff &&
+        !showReferences &&
         staleYaml === undefined &&
         !reply?.ok &&
         (reply?.error ? (
@@ -282,7 +315,7 @@ export function PlaygroundResult({
             <span>実行結果はここに表示されます</span>
           </div>
         ))}
-      {!showProblems && showDiff && canShowDiff && (
+      {!showProblems && !showReferences && showDiff && canShowDiff && (
         <PlaygroundDiffResultView
           previousYaml={previousYaml!}
           currentYaml={currentYaml!}

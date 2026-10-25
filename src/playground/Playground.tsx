@@ -519,6 +519,8 @@ export default function Playground() {
       onSelect: () => {
         navigateToDefinition(reference);
         closeSymbolReferences();
+        setShowProblems(false);
+        setShowDiff(false);
       },
     };
   });
@@ -567,7 +569,7 @@ export default function Playground() {
       ? [
           {
             name: "参照箇所を検索",
-            action: () => void findSymbolReferences(),
+            action: openSymbolReferences,
           },
           {
             name: "シンボル名を変更",
@@ -1299,6 +1301,12 @@ export default function Playground() {
     }
   }
 
+  function openSymbolReferences() {
+    setShowProblems(false);
+    setShowDiff(false);
+    void findSymbolReferences();
+  }
+
   function downloadOutput() {
     const yaml = staleYaml ?? reply?.result?.yaml;
     if (yaml === undefined) return;
@@ -1735,7 +1743,7 @@ export default function Playground() {
                   setShowProblems(true);
                   setShowDiff(false);
                 }}
-                onFindReferences={() => void findSymbolReferences()}
+                onFindReferences={openSymbolReferences}
                 onRenameSymbol={openSymbolRename}
               />
             ) : (
@@ -1760,8 +1768,9 @@ export default function Playground() {
               <div className="playground-result-tabs" role="group" aria-label="結果表示">
                 <button
                   type="button"
-                  aria-pressed={!showProblems && !showDiff}
+                  aria-pressed={!showProblems && !showDiff && !symbolReferencesOpen}
                   onClick={() => {
+                    closeSymbolReferences();
                     setShowProblems(false);
                     setShowDiff(false);
                   }}
@@ -1770,8 +1779,9 @@ export default function Playground() {
                 </button>
                 <button
                   type="button"
-                  aria-pressed={showProblems}
+                  aria-pressed={!symbolReferencesOpen && showProblems}
                   onClick={() => {
+                    closeSymbolReferences();
                     setShowProblems(true);
                     setShowDiff(false);
                   }}
@@ -1780,8 +1790,9 @@ export default function Playground() {
                 </button>
                 <button
                   type="button"
-                  aria-pressed={showDiff}
+                  aria-pressed={!symbolReferencesOpen && showDiff}
                   onClick={() => {
+                    closeSymbolReferences();
                     setShowProblems(false);
                     setShowDiff(true);
                   }}
@@ -1794,6 +1805,11 @@ export default function Playground() {
                 >
                   差分
                 </button>
+                {symbolReferencesOpen && (
+                  <button type="button" aria-pressed="true" onClick={openSymbolReferences}>
+                    参照{symbolReferenceItems.length > 0 ? ` ${symbolReferenceItems.length}` : ""}
+                  </button>
+                )}
               </div>
               <button
                 type="button"
@@ -1801,6 +1817,7 @@ export default function Playground() {
                 disabled={
                   showProblems ||
                   showDiff ||
+                  symbolReferencesOpen ||
                   (staleYaml === undefined && reply?.result?.yaml === undefined)
                 }
               >
@@ -1812,6 +1829,7 @@ export default function Playground() {
                 disabled={
                   showProblems ||
                   showDiff ||
+                  symbolReferencesOpen ||
                   (staleYaml === undefined && reply?.result?.yaml === undefined)
                 }
               >
@@ -1843,6 +1861,9 @@ export default function Playground() {
               fontSize={editorSettings.fontSize}
               showDiff={showDiff}
               showProblems={showProblems}
+              showReferences={symbolReferencesOpen}
+              referenceItems={symbolReferenceItems}
+              referenceError={symbolReferencesError}
               targetOutputPosition={targetOutputPosition}
               onDiagnostic={goToDiagnostic}
               onSourceLocation={navigateToSourceMapLocation}
@@ -1899,10 +1920,6 @@ export default function Playground() {
         onSubmitSymbolRename={(event) => void renameSymbol(event)}
         busy={busy}
         loadingProject={loadingProject}
-        symbolReferencesOpen={symbolReferencesOpen}
-        symbolReferencesError={symbolReferencesError}
-        symbolReferenceItems={symbolReferenceItems}
-        onCloseSymbolReferences={closeSymbolReferences}
       />
       {editorError && (
         <p role="alert">

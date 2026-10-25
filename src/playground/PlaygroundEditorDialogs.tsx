@@ -1,5 +1,4 @@
 import { useEffect, useRef, type SyntheticEvent } from "react";
-import { QuickAccessList, type QuickAccessItem } from "./QuickAccessList";
 
 type FileAction = { kind: "create" } | { kind: "rename" | "delete"; path: string };
 
@@ -30,10 +29,6 @@ type Props = {
   onSubmitSymbolRename: (event: SyntheticEvent<HTMLFormElement>) => void;
   busy: boolean;
   loadingProject: boolean;
-  symbolReferencesOpen: boolean;
-  symbolReferencesError: string;
-  symbolReferenceItems: QuickAccessItem[];
-  onCloseSymbolReferences: () => void;
 };
 
 export function PlaygroundEditorDialogs({
@@ -56,14 +51,9 @@ export function PlaygroundEditorDialogs({
   onSubmitSymbolRename,
   busy,
   loadingProject,
-  symbolReferencesOpen,
-  symbolReferencesError,
-  symbolReferenceItems,
-  onCloseSymbolReferences,
 }: Props) {
   const fileActionDialog = useRef<HTMLDialogElement>(null);
   const symbolRenameDialog = useRef<HTMLDialogElement>(null);
-  const symbolReferencesDialog = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const dialog = fileActionDialog.current;
@@ -78,13 +68,6 @@ export function PlaygroundEditorDialogs({
     if (symbolRenameOpen && !dialog.open) dialog.showModal();
     else if (!symbolRenameOpen && dialog.open) dialog.close();
   }, [symbolRenameOpen]);
-
-  useEffect(() => {
-    const dialog = symbolReferencesDialog.current;
-    if (!dialog) return;
-    if (symbolReferencesOpen && !dialog.open) dialog.showModal();
-    else if (!symbolReferencesOpen && dialog.open) dialog.close();
-  }, [symbolReferencesOpen]);
 
   return (
     <>
@@ -194,31 +177,6 @@ export function PlaygroundEditorDialogs({
             </div>
           </form>
         )}
-      </dialog>
-      <dialog
-        ref={symbolReferencesDialog}
-        className="playground-quick-open"
-        aria-labelledby="playground-symbol-references-title"
-        onCancel={onCloseSymbolReferences}
-      >
-        <label id="playground-symbol-references-title">
-          <span>参照箇所</span>
-        </label>
-        {symbolReferencesError ? (
-          <p role="alert">{symbolReferencesError}</p>
-        ) : (
-          <QuickAccessList
-            label="参照を検索"
-            placeholder="ファイル名またはコードを検索"
-            emptyMessage="参照が見つかりません"
-            items={symbolReferenceItems}
-          />
-        )}
-        <div className="playground-file-action-buttons">
-          <button type="button" onClick={onCloseSymbolReferences}>
-            閉じる
-          </button>
-        </div>
       </dialog>
     </>
   );

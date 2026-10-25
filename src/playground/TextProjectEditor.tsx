@@ -87,6 +87,8 @@ export function TextProjectEditor({
   onRun,
 }: Props) {
   const { t } = useTranslation();
+  const translate = useRef(t);
+  translate.current = t;
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const states = useRef(editorStates);
@@ -134,7 +136,9 @@ export function TextProjectEditor({
         themeMode.current.of(editorTheme(settingsRef.current.theme)),
         drawSelection(),
         contentLabel.current.of(
-          EditorView.contentAttributes.of({ "aria-label": `${documentPath}の内容` }),
+          EditorView.contentAttributes.of({
+            "aria-label": translate.current("fileContentsLabel", { path: documentPath }),
+          }),
         ),
         history(),
         search(),
@@ -258,7 +262,9 @@ export function TextProjectEditor({
         effects: [
           languageMode.current.reconfigure(languageForPath(path)),
           contentLabel.current.reconfigure(
-            EditorView.contentAttributes.of({ "aria-label": `${path}の内容` }),
+            EditorView.contentAttributes.of({
+              "aria-label": translate.current("fileContentsLabel", { path }),
+            }),
           ),
           readOnlyMode.current.reconfigure(
             readOnlyRef.current
@@ -326,7 +332,7 @@ export function TextProjectEditor({
             column: cursorPosition.column,
           })}
         >
-          Ln {cursorPosition.line}, Col {cursorPosition.column}
+          {t("editorPositionShort", cursorPosition)}
         </span>
       </header>
       <div className="playground-editor text-project-editor" ref={host} />

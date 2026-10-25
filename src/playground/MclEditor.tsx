@@ -245,6 +245,8 @@ export function MclEditor({
   onRenameSymbol,
 }: Props) {
   const { t } = useTranslation();
+  const translate = useRef(t);
+  translate.current = t;
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
@@ -262,6 +264,7 @@ export function MclEditor({
   const themeMode = useRef(new Compartment());
   const vimMode = useRef(new Compartment());
   const languageMode = useRef(new Compartment());
+  const contentLabel = useRef(new Compartment());
   const readOnlyMode = useRef(new Compartment());
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
@@ -328,7 +331,7 @@ export function MclEditor({
       documentGeneration,
       definitionRequest,
       hoverRequest,
-      t,
+      t: translate,
     });
     try {
       extensions.current = [
@@ -348,7 +351,11 @@ export function MclEditor({
         ),
         themeMode.current.of(editorTheme(settingsRef.current.theme)),
         drawSelection(),
-        EditorView.contentAttributes.of({ "aria-label": `${path}の内容` }),
+        contentLabel.current.of(
+          EditorView.contentAttributes.of({
+            "aria-label": translate.current("fileContentsLabel", { path }),
+          }),
+        ),
         history(),
         search(),
         highlightSelectionMatches(),
@@ -513,6 +520,19 @@ export function MclEditor({
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({
+      effects: contentLabel.current.reconfigure(
+        EditorView.contentAttributes.of({
+          "aria-label": translate.current("fileContentsLabel", { path: currentPath.current }),
+        }),
+      ),
+    });
+    states.current.set(currentPath.current, view.state);
+  }, [t]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
       effects: readOnlyMode.current.reconfigure(
         readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
       ),
@@ -617,7 +637,16 @@ export function MclEditor({
       line.number - 1,
       nextState.selection.main.head - line.from,
     );
-    view.dispatch({ effects: languageMode.current.reconfigure(languageForPath(path)) });
+    view.dispatch({
+      effects: [
+        languageMode.current.reconfigure(languageForPath(path)),
+        contentLabel.current.reconfigure(
+          EditorView.contentAttributes.of({
+            "aria-label": translate.current("fileContentsLabel", { path }),
+          }),
+        ),
+      ],
+    });
     callbacks.current.onReady(view);
   }, [path, source]);
 
@@ -696,7 +725,7 @@ export function MclEditor({
             column: cursorPosition.column,
           })}
         >
-          Ln {cursorPosition.line}, Col {cursorPosition.column}
+          {t("editorPositionShort", cursorPosition)}
         </span>
       </header>
       <div className="playground-editor" ref={host} />

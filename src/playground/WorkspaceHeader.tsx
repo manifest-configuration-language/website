@@ -82,7 +82,7 @@ export function WorkspaceHeader({
         <span aria-hidden="true" className="playground-brand-separator">
           /
         </span>
-        <span>Playground</span>
+        <span>{t("playgroundTitle")}</span>
         <span aria-hidden="true" className="playground-brand-separator">
           /
         </span>

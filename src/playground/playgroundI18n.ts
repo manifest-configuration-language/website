@@ -24,6 +24,7 @@ export const resources = {
       saveSaved: "Saved locally",
       saveError: "Save failed",
       workspaceLabel: "MCL Playground",
+      playgroundTitle: "Playground",
       docsHome: "MCL documentation",
       editActions: "Editor actions",
       stop: "Stop",
@@ -59,6 +60,10 @@ export const resources = {
       examplesGroupConfiguration: "Structure",
       examplesGroupAdapters: "Adapters",
       examplesGroupValidation: "Validation",
+      exampleConfigMapDescription:
+        "Define a value, build a Kubernetes resource, and emit it as YAML.",
+      exampleDeploymentDescription:
+        "Create a Deployment with a named container port and matching pod labels.",
       commandRun: "Run",
       commandFormat: "Format source",
       commandToggleComment: "Toggle comment",
@@ -128,6 +133,7 @@ export const resources = {
       editorSurface: "Editor",
       edit: "Edit",
       editorPosition: "Line {{line}}, column {{column}}",
+      editorPositionShort: "Ln {{line}}, Col {{column}}",
       deleteFileTitle: "Delete file",
       renameFileTitle: "Rename file",
       createFileTitle: "Create file",
@@ -285,6 +291,7 @@ export const resources = {
       saveSaved: "ローカルに保存済み",
       saveError: "保存に失敗",
       workspaceLabel: "MCL Playground",
+      playgroundTitle: "プレイグラウンド",
       docsHome: "MCLドキュメント",
       editActions: "編集操作",
       stop: "中断",
@@ -318,6 +325,9 @@ export const resources = {
       examplesGroupConfiguration: "構成",
       examplesGroupAdapters: "Adapter",
       examplesGroupValidation: "検証",
+      exampleConfigMapDescription:
+        "値を定義し、Kubernetesリソースを組み立ててYAMLとして出力します。",
+      exampleDeploymentDescription: "コンテナーポートとPodラベルを設定したDeploymentを作成します。",
       commandRun: "実行",
       commandFormat: "コードを整形",
       commandToggleComment: "コメントを切り替え",
@@ -387,6 +397,7 @@ export const resources = {
       editorSurface: "エディター",
       edit: "編集",
       editorPosition: "{{line}}行、{{column}}列",
+      editorPositionShort: "{{line}}行、{{column}}列",
       deleteFileTitle: "ファイルを削除",
       renameFileTitle: "ファイル名を変更",
       createFileTitle: "新規ファイル",
@@ -548,6 +559,7 @@ declare global {
       saveSaved: string;
       saveError: string;
       workspaceLabel: string;
+      playgroundTitle: string;
       docsHome: string;
       editActions: string;
       stop: string;
@@ -583,6 +595,8 @@ declare global {
       examplesGroupConfiguration: string;
       examplesGroupAdapters: string;
       examplesGroupValidation: string;
+      exampleConfigMapDescription: string;
+      exampleDeploymentDescription: string;
       commandRun: string;
       commandFormat: string;
       commandToggleComment: string;
@@ -652,6 +666,7 @@ declare global {
       editorSurface: string;
       edit: string;
       editorPosition: string;
+      editorPositionShort: string;
       deleteFileTitle: string;
       renameFileTitle: string;
       createFileTitle: string;

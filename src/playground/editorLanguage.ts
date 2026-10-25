@@ -26,7 +26,7 @@ type LanguageServiceCallbacks = {
 type Ref<T> = { current: T };
 
 type LanguageServiceContext = {
-  t: TFunction<"starlight">;
+  t: Ref<TFunction<"starlight">>;
   callbacks: Ref<LanguageServiceCallbacks>;
   currentPath: Ref<string>;
   view: Ref<EditorView | undefined>;
@@ -113,7 +113,7 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
                 };
               });
               const labels = new Set(options.map((option) => option.label));
-              for (const starter of starterCompletions(context.t)) {
+              for (const starter of starterCompletions(context.t.current)) {
                 if (word?.text !== starter.trigger || labels.has(starter.completion.label))
                   continue;
                 options.push(starter.completion);
@@ -185,7 +185,7 @@ export function createEditorLanguageServices(context: LanguageServiceContext): {
                   link.href = "/reference/stdlib-functions/";
                   link.target = "_blank";
                   link.rel = "noopener noreferrer";
-                  link.textContent = context.t("standardLibraryReference");
+                  link.textContent = context.t.current("standardLibraryReference");
                   dom.append(document.createElement("br"), link);
                 }
                 return { dom };

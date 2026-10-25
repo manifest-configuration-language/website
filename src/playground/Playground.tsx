@@ -786,6 +786,8 @@ export default function Playground() {
               label: "ConfigMap",
               group: t("examplesGroupBasics"),
               keywords: [t("examplesGroupBasics"), "variables", "manifest"],
+              description: t("exampleConfigMapDescription"),
+              preview: samples.configMap.split("\n").slice(0, 6).join("\n"),
               onSelect: () => void selectSample("configMap"),
             },
             {
@@ -793,6 +795,8 @@ export default function Playground() {
               label: "Deployment",
               group: t("examplesGroupBasics"),
               keywords: [t("examplesGroupBasics"), "kubernetes", "manifest"],
+              description: t("exampleDeploymentDescription"),
+              preview: samples.deployment.split("\n").slice(0, 7).join("\n"),
               onSelect: () => void selectSample("deployment"),
             },
             ...examples.map((entry) => ({

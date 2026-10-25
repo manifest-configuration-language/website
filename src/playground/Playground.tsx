@@ -1,4 +1,3 @@
-import { Group, Panel, Separator } from "react-resizable-panels";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { EditorView } from "@codemirror/view";
 import type { EditorState } from "@codemirror/state";
@@ -15,9 +14,7 @@ import {
   usePlaygroundProjectActions,
 } from "./usePlaygroundProjectActions";
 import type { ExampleCatalogEntry } from "./usePlaygroundProjectActions";
-import { PlaygroundResult } from "./PlaygroundResult";
 import type { SourceMapLocationCandidate } from "./PlaygroundResult";
-import { WorkspaceOutputPane } from "./WorkspaceOutputPane";
 import { PlaygroundEditorDialogs } from "./PlaygroundEditorDialogs";
 import type { PlaygroundClient, PlaygroundDiagnostic, PlaygroundReply, ProjectFile } from "./types";
 import exampleCatalog from "./generatedExamples.json";
@@ -30,7 +27,7 @@ import { PlaygroundShareDialog } from "./PlaygroundShareDialog";
 import { DraftConflictDialog } from "./DraftConflictDialog";
 import { DeleteProjectDialog } from "./DeleteProjectDialog";
 import { WorkspaceHeader } from "./WorkspaceHeader";
-import { WorkspaceEditorPane } from "./WorkspaceEditorPane";
+import { WorkspaceLayout } from "./WorkspaceLayout";
 import { createPlaygroundCommandItems } from "./createPlaygroundCommandItems";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
@@ -1038,204 +1035,132 @@ export default function Playground() {
           />
         )}
         {loadingProject && <p role="status">{t("loadingProject")}</p>}
-        <nav className="playground-mobile-views" aria-label={t("viewMode")}>
-          <Button aria-pressed={mobileView === "editor"} onPress={() => setMobileView("editor")}>
-            {t("editor")}
-          </Button>
-          <Button
-            aria-pressed={mobileView === "output"}
-            onPress={() => {
-              setMobileView("output");
-              setShowProblems(false);
-            }}
-          >
-            {t("output")}
-          </Button>
-          <Button
-            aria-pressed={mobileView === "problems"}
-            onPress={() => {
-              setMobileView("problems");
+        <WorkspaceLayout
+          mobileView={mobileView}
+          onMobileViewChange={(view) => {
+            setMobileView(view);
+            if (view === "output") setShowProblems(false);
+            if (view === "problems") {
               setShowProblems(true);
               setShowDiff(false);
-            }}
-          >
-            {t("problemsCount", { count: diagnostics.length })}
-          </Button>
-        </nav>
-        <div className="playground-output-collapse-control">
-          <Button
-            aria-controls="output"
-            aria-expanded={!outputCollapsed}
-            onPress={toggleOutputPanel}
-          >
-            {outputCollapsed ? t("showOutput") : t("hideOutput")}
-          </Button>
-        </div>
-        <Group
-          className="playground-panels"
-          groupRef={panelGroup}
-          defaultLayout={defaultPanelLayout}
-          onLayoutChanged={(layout, meta) => {
-            if (meta.isUserInteraction) savePanelLayout(layout);
+            }
           }}
-          orientation={orientation}
-          data-mobile-view={mobileView}
-        >
-          <Panel id="editor" className="playground-editor-panel" defaultSize="60" minSize="25">
-            <WorkspaceEditorPane
-              paths={projectPaths}
-              files={projectFiles}
-              activePath={activePath}
-              activeSource={activeSource}
-              openPaths={openPaths}
-              explorerOpen={explorerOpen}
-              disabled={!draftsLoaded || busy || loadingProject || draftConflict}
-              readOnly={draftConflict}
-              editorAttempt={editorAttempt}
-              projectGeneration={projectGeneration}
-              settings={editorSettings}
-              mclEditorStates={mclEditorStates.current}
-              textEditorStates={textEditorStates.current}
-              mclServices={mclEditorServices}
-              textEditorServices={textEditorServices}
-              onToggleExplorer={() => setExplorerOpen((value) => !value)}
-              onSelectFile={selectFile}
-              onCloseFile={(path) => {
-                const index = openPaths.indexOf(path);
-                const remaining = openPaths.filter((entry) => entry !== path);
-                if (path === activePath)
-                  selectProjectFile(remaining[Math.min(index, remaining.length - 1)] ?? "main.mcl");
-                setOpenPaths(remaining.length ? remaining : ["main.mcl"]);
-              }}
-              onCreateFile={requestCreateFile}
-              onRenameFile={requestRenameFile}
-              onDeleteFile={requestDeleteFile}
-            />
-          </Panel>
-          <Separator className="playground-resize-handle" aria-label={t("resizePanels")} />
-          <Panel
-            id="output"
-            className="playground-output-panel"
-            panelRef={outputPanel}
-            defaultSize="40"
-            minSize="25"
-            collapsedSize={0}
-            collapsible
-          >
-            <WorkspaceOutputPane
-              showProblems={showProblems}
-              showResources={showResources}
-              diagnosticsCount={diagnostics.length}
-              onShowResourcesChange={setShowResources}
-              onShowProblemsChange={(show) => {
-                setShowProblems(show);
-                setShowResources(false);
-              }}
-              showDiff={showDiff}
-              onShowDiffChange={(show) => {
-                setShowDiff(show);
-                setShowResources(false);
-              }}
-              showReferences={symbolReferencesOpen}
-              referenceCount={symbolReferenceItems.length}
-              onCloseReferences={closeSymbolReferences}
-              onOpenReferences={openSymbolReferences}
-              canCopyOutput={
-                !showProblems &&
-                !showDiff &&
-                !symbolReferencesOpen &&
-                (staleYaml !== undefined || reply?.result?.yaml !== undefined)
-              }
-              canDownloadOutput={
-                !showProblems &&
-                !showDiff &&
-                !symbolReferencesOpen &&
-                (staleYaml !== undefined || reply?.result?.yaml !== undefined)
-              }
-              canShowDiff={
-                staleYaml === undefined &&
-                Boolean(reply?.ok) &&
-                previousYaml !== undefined &&
-                previousYaml !== reply?.result?.yaml
-              }
-              canShowResources={
-                !showProblems &&
-                !showDiff &&
-                !symbolReferencesOpen &&
-                (staleYaml !== undefined || reply?.result?.yaml !== undefined)
-              }
-              onCopyOutput={() => void copyOutput()}
-              onDownloadOutput={downloadOutput}
-              orientation={orientation}
-              onToggleOrientation={toggleOrientation}
-            >
-              <PlaygroundResult
-                reply={reply}
-                diagnostics={diagnostics}
-                navigablePaths={editablePaths}
-                staleYaml={staleYaml}
-                previousYaml={previousYaml}
-                fontSize={editorSettings.fontSize}
-                showDiff={showDiff}
-                showProblems={showProblems}
-                showResources={showResources}
-                onToggleResources={() => setShowResources(!showResources)}
-                onShowResourcesChange={setShowResources}
-                showReferences={symbolReferencesOpen}
-                referenceItems={symbolReferenceItems}
-                referenceError={symbolReferencesError}
-                targetOutputPosition={targetOutputPosition}
-                onDiagnostic={goToDiagnostic}
-                sourcePositionStore={sourcePositionStore}
-                onSourceCandidates={handleSourceCandidates}
-              />
-              {showProblems && draftsLoaded && diagnostics.length === 0 && (
-                <p className="playground-no-problems">{t("noProblems")}</p>
-              )}
-            </WorkspaceOutputPane>
-          </Panel>
-        </Group>
-        <footer className="playground-statusbar" aria-label={t("projectStatus")}>
-          <span
-            className={`playground-save-status playground-save-${saveStatus}`}
-            aria-live="polite"
-          >
-            {
-              {
-                saving: t("saveSaving"),
-                saved: t("saveSaved"),
-                error: t("saveError"),
-                conflict: t("saveConflict"),
-              }[saveStatus]
-            }
-          </span>
-          <span
-            className={
-              wasmStatus === "ready" ? "playground-status-ready" : "playground-status-loading"
-            }
-          >
-            <span aria-hidden="true">●</span>{" "}
-            {wasmStatus === "waiting"
-              ? t("wasmWaiting")
-              : {
-                  fetching: t("wasmLoading"),
-                  compiling: t("wasmLoading"),
-                  initializing: t("wasmInitializing"),
-                  ready: t("wasmReady"),
-                  error: t("wasmError"),
-                }[wasmStatus]}
-          </span>
-          {wasmStatus === "error" && <Button onPress={() => void retryWasm()}>{t("retry")}</Button>}
-          <span>{t("problemsCount", { count: diagnostics.length })}</span>
-          {pendingInitialImport && (
-            <Button onPress={() => void openDraft(pendingInitialImport.id)}>
-              {t("openImportedProject", { name: pendingInitialImport.name })}
-            </Button>
-          )}
-          <span>{t("filesCount", { count: Object.keys(projectFiles).length + 1 })}</span>
-          <span>{(projectSizeBytes / 1024 / 1024).toFixed(1)} MiB</span>
-          <span className="playground-status-path">{activePath}</span>
-        </footer>
+          diagnosticsCount={diagnostics.length}
+          groupProps={{
+            className: "playground-panels",
+            groupRef: panelGroup,
+            defaultLayout: defaultPanelLayout,
+            onLayoutChanged: (layout, meta) => {
+              if (meta.isUserInteraction) savePanelLayout(layout);
+            },
+            orientation,
+          }}
+          outputPanelRef={outputPanel}
+          editorPaneProps={{
+            paths: projectPaths,
+            files: projectFiles,
+            activePath,
+            activeSource,
+            openPaths,
+            explorerOpen,
+            disabled: !draftsLoaded || busy || loadingProject || draftConflict,
+            readOnly: draftConflict,
+            editorAttempt,
+            projectGeneration,
+            settings: editorSettings,
+            mclEditorStates: mclEditorStates.current,
+            textEditorStates: textEditorStates.current,
+            mclServices: mclEditorServices,
+            textEditorServices,
+            onToggleExplorer: () => setExplorerOpen((value) => !value),
+            onSelectFile: selectFile,
+            onCloseFile: (path) => {
+              const index = openPaths.indexOf(path);
+              const remaining = openPaths.filter((entry) => entry !== path);
+              if (path === activePath)
+                selectProjectFile(remaining[Math.min(index, remaining.length - 1)] ?? "main.mcl");
+              setOpenPaths(remaining.length ? remaining : ["main.mcl"]);
+            },
+            onCreateFile: requestCreateFile,
+            onRenameFile: requestRenameFile,
+            onDeleteFile: requestDeleteFile,
+          }}
+          outputPaneProps={{
+            showProblems,
+            showResources,
+            diagnosticsCount: diagnostics.length,
+            onShowResourcesChange: setShowResources,
+            onShowProblemsChange: (show) => {
+              setShowProblems(show);
+              setShowResources(false);
+            },
+            showDiff,
+            onShowDiffChange: (show) => {
+              setShowDiff(show);
+              setShowResources(false);
+            },
+            showReferences: symbolReferencesOpen,
+            referenceCount: symbolReferenceItems.length,
+            onCloseReferences: closeSymbolReferences,
+            onOpenReferences: openSymbolReferences,
+            canCopyOutput:
+              !showProblems &&
+              !showDiff &&
+              !symbolReferencesOpen &&
+              (staleYaml !== undefined || reply?.result?.yaml !== undefined),
+            canDownloadOutput:
+              !showProblems &&
+              !showDiff &&
+              !symbolReferencesOpen &&
+              (staleYaml !== undefined || reply?.result?.yaml !== undefined),
+            canShowDiff:
+              staleYaml === undefined &&
+              Boolean(reply?.ok) &&
+              previousYaml !== undefined &&
+              previousYaml !== reply?.result?.yaml,
+            canShowResources:
+              !showProblems &&
+              !showDiff &&
+              !symbolReferencesOpen &&
+              (staleYaml !== undefined || reply?.result?.yaml !== undefined),
+            onCopyOutput: () => void copyOutput(),
+            onDownloadOutput: downloadOutput,
+            orientation,
+            onToggleOrientation: toggleOrientation,
+          }}
+          resultProps={{
+            reply,
+            diagnostics,
+            navigablePaths: editablePaths,
+            staleYaml,
+            previousYaml,
+            fontSize: editorSettings.fontSize,
+            showDiff,
+            showProblems,
+            showResources,
+            onToggleResources: () => setShowResources(!showResources),
+            onShowResourcesChange: setShowResources,
+            showReferences: symbolReferencesOpen,
+            referenceItems: symbolReferenceItems,
+            referenceError: symbolReferencesError,
+            targetOutputPosition,
+            onDiagnostic: goToDiagnostic,
+            sourcePositionStore,
+            onSourceCandidates: handleSourceCandidates,
+          }}
+          showProblems={showProblems}
+          draftsLoaded={draftsLoaded}
+          outputCollapsed={outputCollapsed}
+          onToggleOutput={toggleOutputPanel}
+          saveStatus={saveStatus}
+          wasmStatus={wasmStatus}
+          onRetryWasm={() => void retryWasm()}
+          pendingInitialImport={pendingInitialImport}
+          onOpenDraft={(id) => void openDraft(id)}
+          fileCount={Object.keys(projectFiles).length + 1}
+          projectSizeBytes={projectSizeBytes}
+          activePath={activePath}
+        />
         <PlaygroundEditorDialogs
           fileAction={fileAction}
           fileActionError={fileActionError}

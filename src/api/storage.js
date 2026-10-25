@@ -10,7 +10,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { Cluster } from "ioredis";
 import postgres from "postgres";
-import { maximumRequestBytes } from "./snapshot.js";
+import { maximumRequestBytes, validateSnapshot } from "./snapshot.js";
 import { verifyDatabaseMigrations } from "./migrate.js";
 
 const gzipAsync = promisify(gzip);
@@ -21,6 +21,45 @@ const requestLimitScript =
   "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],ARGV[1]) end; return n<=tonumber(ARGV[2]) and 1 or 0";
 const uploadBytesScript =
   "local n=tonumber(redis.call('GET',KEYS[1]) or '0'); local a=tonumber(ARGV[1]); if n+a>tonumber(ARGV[2]) then return 0 end; local t=redis.call('INCRBY',KEYS[1],a); if n==0 then redis.call('EXPIRE',KEYS[1],ARGV[3]) end; return t";
+const corruptShare = () => new Error("Share object is corrupt");
+
+export async function decodeShareObject({ compressed, storedBytes, contentBytes, contentSha256 }) {
+  const expectedStoredBytes = Number(storedBytes);
+  const expectedContentBytes = Number(contentBytes);
+  if (
+    !Number.isSafeInteger(expectedStoredBytes) ||
+    expectedStoredBytes < 0 ||
+    expectedStoredBytes > maximumRequestBytes ||
+    compressed.byteLength !== expectedStoredBytes ||
+    !Number.isSafeInteger(expectedContentBytes) ||
+    expectedContentBytes < 0
+  )
+    throw corruptShare();
+
+  let serialized;
+  try {
+    serialized = await gunzipAsync(compressed, { maxOutputLength: maximumRequestBytes });
+  } catch {
+    throw corruptShare();
+  }
+  const digest = createHash("sha256").update(serialized).digest("hex");
+  if (digest !== contentSha256) throw corruptShare();
+
+  let value;
+  try {
+    value = JSON.parse(serialized.toString("utf8"));
+  } catch {
+    throw corruptShare();
+  }
+  let validated;
+  try {
+    validated = validateSnapshot(value);
+  } catch {
+    throw corruptShare();
+  }
+  if (validated.contentBytes !== expectedContentBytes) throw corruptShare();
+  return validated.snapshot;
+}
 
 function required(name) {
   const value = process.env[name];
@@ -135,20 +174,16 @@ export async function createShareStorage() {
     `;
     const record = rows[0];
     if (!record) return undefined;
-    const storedBytes = Number(record.stored_bytes);
-    if (!Number.isSafeInteger(storedBytes) || storedBytes < 0 || storedBytes > maximumRequestBytes)
-      throw new Error("Share object is corrupt");
     const object = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: record.object_key }));
     if (!object.Body) throw new Error("Share object is missing");
     const compressed = Buffer.from(await object.Body.transformToByteArray());
-    if (compressed.byteLength !== storedBytes) throw new Error("Share object is corrupt");
-    const serialized = await gunzipAsync(compressed, { maxOutputLength: maximumRequestBytes });
-    if (serialized.byteLength !== Number(record.content_bytes))
-      throw new Error("Share object is corrupt");
-    const digest = createHash("sha256").update(serialized).digest("hex");
-    if (digest !== record.content_sha256) throw new Error("Share object is corrupt");
     return {
-      snapshot: JSON.parse(serialized.toString("utf8")),
+      snapshot: await decodeShareObject({
+        compressed,
+        storedBytes: record.stored_bytes,
+        contentBytes: record.content_bytes,
+        contentSha256: record.content_sha256,
+      }),
       runtimeVersion: record.runtime_version,
     };
   }

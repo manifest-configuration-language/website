@@ -5,6 +5,7 @@ export type PlaygroundDraftRecord = {
   id: string;
   name: string;
   updatedAt: number;
+  revision: number;
 };
 
 export type PlaygroundProjectRecord = {
@@ -47,6 +48,20 @@ export class PlaygroundDatabase extends Dexie {
       projects: "id",
       settings: "key",
     });
+    this.version(2)
+      .stores({
+        drafts: "id, updatedAt, name",
+        projects: "id",
+        settings: "key",
+      })
+      .upgrade(async (transaction) => {
+        await transaction
+          .table<PlaygroundDraftRecord, string>("drafts")
+          .toCollection()
+          .modify((draft) => {
+            draft.revision ??= 0;
+          });
+      });
   }
 }
 
@@ -60,13 +75,18 @@ function isDraftMetadata(value: unknown): value is {
   id: string;
   name: string;
   updatedAt: number;
+  revision?: number;
 } {
   return (
     isRecord(value) &&
     typeof value.id === "string" &&
     typeof value.name === "string" &&
     typeof value.updatedAt === "number" &&
-    Number.isFinite(value.updatedAt)
+    Number.isFinite(value.updatedAt) &&
+    (value.revision === undefined ||
+      (typeof value.revision === "number" &&
+        Number.isInteger(value.revision) &&
+        value.revision >= 0))
   );
 }
 
@@ -85,7 +105,7 @@ async function readLegacyDraft(metadata: {
 }): Promise<LegacyDraftImport> {
   const project = await get(legacyDraftKey(metadata.id));
   return {
-    draft: metadata,
+    draft: { ...metadata, revision: 0 },
     ...(project === undefined ? {} : { project: { id: metadata.id, project } }),
   };
 }
@@ -106,10 +126,11 @@ async function migrateLegacyStorage() {
       id: activeDraft,
       name: "プロジェクト",
       updatedAt: Date.now(),
+      revision: 0,
     };
     importedDrafts.push(await readLegacyDraft(activeMetadata));
   }
-  const migratedDrafts = importedDrafts.map(({ draft }) => draft);
+  const migratedDrafts = importedDrafts.map(({ draft }) => ({ ...draft, revision: 0 }));
   const migratedProjects = importedDrafts.flatMap(({ project }) => (project ? [project] : []));
 
   const settings: PlaygroundSettingRecord[] = [];

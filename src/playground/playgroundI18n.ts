@@ -167,6 +167,12 @@ export const resources = {
       copy: "Copy",
       download: "Download",
       referencesCount: "References {{count}}",
+      draftConflictTitle: "Draft changed in another tab",
+      draftConflictDescription:
+        "Choose whether to keep this tab's changes or load the latest draft.",
+      draftConflictFork: "Keep these changes in a new draft",
+      draftConflictReload: "Load the latest draft",
+      saveConflict: "Changes need review",
     },
   },
   ja: {
@@ -333,6 +339,12 @@ export const resources = {
       copy: "コピー",
       download: "ダウンロード",
       referencesCount: "参照{{count}}件",
+      draftConflictTitle: "別のタブでドラフトが変更されました",
+      draftConflictDescription:
+        "このタブの変更を新しいドラフトに残すか、最新の内容を読み込んでください。",
+      draftConflictFork: "変更を新しいドラフトに残す",
+      draftConflictReload: "最新のドラフトを読み込む",
+      saveConflict: "変更の確認が必要です",
     },
   },
 } as const;
@@ -503,6 +515,11 @@ declare global {
       copy: string;
       download: string;
       referencesCount: string;
+      draftConflictTitle: string;
+      draftConflictDescription: string;
+      draftConflictFork: string;
+      draftConflictReload: string;
+      saveConflict: string;
     }
   }
 }

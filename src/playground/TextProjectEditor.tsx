@@ -31,6 +31,7 @@ type Props = {
   path: string;
   source: string;
   settings: EditorSettings;
+  readOnly?: boolean;
   editorStates: Map<string, EditorState>;
   onReady: (view: EditorView | undefined) => void;
   onDocumentChange: (source: string, path: string) => boolean | void;
@@ -78,6 +79,7 @@ export function TextProjectEditor({
   path,
   source,
   settings,
+  readOnly = false,
   editorStates,
   onReady,
   onDocumentChange,
@@ -106,6 +108,9 @@ export function TextProjectEditor({
   const vimMode = useRef(new Compartment());
   const languageMode = useRef(new Compartment());
   const contentLabel = useRef(new Compartment());
+  const readOnlyMode = useRef(new Compartment());
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
 
   const createEditorState = useCallback((documentPath: string, documentSource: string) => {
@@ -137,6 +142,9 @@ export function TextProjectEditor({
         bracketMatching(),
         foldGutter(),
         languageMode.current.of(languageForPath(documentPath)),
+        readOnlyMode.current.of(
+          readOnlyRef.current ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
+        ),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         keymap.of([
           {
@@ -218,6 +226,16 @@ export function TextProjectEditor({
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;
+    view.dispatch({
+      effects: readOnlyMode.current.reconfigure(
+        readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
+      ),
+    });
+  }, [readOnly]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
 
     const pathChanged = currentPath.current !== path;
     if (pathChanged) {
@@ -241,6 +259,11 @@ export function TextProjectEditor({
           languageMode.current.reconfigure(languageForPath(path)),
           contentLabel.current.reconfigure(
             EditorView.contentAttributes.of({ "aria-label": `${path}の内容` }),
+          ),
+          readOnlyMode.current.reconfigure(
+            readOnlyRef.current
+              ? [EditorState.readOnly.of(true), EditorView.editable.of(false)]
+              : [],
           ),
         ],
       });

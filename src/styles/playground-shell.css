@@ -561,6 +561,10 @@ body:has(.playground-app) .right-sidebar-container {
   color: var(--sl-color-red-high);
 }
 
+.playground-app .playground-save-conflict {
+  color: var(--sl-color-orange-high);
+}
+
 .playground-app .playground-statusbar .playground-status-path {
   min-width: 0;
   margin-inline-start: auto;

@@ -38,11 +38,16 @@ import { renamePreviewEntries, usePlaygroundLanguageActions } from "./usePlaygro
 import { type QuickAccessItem } from "./QuickAccessList";
 import { PlaygroundQuickAccessDialogs } from "./PlaygroundQuickAccessDialogs";
 import { PlaygroundShareDialog } from "./PlaygroundShareDialog";
+import { DraftConflictDialog } from "./DraftConflictDialog";
 import { ProjectName } from "./ProjectName";
 import { SourceMapCandidateDialog } from "./SourceMapCandidateDialog";
 import { usePlaygroundSharing } from "./usePlaygroundSharing";
 import "./symbolRenamePreview.css";
-import { isStoredProject, usePlaygroundPersistence } from "./usePlaygroundPersistence";
+import {
+  DraftConflictError,
+  isStoredProject,
+  usePlaygroundPersistence,
+} from "./usePlaygroundPersistence";
 import type { StoredProject } from "./usePlaygroundPersistence";
 
 const layoutPreferenceKey = "mcl-playground-layout-v1";
@@ -356,13 +361,15 @@ export default function Playground() {
   const [filePathInput, setFilePathInput] = useState("");
   const [fileActionError, setFileActionError] = useState("");
 
-  const reportPersistenceError = useCallback(
-    (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)),
-    [],
-  );
+  const reportPersistenceError = useCallback((cause: unknown) => {
+    if (cause instanceof DraftConflictError) return;
+    setError(cause instanceof Error ? cause.message : String(cause));
+  }, []);
   const {
     editorSettings,
     saveStatus,
+    conflictedDraftIds,
+    clearDraftConflict,
     setEditorSettings,
     activeDraftId,
     activeDraftIdRef,
@@ -382,6 +389,7 @@ export default function Playground() {
   } = usePlaygroundPersistence(project, reportPersistenceError);
   const activeDraftName =
     drafts.find((draft) => draft.id === activeDraftId)?.name ?? "プロジェクト";
+  const draftConflict = conflictedDraftIds.includes(activeDraftId);
   const handleShareError = useCallback((cause: unknown) => setError(sharedProjectError(cause)), []);
   const { shareDialogOpen, sharing, openShareDialog, closeShareDialog, shareProject } =
     usePlaygroundSharing({
@@ -701,7 +709,10 @@ export default function Playground() {
   );
 
   const applyProject = useCallback(
-    (project: StoredProject, options: { newDraft?: boolean; name?: string } = {}) => {
+    (
+      project: StoredProject,
+      options: { newDraft?: boolean; name?: string; skipCurrentSnapshot?: boolean } = {},
+    ) => {
       const requestedPath = project.activePath;
       const nextPath =
         requestedPath &&
@@ -717,9 +728,10 @@ export default function Playground() {
         setError(projectSnapshotErrorMessage(validationError));
         return false;
       }
-      if (options.newDraft !== false) {
+      if (options.newDraft !== false && !options.skipCurrentSnapshot) {
         void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
           (cause: unknown) => {
+            if (cause instanceof DraftConflictError) return;
             setError(cause instanceof Error ? cause.message : String(cause));
           },
         );
@@ -741,6 +753,7 @@ export default function Playground() {
       applyWorkspacePreference(project.files, nextPath, options.newDraft !== false);
       void saveDraftSnapshot(activeDraftIdRef.current, projectRef.current).catch(
         (cause: unknown) => {
+          if (cause instanceof DraftConflictError) return;
           setError(cause instanceof Error ? cause.message : String(cause));
         },
       );
@@ -1128,6 +1141,7 @@ export default function Playground() {
 
   async function formatSource() {
     if (
+      draftConflict ||
       !editor.current ||
       !client.current ||
       loadingProject ||
@@ -1195,6 +1209,7 @@ export default function Playground() {
       setWasmStatus("ready");
       if (startupReady.current) runAction.current();
     } catch (cause) {
+      if (cause instanceof DraftConflictError) return;
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   }
@@ -1234,6 +1249,7 @@ export default function Playground() {
         { name: example.title },
       );
     } catch (cause) {
+      if (cause instanceof DraftConflictError) return;
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setLoadingProject(false);
@@ -1247,9 +1263,23 @@ export default function Playground() {
       await saveDraftSnapshot(activeDraftIdRef.current, projectRef.current);
       const saved: unknown = await loadDraft(id);
       if (!isStoredProject(saved)) throw new Error("プロジェクトを読み込めません");
+      clearDraftConflict(id);
       await setActiveDraft(id);
       clearShareReferenceFromURL();
       applyProject(saved, { newDraft: false });
+    } catch (cause) {
+      if (cause instanceof DraftConflictError) return;
+      setError(cause instanceof Error ? cause.message : String(cause));
+    }
+  }
+
+  async function reloadConflictedDraft() {
+    try {
+      const saved: unknown = await loadDraft(activeDraftId);
+      if (!isStoredProject(saved)) throw new Error("プロジェクトを読み込めません");
+      applyProject(saved, { newDraft: false });
+      clearDraftConflict(activeDraftId);
+      setError("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     }
@@ -1273,6 +1303,7 @@ export default function Playground() {
       if (nextDraft) {
         const saved: unknown = await loadDraft(nextDraft.id);
         if (!isStoredProject(saved)) throw new Error("プロジェクトを読み込めません");
+        clearDraftConflict(nextDraft.id);
         await setActiveDraft(nextDraft.id);
         applyProject(saved, { newDraft: false });
       } else {
@@ -1442,7 +1473,7 @@ export default function Playground() {
             </span>
             <ProjectName
               name={activeDraftName}
-              disabled={!draftsLoaded || !activeDraftId}
+              disabled={!draftsLoaded || !activeDraftId || draftConflict}
               onSave={(name) => updateDraftMetadata(activeDraftId, name)}
             />
           </div>
@@ -1471,6 +1502,7 @@ export default function Playground() {
                     disabled={
                       !draftsLoaded ||
                       loadingProject ||
+                      draftConflict ||
                       Boolean(editorError) ||
                       !activePath.endsWith(".mcl")
                     }
@@ -1482,7 +1514,7 @@ export default function Playground() {
               <button
                 type="button"
                 onClick={openShareDialog}
-                disabled={!draftsLoaded || busy || loadingProject}
+                disabled={!draftsLoaded || busy || loadingProject || draftConflict}
               >
                 {t("share")}
               </button>
@@ -1613,6 +1645,16 @@ export default function Playground() {
             });
           }}
         />
+        <DraftConflictDialog
+          open={draftConflict}
+          onFork={() =>
+            applyProject(projectRef.current, {
+              name: `${activeDraftName}のコピー`,
+              skipCurrentSnapshot: true,
+            })
+          }
+          onReload={() => void reloadConflictedDraft()}
+        />
         {sourceMapCandidates.length > 1 && (
           <SourceMapCandidateDialog
             candidates={sourceMapCandidates}
@@ -1717,7 +1759,7 @@ export default function Playground() {
                 type="button"
                 className="playground-new-file"
                 onClick={requestCreateFile}
-                disabled={!draftsLoaded || busy || loadingProject}
+                disabled={!draftsLoaded || busy || loadingProject || draftConflict}
                 title={t("createFile")}
                 aria-label={t("createFile")}
               >
@@ -1734,7 +1776,7 @@ export default function Playground() {
                   onCreate={requestCreateFile}
                   onRename={requestRenameFile}
                   onDelete={requestDeleteFile}
-                  disabled={!draftsLoaded || busy || loadingProject}
+                  disabled={!draftsLoaded || busy || loadingProject || draftConflict}
                 />
               )}
               {activePath.endsWith(".mcl") ? (
@@ -1744,6 +1786,7 @@ export default function Playground() {
                   paths={projectPaths}
                   source={activeSource}
                   settings={editorSettings}
+                  readOnly={draftConflict}
                   editorStates={mclEditorStates.current}
                   onReady={onEditorReady}
                   onWorkspaceEditApplierReady={(applier) => {
@@ -1801,6 +1844,7 @@ export default function Playground() {
                   path={activePath}
                   source={activeSource}
                   settings={editorSettings}
+                  readOnly={draftConflict}
                   editorStates={textEditorStates.current}
                   onReady={onEditorReady}
                   onDocumentChange={onDocumentChange}
@@ -1890,7 +1934,14 @@ export default function Playground() {
             className={`playground-save-status playground-save-${saveStatus}`}
             aria-live="polite"
           >
-            {{ saving: t("saveSaving"), saved: t("saveSaved"), error: t("saveError") }[saveStatus]}
+            {
+              {
+                saving: t("saveSaving"),
+                saved: t("saveSaved"),
+                error: t("saveError"),
+                conflict: t("saveConflict"),
+              }[saveStatus]
+            }
           </span>
           <span
             className={

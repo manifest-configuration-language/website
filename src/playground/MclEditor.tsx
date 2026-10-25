@@ -128,6 +128,7 @@ type Props = {
   paths: string[];
   source: string;
   settings: EditorSettings;
+  readOnly?: boolean;
   editorStates?: Map<string, EditorState>;
   onReady: (view: EditorView | undefined) => void;
   onWorkspaceEditApplierReady: (applier: ApplyWorkspaceEdits | undefined) => void;
@@ -197,6 +198,7 @@ export function MclEditor({
   paths,
   source,
   settings,
+  readOnly = false,
   editorStates,
   onReady,
   onWorkspaceEditApplierReady,
@@ -233,6 +235,9 @@ export function MclEditor({
   const themeMode = useRef(new Compartment());
   const vimMode = useRef(new Compartment());
   const languageMode = useRef(new Compartment());
+  const readOnlyMode = useRef(new Compartment());
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const callbacks = useRef({
@@ -322,6 +327,9 @@ export function MclEditor({
         bracketMatching(),
         foldGutter(),
         languageMode.current.of(languageForPath(path)),
+        readOnlyMode.current.of(
+          readOnlyRef.current ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
+        ),
         lintGutter(),
         syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         ...languageServices.extensions,
@@ -435,10 +443,15 @@ export function MclEditor({
         languageServices.definitionMouseHandler,
       ];
       const cachedState = states.current.get(path);
-      const initialState =
+      const initialState = (
         cachedState?.doc.toString() === source
           ? cachedState.update({ effects: StateEffect.reconfigure.of(extensions.current) }).state
-          : EditorState.create({ doc: source, extensions: extensions.current });
+          : EditorState.create({ doc: source, extensions: extensions.current })
+      ).update({
+        effects: readOnlyMode.current.reconfigure(
+          readOnlyRef.current ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
+        ),
+      }).state;
       states.current.set(path, initialState);
       const initialLine = initialState.doc.lineAt(initialState.selection.main.head);
       setCursorPosition({
@@ -467,6 +480,16 @@ export function MclEditor({
       view?.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: readOnlyMode.current.reconfigure(
+        readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
+      ),
+    });
+  }, [readOnly]);
 
   function applyWorkspaceEdits(
     edits: PlaygroundRenameEdit[],

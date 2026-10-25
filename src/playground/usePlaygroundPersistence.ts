@@ -22,8 +22,19 @@ export type StoredProject = {
   files: Record<string, ProjectFile>;
   activePath?: string;
 };
-export type DraftSaveStatus = "saving" | "saved" | "error";
+export type DraftSaveStatus = "saving" | "saved" | "error" | "conflict";
 export type DraftMetadata = { id: string; name: string; updatedAt: number };
+
+export class DraftConflictError extends Error {
+  constructor(
+    readonly draftId: string,
+    readonly expectedRevision: number,
+    readonly actualRevision: number | undefined,
+  ) {
+    super("The draft changed in another tab.");
+    this.name = "DraftConflictError";
+  }
+}
 function isDraftMetadataList(value: unknown): value is DraftMetadata[] {
   return (
     Array.isArray(value) &&
@@ -70,18 +81,67 @@ export function usePlaygroundPersistence(
   const [editorSettingsLoaded, setEditorSettingsLoaded] = useState(false);
   const [activeDraftId, setActiveDraftId] = useState("");
   const [saveStatus, setSaveStatus] = useState<DraftSaveStatus>("saved");
+  const [conflictedDraftIds, setConflictedDraftIds] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<DraftMetadata[]>([]);
   const [draftsLoaded, setDraftsLoaded] = useState(false);
   const activeDraftIdRef = useRef("");
   const draftsRef = useRef<DraftMetadata[]>([]);
   const writeQueue = useRef(Promise.resolve());
   const saveSequence = useRef(0);
+  const expectedRevisions = useRef(new Map<string, number>());
+  const conflictedDraftIdsRef = useRef(new Set<string>());
+  const channel = useRef<BroadcastChannel | undefined>(undefined);
+  const loadDraftIndexRef = useRef<(() => Promise<DraftMetadata[]>) | undefined>(undefined);
 
   const enqueueWrite = useCallback((write: () => Promise<void>) => {
     const next = writeQueue.current.then(write, write);
     writeQueue.current = next.catch(() => undefined);
     return next;
   }, []);
+
+  const markDraftConflict = useCallback((id: string) => {
+    conflictedDraftIdsRef.current.add(id);
+    setConflictedDraftIds([...conflictedDraftIdsRef.current]);
+    if (id === activeDraftIdRef.current) {
+      ++saveSequence.current;
+      setSaveStatus("conflict");
+    }
+  }, []);
+
+  const clearDraftConflict = useCallback((id: string) => {
+    conflictedDraftIdsRef.current.delete(id);
+    setConflictedDraftIds([...conflictedDraftIdsRef.current]);
+    if (id === activeDraftIdRef.current) setSaveStatus("saved");
+  }, []);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const draftChannel = new BroadcastChannel("mcl-playground-drafts-v1");
+    channel.current = draftChannel;
+    draftChannel.addEventListener("message", (event: MessageEvent<unknown>) => {
+      const message = event.data as { type?: unknown; draftId?: unknown; revision?: unknown };
+      if (
+        message?.type !== "draft-saved" ||
+        typeof message.draftId !== "string" ||
+        typeof message.revision !== "number" ||
+        !Number.isSafeInteger(message.revision) ||
+        message.revision < 0
+      )
+        return;
+      const expected = expectedRevisions.current.get(message.draftId);
+      if (
+        message.draftId === activeDraftIdRef.current &&
+        expected !== undefined &&
+        message.revision > expected
+      )
+        markDraftConflict(message.draftId);
+      void loadDraftIndexRef.current?.().catch(onError);
+    });
+    return () => {
+      channel.current = undefined;
+      draftChannel.close();
+    };
+  }, [markDraftConflict, onError]);
 
   const updateDraftMetadata = useCallback(
     (id: string, name?: string, persist = true) => {
@@ -99,12 +159,22 @@ export function usePlaygroundPersistence(
           await ensurePlaygroundStorageMigrated();
           await playgroundDatabase.transaction("rw", playgroundDatabase.drafts, async () => {
             const current = await playgroundDatabase.drafts.get(id);
-            await playgroundDatabase.drafts.put({ ...current, ...nextDraft });
+            if (!current && expectedRevisions.current.has(id))
+              throw new DraftConflictError(id, expectedRevisions.current.get(id) ?? 0, undefined);
+            await playgroundDatabase.drafts.put({
+              id,
+              name: nextDraft.name,
+              updatedAt: nextDraft.updatedAt,
+              revision: current?.revision ?? expectedRevisions.current.get(id) ?? 0,
+            });
           });
-        }).catch(onError);
+        }).catch((cause: unknown) => {
+          if (cause instanceof DraftConflictError) markDraftConflict(id);
+          onError(cause);
+        });
       return next;
     },
-    [enqueueWrite, onError],
+    [enqueueWrite, markDraftConflict, onError],
   );
 
   const saveDraftSnapshot = useCallback(
@@ -117,35 +187,56 @@ export function usePlaygroundPersistence(
       try {
         await enqueueWrite(async () => {
           await ensurePlaygroundStorageMigrated();
+          let nextRevision = 0;
           await playgroundDatabase.transaction(
             "rw",
             playgroundDatabase.drafts,
             playgroundDatabase.projects,
             async () => {
               const current = await playgroundDatabase.drafts.get(id);
-              await playgroundDatabase.drafts.put({ ...current, ...draft });
+              const expectedRevision = expectedRevisions.current.get(id) ?? 0;
+              const actualRevision = current?.revision ?? 0;
+              if (
+                actualRevision !== expectedRevision ||
+                (!current && expectedRevisions.current.has(id))
+              )
+                throw new DraftConflictError(id, expectedRevision, current?.revision);
+              nextRevision = expectedRevision + 1;
+              await playgroundDatabase.drafts.put({
+                id,
+                name: current?.name ?? draft.name,
+                updatedAt: draft.updatedAt,
+                revision: nextRevision,
+              });
               await playgroundDatabase.projects.put({ id, project: value });
             },
           );
+          expectedRevisions.current.set(id, nextRevision);
+          channel.current?.postMessage({
+            type: "draft-saved",
+            draftId: id,
+            revision: nextRevision,
+          });
         });
         if (sequence === saveSequence.current) setSaveStatus("saved");
       } catch (cause) {
+        if (cause instanceof DraftConflictError) markDraftConflict(id);
         if (sequence === saveSequence.current) setSaveStatus("error");
         throw cause;
       }
     },
-    [enqueueWrite, updateDraftMetadata],
+    [enqueueWrite, markDraftConflict, updateDraftMetadata],
   );
 
   useEffect(() => {
-    if (!draftsLoaded || !activeDraftId) return;
+    if (!draftsLoaded || !activeDraftId || conflictedDraftIds.includes(activeDraftId)) return;
     ++saveSequence.current;
     setSaveStatus("saving");
     const timer = setTimeout(() => {
       void saveDraftSnapshot(activeDraftId, project).catch((cause: unknown) => onError(cause));
     }, 300);
     return () => clearTimeout(timer);
-  }, [activeDraftId, draftsLoaded, onError, project, saveDraftSnapshot]);
+  }, [activeDraftId, conflictedDraftIds, draftsLoaded, onError, project, saveDraftSnapshot]);
 
   const setActiveDraft = useCallback(async (id: string) => {
     activeDraftIdRef.current = id;
@@ -183,33 +274,59 @@ export function usePlaygroundPersistence(
 
   const loadDraft = useCallback(async (id: string) => {
     await ensurePlaygroundStorageMigrated();
-    return (await playgroundDatabase.projects.get(id))?.project;
+    return playgroundDatabase.transaction(
+      "r",
+      playgroundDatabase.drafts,
+      playgroundDatabase.projects,
+      async () => {
+        const [draft, record] = await Promise.all([
+          playgroundDatabase.drafts.get(id),
+          playgroundDatabase.projects.get(id),
+        ]);
+        expectedRevisions.current.set(id, draft?.revision ?? 0);
+        return record?.project;
+      },
+    );
   }, []);
   const deleteDraft = useCallback(
     async (id: string) => {
-      await enqueueWrite(async () => {
-        await ensurePlaygroundStorageMigrated();
-        await playgroundDatabase.transaction(
-          "rw",
-          playgroundDatabase.drafts,
-          playgroundDatabase.projects,
-          async () => {
-            await playgroundDatabase.drafts.delete(id);
-            await playgroundDatabase.projects.delete(id);
-          },
-        );
-      });
+      try {
+        await enqueueWrite(async () => {
+          await ensurePlaygroundStorageMigrated();
+          await playgroundDatabase.transaction(
+            "rw",
+            playgroundDatabase.drafts,
+            playgroundDatabase.projects,
+            async () => {
+              const current = await playgroundDatabase.drafts.get(id);
+              const expectedRevision = expectedRevisions.current.get(id) ?? 0;
+              if (
+                (current?.revision ?? 0) !== expectedRevision ||
+                (!current && expectedRevisions.current.has(id))
+              )
+                throw new DraftConflictError(id, expectedRevision, current?.revision);
+              await playgroundDatabase.drafts.delete(id);
+              await playgroundDatabase.projects.delete(id);
+            },
+          );
+        });
+      } catch (cause) {
+        if (cause instanceof DraftConflictError) markDraftConflict(id);
+        throw cause;
+      }
       const next = draftsRef.current.filter((draft) => draft.id !== id);
       draftsRef.current = next;
       setDrafts(next);
     },
-    [enqueueWrite],
+    [enqueueWrite, markDraftConflict],
   );
   const loadLegacyProject = useCallback(async () => {
     await ensurePlaygroundStorageMigrated();
     return (await playgroundDatabase.settings.get(playgroundSettingKeys.legacyProject))?.value;
   }, []);
   const markDraftsLoaded = useCallback(() => setDraftsLoaded(true), []);
+
+  loadDraftIndexRef.current = loadDraftIndex;
 
   useEffect(() => {
     let cancelled = false;
@@ -250,6 +367,8 @@ export function usePlaygroundPersistence(
   return {
     editorSettings,
     saveStatus,
+    conflictedDraftIds,
+    clearDraftConflict,
     setEditorSettings,
     editorSettingsLoaded,
     activeDraftId,

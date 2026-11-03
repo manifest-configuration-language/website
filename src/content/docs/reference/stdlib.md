@@ -78,6 +78,14 @@ emit output
 | --------------------- | ------------------------------------------------------------------------------------------ |
 | `keyOf(mapping, key)` | Mapに存在するStringキーを返します。Map以外、String以外のキー、存在しないキーはエラーです。 |
 
+## `std:context`
+
+| 関数                | 説明                                                                  |
+| ------------------- | --------------------------------------------------------------------- |
+| `parameter(name)`   | CLIから明示的に渡されたString parameterを返します。未指定ならエラーです。 |
+
+`mcl render`、`mcl check`、`mcl update`は`--parameter name=value`を受け付けます。同じparameterを複数回指定できません。複数クラスタ用のアプリケーションでは、アプリ側のdeployment recordでclusterとfeature profileを対応付け、ApplicationSetはprofile名だけを指定できます。
+
 ## `std:lifecycle`
 
 | 関数                                             | 説明                                                                                                                                                                 |

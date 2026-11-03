@@ -20,6 +20,10 @@ Kubernetes向け出力ではArtifact直下のListを拒否します。各Resourc
 
 組み込みscope情報はよく使われるKindの一部を扱います。未登録のKindも出力でき、同じBundleにCRDがあればそのscopeで検査します。scopeが分かるCluster-scoped Resourceは`metadata.namespace`を指定できません。
 
+### Runtime parameters
+
+`mcl render`、`mcl check`、`mcl update`は`--parameter name=value`を受け付けます。同じparameterを複数回渡すとエラーになります。MCLは`import "std:context" as context`から`context.parameter("name")`を呼び、明示的に渡されたString値を取得します。未指定のparameterを参照すると評価エラーになります。parameterは環境変数や暗黙の外部状態から読み込まれません。
+
 ### `check`
 
 `mcl check <file>`は構文解析と値の評価を行い、ArtifactをYAMLへ出力できる値か検証します。分かるscopeに基づいてResourceの重複とnamespace指定を検査し、scope不明のResourceは宣言されたnamespaceを使って重複を検査します。ファイルを変更せず、Manifestも出力しません。`mcl check --operation <name> <file>`は指定した操作向けに評価し、`render --operation`と同じHelm Release contextを検証します。操作名は`create`、`update`、`delete`、`rollback`、`verify`です。

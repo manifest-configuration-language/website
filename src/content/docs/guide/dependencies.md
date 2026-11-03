@@ -15,6 +15,22 @@ let container = defaults.container with:
 emit container
 ```
 
+ConfigMapの値やテンプレートなど、複数行のテキストは`import text`でStringとして読み込めます。テキストファイルは通常のMCL importと同じプロジェクトルート内に置きます。
+
+```mcl
+import text "./_configs/settings.yaml" as settings
+
+let configMap =
+  apiVersion: "v1"
+  kind: "ConfigMap"
+  metadata:
+    name: "settings"
+  data:
+    "settings.yaml": settings
+
+emit configMap
+```
+
 モジュール内に`emit`や`validate`は置かず、出力と検証はエントリーファイルに記述します。import先はプロジェクトルート内に限定されます。最寄りの`mcl.toml`がルートを決め、設定ファイルがない場合はエントリーファイルのディレクトリがルートになります。
 
 Manifest、JSON Schema、Helm Chart、固定commitのGit sourceなど外部データを参照するときは、`mcl update`で取得し、生成された`mcl.lock`の差分を確認します。通常の評価はlockとコンテンツキャッシュを照合するため、外部ネットワークへ接続しません。依存を追加または更新するときは、lockに記録されたdigestと取得元をレビューしてください。

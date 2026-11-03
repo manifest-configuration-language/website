@@ -28,6 +28,20 @@ export let container =
 
 モジュール内で`export`を付けない定義は非公開です。`std:`標準ライブラリは直接呼び出すか、名前空間付きでimportできます。
 
+MCLモジュール以外のファイルは`import text`で`String`として読み込めます。ファイル内容はUTF-8として検証し、末尾改行を含む内容をそのまま保持します。1ファイルあたり16 MiB、プロジェクト内のテキストimport全体で64 MiBまでです。text importもMCL importと同じ相対パス、プロジェクトルート制約、シンボリックリンク制約に従い、依存ファイルとして追跡されます。
+
+```mcl
+import text "./_configs/values.yaml" as values
+
+let configMap =
+  apiVersion: "v1"
+  kind: "ConfigMap"
+  data:
+    "values.yaml": values
+
+emit configMap
+```
+
 `export type`で公開された型は、import aliasを使って型注釈に指定できます。exportされた構造型が非公開の型エイリアスを参照する場合も、定義元の型環境で検証します。
 
 ```mcl verify snapshot=reference-modules-2 fixture=module-type-annotation expect=0.name=api,0.image=example.test/api:v1

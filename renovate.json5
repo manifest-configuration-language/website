@@ -1,20 +1,20 @@
 {
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>walnuts1018/renovate-config"],
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: ["github>manifest-configuration-language/renovate-config"],
   "packageRules": [
     {
       "description": "Update the MCL JavaScript packages together",
       "matchPackageNames": [
         "@manifest-configuration-language/browser",
-        "@manifest-configuration-language/language"
+        "@manifest-configuration-language/language",
       ],
-      "groupName": "MCL JavaScript packages"
+      "groupName": "MCL JavaScript packages",
     },
     {
       "description": "Pin digests for Dockerfile base images",
       "matchDatasources": ["docker"],
       "matchManagers": ["dockerfile"],
-      "pinDigests": true
+      "pinDigests": true,
     }
-  ]
+  ],
 }

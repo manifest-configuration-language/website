@@ -1,0 +1,7 @@
+{
+    "i18n-ally.localesPaths": [
+        "public/playground-examples/language",
+        "src/content/docs/examples/language"
+    ],
+    "chat.disableAIFeatures": false
+}

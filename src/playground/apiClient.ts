@@ -2,6 +2,7 @@ import {
   createMclRuntime,
   MclRuntimeError,
   type MclProject,
+  type MclResult,
   type ProjectFiles,
   type RuntimeOperationEvent,
   type RuntimeStatusEvent,
@@ -10,19 +11,31 @@ import type {
   PlaygroundClient,
   PlaygroundDiagnostic,
   PlaygroundPriority,
-  PlaygroundRenameEdit,
   ProjectFile,
 } from "./types";
 import { readProject } from "./projectFiles.js";
 
 const operationTimeoutMs = 10_000;
-type FileImportRename = (options: {
-  oldPath: string;
-  newPath: string;
-  signal: AbortSignal;
-  timeoutMs: number;
-  priority: "interactive";
-}) => Promise<{ edits: PlaygroundRenameEdit[] }>;
+type ProjectOperation =
+  | "parse"
+  | "lint"
+  | "format"
+  | "check"
+  | "evaluate"
+  | "render"
+  | "completion"
+  | "definition"
+  | "hover"
+  | "references"
+  | "rename"
+  | "renameFileImports";
+
+type ProjectRun = (
+  operation: ProjectOperation,
+  options?: Record<string, unknown>,
+) => Promise<Record<string, unknown>>;
+
+type ProjectPatch = (changes: { set?: ProjectFiles; delete?: string[] }) => MclProject;
 
 type PlaygroundRuntimeStatusEvent = RuntimeStatusEvent & {
   workerGeneration?: number;
@@ -48,6 +61,10 @@ function toProjectFiles(
     project[filePath] = file.encoding === "utf8" ? file.content : file.bytes;
   }
   return project;
+}
+
+function sameFileValue(left: string | Uint8Array, right: string | Uint8Array): boolean {
+  return left === right;
 }
 
 function toError(error: unknown): PlaygroundDiagnostic {
@@ -84,18 +101,56 @@ export function createPlaygroundClient(
   });
   const activeControllers = new Set<AbortController>();
   let projectSession: MclProject | undefined;
+  let projectFiles: ProjectFiles = Object.create(null) as ProjectFiles;
 
   function updateProject(
     source: string,
     files: Record<string, ProjectFile> = {},
     entrypoint = "main.mcl",
   ): MclProject {
-    const snapshot = toProjectFiles(source, files, entrypoint);
-    const nextProject = projectSession
-      ? projectSession.update(snapshot)
-      : runtime.openProject(snapshot);
+    return updateProjectSnapshot(toProjectFiles(source, files, entrypoint));
+  }
+
+  function updateProjectSnapshot(snapshot: ProjectFiles): MclProject {
+    if (!projectSession) {
+      projectSession = runtime.openProject(snapshot);
+      projectFiles = snapshot;
+      return projectSession;
+    }
+
+    const set = Object.create(null) as Record<string, string | Uint8Array>;
+    const deleted = Object.keys(projectFiles).filter((path) => !Object.hasOwn(snapshot, path));
+    for (const [path, content] of Object.entries(snapshot)) {
+      const previous = projectFiles[path];
+      if (previous === undefined || !sameFileValue(previous, content)) set[path] = content;
+    }
+    const patch = Reflect.get(projectSession, "patch") as ProjectPatch | undefined;
+    const update = Reflect.get(projectSession, "update") as
+      | ((files: ProjectFiles) => MclProject)
+      | undefined;
+    const nextProject = patch
+      ? patch.call(projectSession, { set, delete: deleted })
+      : update?.call(projectSession, snapshot);
+    if (!nextProject) throw new Error("The Browser SDK cannot update this project snapshot");
     projectSession = nextProject;
+    projectFiles = snapshot;
     return nextProject;
+  }
+
+  async function runProject(
+    project: MclProject,
+    operation: ProjectOperation,
+    options: Record<string, unknown> = {},
+  ): Promise<MclResult> {
+    const run = Reflect.get(project, "run") as ProjectRun | undefined;
+    if (run) return run.call(project, operation, options) as Promise<MclResult>;
+
+    const legacyMethod = operation === "completion" ? "complete" : operation;
+    const method = Reflect.get(project, legacyMethod) as
+      | ((options: unknown) => Promise<unknown>)
+      | undefined;
+    if (!method) throw new Error(`The Browser SDK does not support the ${operation} operation`);
+    return (await method.call(project, options)) as MclResult;
   }
 
   function beginRequest(): AbortController {
@@ -124,11 +179,11 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       try {
         const project = updateProject(source, files);
-        const lint = await project.lint({
+        const lint = (await runProject(project, "lint", {
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "lint" }>;
         return {
           requestId: revision,
           revision,
@@ -150,13 +205,13 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
-        const completion = await project.complete({
+        const completion = (await runProject(project, "completion", {
           entrypoint,
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "completion" }>;
         return completion.items;
       } finally {
         finishRequest(controller);
@@ -166,13 +221,13 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
-        const result = await project.definition({
+        const result = (await runProject(project, "definition", {
           entrypoint,
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "definition" }>;
         return result.location;
       } finally {
         finishRequest(controller);
@@ -182,13 +237,13 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
-        const result = await project.hover({
+        const result = (await runProject(project, "hover", {
           entrypoint,
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "hover" }>;
         return result.hover;
       } finally {
         finishRequest(controller);
@@ -198,14 +253,14 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
-        const result = await project.rename({
+        const result = (await runProject(project, "rename", {
           entrypoint,
           position,
           newName,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "rename" }>;
         return result.edits;
       } finally {
         finishRequest(controller);
@@ -215,17 +270,13 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       try {
         const project = updateProject(source, files);
-        const renameFileImports = Reflect.get(project, "renameFileImports") as
-          | FileImportRename
-          | undefined;
-        if (!renameFileImports) return [];
-        const result = await renameFileImports.call(project, {
+        const result = (await runProject(project, "renameFileImports", {
           oldPath,
           newPath,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority: "interactive",
-        });
+        })) as Extract<MclResult, { operation: "renameFileImports" }>;
         return result.edits;
       } finally {
         finishRequest(controller);
@@ -235,13 +286,13 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       try {
         const project = updateProject(source, files, entrypoint);
-        const result = await project.references({
+        const result = (await runProject(project, "references", {
           entrypoint,
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "references" }>;
         return result.references;
       } finally {
         finishRequest(controller);
@@ -252,17 +303,17 @@ export function createPlaygroundClient(
       let diagnostics: PlaygroundDiagnostic[] | undefined;
       try {
         const project = updateProject(source, files);
-        const lint = await project.lint({
+        const lint = (await runProject(project, "lint", {
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "lint" }>;
         diagnostics = lint.diagnostics;
-        const rendered = await project.render({
+        const rendered = (await runProject(project, "render", {
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "render" }>;
         return {
           requestId: revision,
           revision,
@@ -289,11 +340,12 @@ export function createPlaygroundClient(
     async format(source, revision, priority = "interactive") {
       const controller = beginRequest();
       try {
-        const formatted = await runtime.format(source, {
+        const project = updateProjectSnapshot({ ...projectFiles, "main.mcl": source });
+        const formatted = (await runProject(project, "format", {
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        });
+        })) as Extract<MclResult, { operation: "format" }>;
         return {
           requestId: revision,
           revision,

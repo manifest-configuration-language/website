@@ -5,6 +5,7 @@ import {
   isValidProjectPath,
   projectLimits,
   projectSnapshotError,
+  projectSnapshotErrorMessage,
 } from "./projectValidation.js";
 import type { PlaygroundRenameEdit, ProjectFile } from "./types";
 
@@ -22,31 +23,6 @@ export type ProjectMutation =
   | { ok: false; error: string };
 
 const encoder = new TextEncoder();
-
-function projectErrorMessage(error: string, t: ReturnType<typeof useTranslation>["t"]): string {
-  switch (error) {
-    case "Source exceeds the size limit":
-      return t("sourceSizeLimit", { size: projectLimits.sourceBytes / 1024 });
-    case "Project file exceeds the size limit":
-      return t("projectFileSizeLimit", {
-        size: projectLimits.projectFileBytes / (1024 * 1024),
-      });
-    case "Project exceeds the size limit":
-      return t("projectSizeLimit", { size: projectLimits.projectBytes / (1024 * 1024) });
-    case "Project has too many files":
-      return t("projectTooManyFiles", { count: projectLimits.projectFiles });
-    case "Invalid active project path":
-      return t("projectActivePathInvalid");
-    case "Invalid project size metadata":
-      return t("projectSizeMetadataInvalid");
-    case "Project contains an invalid file path":
-      return t("projectPathsInvalid");
-    case "Project file paths overlap files and directories":
-      return t("projectPathsOverlap");
-    default:
-      return t("projectUpdateFailed");
-  }
-}
 
 export type RenameFileImports = (
   source: string,
@@ -218,7 +194,7 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         revision: current.revision + 1,
       });
       const validationError = projectSnapshotError(next, fileSizes);
-      if (validationError) return { ok: false, error: projectErrorMessage(validationError, t) };
+      if (validationError) return { ok: false, error: projectSnapshotErrorMessage(validationError, t) };
       projectRef.current = next;
       if (updateReact) setProjectVersion((version) => version + 1);
       notifySubscribers();

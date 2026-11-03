@@ -214,18 +214,23 @@ export function usePlaygroundExecution({
     )
       return;
     const view = editor.current;
+    const activePath = project.current.activePath;
     const currentRevision = ++revision.current;
     setBusy(true);
     setError("");
     try {
-      const result = await client.current.format(view.state.doc.toString(), currentRevision);
+      const result = await client.current.format(
+        view.state.doc.toString(),
+        currentRevision,
+        activePath,
+      );
       if (currentRevision !== revision.current) return;
       if (!result.ok) {
         if (result.error) setError(`${result.error.code}: ${result.error.message}`);
         return;
       }
       const formatted = result.result?.source;
-      if (project.current.activePath !== activePath || formatted === undefined) return;
+      if (formatted === undefined) return;
       const original = view.state.doc.toString();
       if (formatted === original) return;
       let prefix = 0;

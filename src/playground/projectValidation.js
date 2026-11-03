@@ -79,6 +79,10 @@ export function projectSnapshotError(snapshot, knownFileSizes) {
   return undefined;
 }
 
+export function isValidProjectSnapshot(snapshot) {
+  return projectSnapshotError(snapshot) === undefined;
+}
+
 export function projectSnapshotErrorMessage(error, t) {
   if (error === "Source exceeds the size limit")
     return t("sourceSizeLimit", { size: projectLimits.sourceBytes / 1024 });
@@ -95,10 +99,6 @@ export function projectSnapshotErrorMessage(error, t) {
   if (error === "Project contains an invalid file path") return t("projectPathsInvalid");
   if (error === "Project file paths overlap files and directories") return t("projectPathsOverlap");
   return t("projectUpdateFailed");
-}
-
-export function isValidProjectSnapshot(snapshot) {
-  return projectSnapshotError(snapshot) === undefined;
 }
 
 export function normalizeImportedProjectPaths(paths, hasRelativePaths) {

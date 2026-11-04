@@ -108,7 +108,6 @@ export function usePlaygroundExecution({
     },
     [setDiagnostics],
   );
-  const handleWasmReady = useCallback(() => setWasmStatus("ready"), []);
   const {
     isRendering,
     renderPending,
@@ -119,7 +118,6 @@ export function usePlaygroundExecution({
     project,
     revision,
     onLint: handleLintResult,
-    onWasmReady: handleWasmReady,
   });
 
   const notifySourceChanged = useCallback(() => {

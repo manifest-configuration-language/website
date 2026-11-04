@@ -6,13 +6,8 @@ import type { PlaygroundProject } from "./usePlaygroundProject";
 type PendingLint = { source: string; revision: number };
 
 function isAbortError(cause: unknown): boolean {
-  return cause instanceof Error && cause.name === "AbortError";
-}
-
-function isAbortReply(result: PlaygroundReply): boolean {
   return (
-    result.error?.code === "MCL-WASM-RUNTIME" &&
-    result.error.message === "The operation was aborted"
+    typeof cause === "object" && cause !== null && "name" in cause && cause.name === "AbortError"
   );
 }
 
@@ -21,10 +16,9 @@ type Options = {
   project: RefObject<PlaygroundProject>;
   revision: RefObject<number>;
   onLint: (result: PlaygroundReply, revision: number) => void;
-  onWasmReady: () => void;
 };
 
-export function usePlaygroundRuntime({ client, project, revision, onLint, onWasmReady }: Options) {
+export function usePlaygroundRuntime({ client, project, revision, onLint }: Options) {
   const renderInFlight = useRef(false);
   const pendingLint = useRef<PendingLint | undefined>(undefined);
   const lintTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -53,10 +47,7 @@ export function usePlaygroundRuntime({ client, project, revision, onLint, onWasm
             "background",
           );
           const result = request ? await request : undefined;
-          if (result && requestRevision === revision.current && !isAbortReply(result)) {
-            onWasmReady();
-            onLint(result, requestRevision);
-          }
+          if (result && requestRevision === revision.current) onLint(result, requestRevision);
         } catch (cause) {
           if (requestRevision !== revision.current || isAbortError(cause)) return;
           onLint(
@@ -77,7 +68,7 @@ export function usePlaygroundRuntime({ client, project, revision, onLint, onWasm
         }
       }, 400);
     },
-    [client, onLint, onWasmReady, project, revision],
+    [client, onLint, project, revision],
   );
 
   const flushPendingLint = useCallback(() => {

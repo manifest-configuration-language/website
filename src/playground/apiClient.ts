@@ -53,6 +53,12 @@ function toError(error: unknown): PlaygroundDiagnostic {
   };
 }
 
+function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && "name" in error && error.name === "AbortError"
+  );
+}
+
 export function createPlaygroundClient(
   onRuntimeStatus?: (event: RuntimeStatusEvent) => void,
   onRuntimeOperation?: (event: RuntimeOperationEvent) => void,
@@ -103,6 +109,7 @@ export function createPlaygroundClient(
           diagnostics: lint.diagnostics,
         };
       } catch (error) {
+        if (isAbortError(error)) throw error;
         return {
           requestId: revision,
           revision,

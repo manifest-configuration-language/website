@@ -194,7 +194,8 @@ export function usePlaygroundProject(initialSource: string, renameFileImports: R
         revision: current.revision + 1,
       });
       const validationError = projectSnapshotError(next, fileSizes);
-      if (validationError) return { ok: false, error: projectSnapshotErrorMessage(validationError, t) };
+      if (validationError)
+        return { ok: false, error: projectSnapshotErrorMessage(validationError, t) };
       projectRef.current = next;
       if (updateReact) setProjectVersion((version) => version + 1);
       notifySubscribers();

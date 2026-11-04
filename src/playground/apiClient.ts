@@ -1,8 +1,6 @@
 import {
   createMclRuntime,
   MclRuntimeError,
-  type MclProject,
-  type MclResult,
   type ProjectFiles,
   type RuntimeOperationEvent,
   type RuntimeStatusEvent,
@@ -14,6 +12,7 @@ import type {
   ProjectFile,
 } from "./types.js";
 import { readProject } from "./projectFiles.js";
+import { createProjectSession } from "./projectSession.js";
 
 const operationTimeoutMs = 10_000;
 
@@ -29,10 +28,6 @@ function toProjectFiles(
     project[filePath] = file.encoding === "utf8" ? file.content : file.bytes;
   }
   return project;
-}
-
-function sameFileValue(left: string | Uint8Array, right: string | Uint8Array): boolean {
-  return left === right;
 }
 
 function toError(error: unknown): PlaygroundDiagnostic {
@@ -68,38 +63,7 @@ export function createPlaygroundClient(
     onOperation: (event) => onRuntimeOperation?.(event),
   });
   const activeControllers = new Set<AbortController>();
-  let projectSession: MclProject | undefined;
-  let projectFiles: ProjectFiles = Object.create(null) as ProjectFiles;
-
-  function updateProjectSnapshot(snapshot: ProjectFiles): MclProject {
-    if (!projectSession) {
-      projectSession = runtime.openProject(snapshot);
-      projectFiles = snapshot;
-      return projectSession;
-    }
-
-    const patch = projectSession.patch.bind(projectSession);
-    const set = Object.create(null) as Record<string, string | Uint8Array>;
-    const deleted: string[] = [];
-    for (const [path, content] of Object.entries(snapshot)) {
-      const previous = projectFiles[path];
-      if (previous === undefined || !sameFileValue(previous, content)) set[path] = content;
-    }
-    for (const path of Object.keys(projectFiles)) {
-      if (!Object.hasOwn(snapshot, path)) deleted.push(path);
-    }
-    const nextProject = patch({ set, delete: deleted });
-    projectFiles = snapshot;
-    return nextProject;
-  }
-
-  async function runProject(
-    project: MclProject,
-    operation: string,
-    options?: Record<string, unknown>,
-  ): Promise<MclResult> {
-    return project.run(operation as string, options) as Promise<MclResult>;
-  }
+  const projectSession = createProjectSession((files) => runtime.openProject(files));
 
   function beginRequest(): AbortController {
     const controller = new AbortController();
@@ -126,12 +90,12 @@ export function createPlaygroundClient(
     async lint(source, revision, files, priority = "background") {
       const controller = beginRequest();
       try {
-        const project = updateProjectSnapshot(toProjectFiles(source, files));
-        const lint = (await runProject(project, "lint", {
+        const project = projectSession.update(toProjectFiles(source, files));
+        const lint = await project.run("lint", {
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "lint" }>;
+        });
         return {
           requestId: revision,
           revision,
@@ -152,14 +116,14 @@ export function createPlaygroundClient(
     async complete(source, entrypoint, position, files, priority = "interactive") {
       const controller = beginRequest();
       try {
-        const project = updateProjectSnapshot(toProjectFiles(source, files, entrypoint));
-        const completion = (await runProject(project, "completion", {
+        const project = projectSession.update(toProjectFiles(source, files, entrypoint));
+        const completion = await project.run("completion", {
           entrypoint,
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "completion" }>;
+        });
         return completion.items;
       } finally {
         finishRequest(controller);
@@ -168,14 +132,14 @@ export function createPlaygroundClient(
     async definition(source, entrypoint, position, files, priority = "interactive") {
       const controller = beginRequest();
       try {
-        const project = updateProjectSnapshot(toProjectFiles(source, files, entrypoint));
-        const result = (await runProject(project, "definition", {
+        const project = projectSession.update(toProjectFiles(source, files, entrypoint));
+        const result = await project.run("definition", {
           entrypoint,
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "definition" }>;
+        });
         return result.location;
       } finally {
         finishRequest(controller);
@@ -184,14 +148,14 @@ export function createPlaygroundClient(
     async hover(source, entrypoint, position, files, priority = "interactive") {
       const controller = beginRequest();
       try {
-        const project = updateProjectSnapshot(toProjectFiles(source, files, entrypoint));
-        const result = (await runProject(project, "hover", {
+        const project = projectSession.update(toProjectFiles(source, files, entrypoint));
+        const result = await project.run("hover", {
           entrypoint,
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "hover" }>;
+        });
         return result.hover;
       } finally {
         finishRequest(controller);
@@ -200,15 +164,15 @@ export function createPlaygroundClient(
     async rename(source, entrypoint, position, newName, files, priority = "interactive") {
       const controller = beginRequest();
       try {
-        const project = updateProjectSnapshot(toProjectFiles(source, files, entrypoint));
-        const result = (await runProject(project, "rename", {
+        const project = projectSession.update(toProjectFiles(source, files, entrypoint));
+        const result = await project.run("rename", {
           entrypoint,
           position,
           newName,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "rename" }>;
+        });
         return result.edits;
       } finally {
         finishRequest(controller);
@@ -217,14 +181,14 @@ export function createPlaygroundClient(
     async renameFileImports(source, files, oldPath, newPath) {
       const controller = beginRequest();
       try {
-        const project = updateProjectSnapshot(toProjectFiles(source, files));
-        const result = (await runProject(project, "renameFileImports", {
+        const project = projectSession.update(toProjectFiles(source, files));
+        const result = await project.run("renameFileImports", {
           oldPath,
           newPath,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority: "interactive",
-        })) as Extract<MclResult, { operation: "renameFileImports" }>;
+        });
         return result.edits;
       } finally {
         finishRequest(controller);
@@ -233,14 +197,14 @@ export function createPlaygroundClient(
     async references(source, entrypoint, position, files, priority = "interactive") {
       const controller = beginRequest();
       try {
-        const project = updateProjectSnapshot(toProjectFiles(source, files, entrypoint));
-        const result = (await runProject(project, "references", {
+        const project = projectSession.update(toProjectFiles(source, files, entrypoint));
+        const result = await project.run("references", {
           entrypoint,
           position,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "references" }>;
+        });
         return result.references;
       } finally {
         finishRequest(controller);
@@ -250,18 +214,18 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       let diagnostics: PlaygroundDiagnostic[] | undefined;
       try {
-        const project = updateProjectSnapshot(toProjectFiles(source, files));
-        const lint = (await runProject(project, "lint", {
+        const project = projectSession.update(toProjectFiles(source, files));
+        const lint = await project.run("lint", {
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "lint" }>;
+        });
         diagnostics = lint.diagnostics;
-        const rendered = (await runProject(project, "render", {
+        const rendered = await project.run("render", {
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "render" }>;
+        });
         return {
           requestId: revision,
           revision,
@@ -289,16 +253,17 @@ export function createPlaygroundClient(
       const controller = beginRequest();
       try {
         const projectFilesForFormat = Object.create(null) as Record<string, string | Uint8Array>;
-        for (const [path, content] of Object.entries(projectFiles)) {
+        for (const [path, content] of Object.entries(projectSession.files)) {
           if (path !== entrypoint) projectFilesForFormat[path] = content;
         }
         projectFilesForFormat[entrypoint] = source;
-        const runtimeProject = runtime.openProject(projectFilesForFormat);
-        const result = (await runProject(runtimeProject, "format", {
+        const runtimeProject = projectSession.update(projectFilesForFormat);
+        const result = await runtimeProject.run("format", {
+          entrypoint,
           signal: controller.signal,
           timeoutMs: operationTimeoutMs,
           priority,
-        })) as Extract<MclResult, { operation: "format" }>;
+        });
         return {
           requestId: revision,
           revision,

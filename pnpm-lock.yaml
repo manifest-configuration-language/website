@@ -215,11 +215,11 @@ importers:
         specifier: 2.1.5
         version: 2.1.5(hono@4.13.13)
       '@manifest-configuration-language/browser':
-        specifier: 0.3.12
-        version: 0.3.12
+        specifier: 0.3.26
+        version: 0.3.26
       '@manifest-configuration-language/language':
-        specifier: 0.3.12
-        version: 0.3.12(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
+        specifier: 0.3.26
+        version: 0.3.26(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
       '@replit/codemirror-vim':
         specifier: 6.4.0
         version: 6.4.0(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/search@6.6.0)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)
@@ -1067,12 +1067,12 @@ packages:
   '@lezer/yaml@1.0.4':
     resolution: {integrity: sha512-2lrrHqxalACEbxIbsjhqGpSW8kWpUKuY6RHgnSAFZa6qK62wvnPxA8hGOwOoDbwHcOFs5M4o27mjGu+P7TvBmw==}
 
-  '@manifest-configuration-language/browser@0.3.12':
-    resolution: {integrity: sha512-dWjsyf6rXLJbjrJM1hsCsHp15kO6G7ic4l6XZQyl7GMCtS4HH3OXEDpYBSyu3JxQFph7I1jBfhjwSWEVZ/fYtw==}
-    engines: {node: '>=20.19'}
+  '@manifest-configuration-language/browser@0.3.26':
+    resolution: {integrity: sha512-F683y15Z+IVEczRBKmonRi//2ov1vaA1goDqOZXu9JAvPgjhFTQ7HY7hzvtU5diZUBBn61kvXlC/EpkCq2DRrg==}
+    engines: {node: '>=24.22.0'}
 
-  '@manifest-configuration-language/language@0.3.12':
-    resolution: {integrity: sha512-FVC/nKwuthgMSo7hmO1A7mIjQ47KspYtovIvPB/IlP+aUF/N3Q4ou7k+/uD2EPXWatHkYi52dqrdZSDH56Gbjw==}
+  '@manifest-configuration-language/language@0.3.26':
+    resolution: {integrity: sha512-VDryLotHGWAei0oou+YbEYueaDUiwi0b3ZS4VPIL/FtjV72gohq6jPppCfL+pimr0w1iczGYwbHHuLjtSvlmGg==}
     peerDependencies:
       '@codemirror/autocomplete': '>=6 <7'
       '@codemirror/language': '>=6 <7'
@@ -1991,6 +1991,9 @@ packages:
 
   collapse-white-space@2.1.0:
     resolution: {integrity: sha512-loKTxY1zCOuG4j9f6EPnuyyYkf58RnhhWTvRoZEokgB+WbdXehfjFviyOVYkqzEWz1Q5kRiZdBYS5SwxbQYwzw==}
+
+  comlink@4.4.2:
+    resolution: {integrity: sha512-OxGdvBmJuNKSCMO4NTl1L47VRp6xn2wG4F/2hYzB6tiCb709otOxtEYCSvK80PtjODfXXZu8ds+Nw5kVCjqd2g==}
 
   comma-separated-tokens@2.0.3:
     resolution: {integrity: sha512-Fu4hJdvzeylCfQPp9SGWidpzrMs7tTrlu6Vb8XGaRGck8QSNZJJp538Wrb60Lax4fPwR64ViY468OIUTbRlGZg==}
@@ -4376,11 +4379,12 @@ snapshots:
       '@lezer/highlight': 1.2.5
       '@lezer/lr': 1.4.11
 
-  '@manifest-configuration-language/browser@0.3.12':
+  '@manifest-configuration-language/browser@0.3.26':
     dependencies:
+      comlink: 4.4.2
       p-queue: 9.1.2
 
-  '@manifest-configuration-language/language@0.3.12(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
+  '@manifest-configuration-language/language@0.3.26(@codemirror/autocomplete@6.20.4)(@codemirror/language@6.13.1)(@codemirror/state@6.7.6)(@codemirror/view@6.43.15)':
     dependencies:
       '@codemirror/autocomplete': 6.20.4
       '@codemirror/language': 6.13.1
@@ -5196,6 +5200,8 @@ snapshots:
 
   collapse-white-space@2.1.0:
     optional: true
+
+  comlink@4.4.2: {}
 
   comma-separated-tokens@2.0.3: {}
 

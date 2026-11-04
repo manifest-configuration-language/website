@@ -131,7 +131,12 @@ export interface PlaygroundClient {
     files?: Record<string, ProjectFile>,
     priority?: PlaygroundPriority,
   ): Promise<PlaygroundReply>;
-  format(source: string, revision: number, priority?: PlaygroundPriority): Promise<PlaygroundReply>;
+  format(
+    source: string,
+    revision: number,
+    entrypoint?: string,
+    priority?: PlaygroundPriority,
+  ): Promise<PlaygroundReply>;
   cancel(): void;
   dispose(): void;
 }

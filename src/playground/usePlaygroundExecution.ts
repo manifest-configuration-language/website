@@ -4,6 +4,7 @@ import type { EditorView } from "@codemirror/view";
 import type { RuntimeStatus } from "@manifest-configuration-language/browser";
 import { DraftConflictError } from "./usePlaygroundPersistence";
 import { usePlaygroundRuntime } from "./usePlaygroundRuntime";
+import { isCurrentEditorRequest } from "./playgroundRequest";
 import type { PlaygroundClient, PlaygroundDiagnostic, PlaygroundReply } from "./types";
 import type { PlaygroundProject } from "./usePlaygroundProject";
 
@@ -213,24 +214,33 @@ export function usePlaygroundExecution({
       return;
     const view = editor.current;
     const activePath = project.current.activePath;
+    const source = view.state.doc.toString();
     const currentRevision = ++revision.current;
     setBusy(true);
     setError("");
     try {
-      const result = await client.current.format(
-        view.state.doc.toString(),
-        currentRevision,
-        activePath,
-      );
-      if (currentRevision !== revision.current) return;
+      const result = await client.current.format(source, currentRevision, activePath);
+      if (
+        !isCurrentEditorRequest({
+          revision: revision.current,
+          expectedRevision: currentRevision,
+          editor: editor.current,
+          expectedEditor: view,
+          activePath: project.current.activePath,
+          expectedPath: activePath,
+          source,
+          currentSource: view.state.doc.toString(),
+        })
+      )
+        return;
       if (!result.ok) {
         if (result.error) setError(`${result.error.code}: ${result.error.message}`);
         return;
       }
       const formatted = result.result?.source;
       if (formatted === undefined) return;
-      const original = view.state.doc.toString();
-      if (formatted === original) return;
+      if (formatted === source) return;
+      const original = source;
       let prefix = 0;
       while (
         prefix < original.length &&
@@ -253,7 +263,16 @@ export function usePlaygroundExecution({
         },
       });
     } catch (cause) {
-      if (currentRevision === revision.current)
+      if (
+        isCurrentEditorRequest({
+          revision: revision.current,
+          expectedRevision: currentRevision,
+          editor: editor.current,
+          expectedEditor: view,
+          activePath: project.current.activePath,
+          expectedPath: activePath,
+        })
+      )
         setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       if (currentRevision === revision.current) setBusy(false);

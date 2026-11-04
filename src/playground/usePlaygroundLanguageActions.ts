@@ -13,6 +13,7 @@ import type {
   ProjectFile,
 } from "./types";
 import type { PlaygroundProject, ProjectMutation } from "./usePlaygroundProject";
+import { isCurrentEditorRequest } from "./playgroundRequest";
 
 type PendingSymbolRename = {
   edits: PlaygroundRenameEdit[];
@@ -201,11 +202,31 @@ export function usePlaygroundLanguageActions({
         position,
         languageServiceFiles(),
       );
-      if (currentRevision !== revision.current || editor.current !== view) return;
+      if (
+        !isCurrentEditorRequest({
+          revision: revision.current,
+          expectedRevision: currentRevision,
+          editor: editor.current,
+          expectedEditor: view,
+          activePath: project.current.activePath,
+          expectedPath: path,
+        })
+      )
+        return;
       if (location) navigateToDefinition(location);
       else onNotice(t("goToDefinitionMissing"));
     } catch (cause) {
-      if (currentRevision !== revision.current || editor.current !== view) return;
+      if (
+        !isCurrentEditorRequest({
+          revision: revision.current,
+          expectedRevision: currentRevision,
+          editor: editor.current,
+          expectedEditor: view,
+          activePath: project.current.activePath,
+          expectedPath: path,
+        })
+      )
+        return;
       onError(cause instanceof Error ? cause.message : String(cause));
     }
   }
@@ -230,11 +251,31 @@ export function usePlaygroundLanguageActions({
         position,
         languageServiceFiles(),
       );
-      if (currentRevision !== revision.current || editor.current !== view) return;
+      if (
+        !isCurrentEditorRequest({
+          revision: revision.current,
+          expectedRevision: currentRevision,
+          editor: editor.current,
+          expectedEditor: view,
+          activePath: project.current.activePath,
+          expectedPath: path,
+        })
+      )
+        return;
       setSymbolReferences(references.filter((reference) => mclPaths.includes(reference.path)));
       setSymbolReferencesOpen(true);
     } catch (cause) {
-      if (currentRevision !== revision.current || editor.current !== view) return;
+      if (
+        !isCurrentEditorRequest({
+          revision: revision.current,
+          expectedRevision: currentRevision,
+          editor: editor.current,
+          expectedEditor: view,
+          activePath: project.current.activePath,
+          expectedPath: path,
+        })
+      )
+        return;
       setSymbolReferencesError(cause instanceof Error ? cause.message : String(cause));
       setSymbolReferencesOpen(true);
     }
@@ -291,7 +332,17 @@ export function usePlaygroundLanguageActions({
         newName,
         languageServiceFiles(),
       );
-      if (currentRevision !== revision.current || editor.current !== view) return;
+      if (
+        !isCurrentEditorRequest({
+          revision: revision.current,
+          expectedRevision: currentRevision,
+          editor: editor.current,
+          expectedEditor: view,
+          activePath: project.current.activePath,
+          expectedPath: path,
+        })
+      )
+        return;
       if (edits.length === 0) {
         setSymbolRenameError(t("renameSymbolNoTarget"));
         return;
@@ -317,6 +368,17 @@ export function usePlaygroundLanguageActions({
       }
       setPendingSymbolRename({ edits, sources, revision: currentRevision });
     } catch (cause) {
+      if (
+        !isCurrentEditorRequest({
+          revision: revision.current,
+          expectedRevision: currentRevision,
+          editor: editor.current,
+          expectedEditor: view,
+          activePath: project.current.activePath,
+          expectedPath: path,
+        })
+      )
+        return;
       setSymbolRenameError(cause instanceof Error ? cause.message : String(cause));
     }
   }
